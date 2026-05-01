@@ -19,6 +19,7 @@ import {
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useAppSettings } from '@/utils/app-settings';
 import bible from '../assets/bible.json';
 
 type BibleBook = {
@@ -60,6 +61,7 @@ function parseReference(input: string) {
 
 export default function BibleBooksScreen() {
   const router = useRouter();
+  const { colorTheme } = useAppSettings();
   const sectionListRef = useRef<SectionList<BibleBook> | null>(null);
   const pendingScrollTargetRef = useRef<{
     sectionIndex: number;
@@ -231,13 +233,26 @@ export default function BibleBooksScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Bible ✨</Text>
-      <Text style={styles.subtitle}>Find a verse to create with</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerTextBlock}>
+          <Text style={styles.title}>Bible ✨</Text>
+          <Text style={styles.subtitle}>Find a verse to create with</Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => router.push('/settings')}
+          style={[styles.settingsButton, { backgroundColor: colorTheme.soft }]}>
+          <Ionicons name="settings-outline" size={20} color="#5B514D" />
+        </TouchableOpacity>
+      </View>
 
       <View
         style={[
           styles.searchBar,
-          isSearchFocused ? styles.searchBarFocused : null,
+          isSearchFocused
+            ? [styles.searchBarFocused, { backgroundColor: colorTheme.accent }]
+            : null,
         ]}>
         <TouchableOpacity
           activeOpacity={0.8}
@@ -308,7 +323,15 @@ export default function BibleBooksScreen() {
             onPress={() => handleBookSelect(item)}
             style={[
               styles.bookButton,
-              selectedBook?.book === item.book ? styles.bookButtonSelected : null,
+              selectedBook?.book === item.book
+                ? [
+                    styles.bookButtonSelected,
+                    {
+                      backgroundColor: colorTheme.soft,
+                      borderColor: colorTheme.border,
+                    },
+                  ]
+                : null,
             ]}>
             <Text
               style={[
@@ -380,7 +403,7 @@ export default function BibleBooksScreen() {
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={handleOpenVerse}
-              style={styles.openButton}>
+              style={[styles.openButton, { backgroundColor: colorTheme.tint }]}>
               <Text style={styles.openButtonText}>
                 Open {selectedBook.book} {selectedChapter}:{selectedVerse}
               </Text>
@@ -402,15 +425,35 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '700',
     color: '#1F1F1F',
-    paddingHorizontal: 20,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
     color: '#7A6F66',
+  },
+  headerRow: {
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: 14,
+  },
+  headerTextBlock: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   searchBar: {
     marginHorizontal: 20,

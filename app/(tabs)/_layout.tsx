@@ -5,15 +5,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAppSettings } from '@/utils/app-settings';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { colorTheme } = useAppSettings();
 
   return (
     <Tabs
       initialRouteName="bible"
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: colorTheme.tint ?? Colors[colorScheme ?? 'light'].tint,
         tabBarInactiveTintColor: '#8F877F',
         headerShown: false,
         tabBarButton: HapticTab,
@@ -36,7 +38,7 @@ export default function TabLayout() {
           borderTopRightRadius: 24,
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
-          backgroundColor: '#FFFDF9',
+          backgroundColor: colorTheme.soft,
           shadowColor: '#000000',
           shadowOpacity: 0.1,
           shadowRadius: 12,
