@@ -46,6 +46,7 @@ import {
   type VerseStateMap,
 } from '@/utils/verse-storage';
 import { getChapters, getVerseText, getVerses } from '@/utils/bible-data';
+import { useAppSettings } from '@/utils/app-settings';
 
 type Sticker = StickerData;
 type Note = NoteData;
@@ -778,6 +779,7 @@ type FloatingItem =
 type ToolbarMenu = 'fonts' | 'size' | 'highlight' | 'stickers' | null;
 
 export default function StudioScreen() {
+  const { colorTheme } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
@@ -1955,7 +1957,9 @@ export default function StudioScreen() {
           { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 32 : 32 },
         ]}
         keyboardShouldPersistTaps="handled">
-        <Pressable style={styles.container} onPress={clearSelections}>
+        <Pressable
+          style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}
+          onPress={clearSelections}>
         <View style={styles.headerSection}>
           <View style={styles.titleRow}>
             <View style={styles.titleGroup}>
@@ -1979,10 +1983,19 @@ export default function StudioScreen() {
                 event.stopPropagation();
                 void toggleFavorite();
               }}
-              style={[
-                styles.saveDesignButton,
-                isCurrentVerseSaved && styles.saveDesignButtonActive,
-              ]}
+                style={[
+                  styles.saveDesignButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  isCurrentVerseSaved
+                    ? [
+                        styles.saveDesignButtonActive,
+                        {
+                          backgroundColor: colorTheme.selectionBackground,
+                          borderColor: colorTheme.border,
+                        },
+                      ]
+                    : null,
+                ]}
               accessibilityRole="button"
               accessibilityLabel={isCurrentVerseSaved ? 'Unsave verse design' : 'Save verse design'}>
               <Ionicons
@@ -2001,7 +2014,10 @@ export default function StudioScreen() {
                   setIsChapterDropdownOpen((current) => !current);
                   setIsVerseDropdownOpen(false);
                 }}
-                style={styles.chapterDropdownButton}>
+                style={[
+                  styles.chapterDropdownButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
                 <Text style={styles.chapterDropdownButtonText}>
                   {selectedChapter}
                 </Text>
@@ -2009,7 +2025,14 @@ export default function StudioScreen() {
               </Pressable>
 
               {isChapterDropdownOpen ? (
-                <View style={styles.chapterDropdownMenu}>
+                <View
+                  style={[
+                    styles.chapterDropdownMenu,
+                    {
+                      backgroundColor: colorTheme.screenBackground,
+                      borderColor: colorTheme.border,
+                    },
+                  ]}>
                   <GestureHandlerScrollView
                     nestedScrollEnabled
                     showsVerticalScrollIndicator
@@ -2023,8 +2046,12 @@ export default function StudioScreen() {
                         }}
                         style={[
                           styles.chapterDropdownOption,
-                          selectedChapter === chapterNumber &&
-                            styles.chapterDropdownOptionSelected,
+                          selectedChapter === chapterNumber
+                            ? [
+                                styles.chapterDropdownOptionSelected,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
                         ]}>
                         <Text style={styles.chapterDropdownOptionText}>
                           {`Chapter ${chapterNumber}`}
@@ -2043,7 +2070,10 @@ export default function StudioScreen() {
                   setIsChapterDropdownOpen(false);
                   setIsVerseDropdownOpen((current) => !current);
                 }}
-                style={styles.verseDropdownButton}>
+                style={[
+                  styles.verseDropdownButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
                 <Text style={styles.verseDropdownButtonText}>
                   {verseDropdownLabel}
                 </Text>
@@ -2051,7 +2081,14 @@ export default function StudioScreen() {
               </Pressable>
 
               {isVerseDropdownOpen ? (
-                <View style={styles.verseDropdownMenu}>
+                <View
+                  style={[
+                    styles.verseDropdownMenu,
+                    {
+                      backgroundColor: colorTheme.screenBackground,
+                      borderColor: colorTheme.border,
+                    },
+                  ]}>
                   <GestureHandlerScrollView
                     nestedScrollEnabled
                     showsVerticalScrollIndicator
@@ -2071,7 +2108,12 @@ export default function StudioScreen() {
                         }}
                         style={[
                           styles.verseDropdownOption,
-                          selectedVerse === verseNumber && styles.verseDropdownOptionSelected,
+                          selectedVerse === verseNumber
+                            ? [
+                                styles.verseDropdownOptionSelected,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
                         ]}>
                         <Pressable
                           onPress={(event) => {
@@ -2130,7 +2172,16 @@ export default function StudioScreen() {
                 }}
                 style={[
                   styles.dropdownToolbarButton,
-                  openToolbarMenu === menu && styles.dropdownToolbarButtonActive,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  openToolbarMenu === menu
+                    ? [
+                        styles.dropdownToolbarButtonActive,
+                        {
+                          backgroundColor: colorTheme.selectionBackground,
+                          borderColor: colorTheme.border,
+                        },
+                      ]
+                    : null,
                 ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
                   <Text style={styles.dropdownToolbarEmoji}>
@@ -2146,7 +2197,10 @@ export default function StudioScreen() {
 
               <TouchableOpacity
                 onPress={addNote}
-                style={styles.noteButton}>
+                style={[
+                  styles.noteButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
                   <Text style={styles.dropdownToolbarEmoji}>📝</Text>
                   <Text style={styles.noteButtonText}>Note</Text>
@@ -2159,6 +2213,7 @@ export default function StudioScreen() {
                 }}
                 style={[
                   styles.shareButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
                   isSharingImage && styles.shareImageButtonDisabled,
                 ]}
                 accessibilityRole="button"
@@ -2172,6 +2227,7 @@ export default function StudioScreen() {
                 }}
                 style={[
                   styles.shareButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
                   isSharingImage && styles.shareImageButtonDisabled,
                 ]}
                 accessibilityRole="button"
@@ -2181,7 +2237,14 @@ export default function StudioScreen() {
           </ScrollView>
 
           {openToolbarMenu ? (
-            <View style={styles.dropdownPanel}>
+            <View
+              style={[
+                styles.dropdownPanel,
+                {
+                  backgroundColor: colorTheme.screenBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
               {openToolbarMenu === 'fonts' ? (
                 <View style={styles.dropdownOptionList}>
                   <Pressable
@@ -2191,7 +2254,16 @@ export default function StudioScreen() {
                     }}
                     style={[
                       styles.dropdownOptionButton,
-                      selectedFont === 'Playwrite' && styles.dropdownOptionButtonActive,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                      selectedFont === 'Playwrite'
+                        ? [
+                            styles.dropdownOptionButtonActive,
+                            {
+                              backgroundColor: colorTheme.selectionBackground,
+                              borderColor: colorTheme.border,
+                            },
+                          ]
+                        : null,
                     ]}>
                     <Text style={[styles.dropdownOptionText, styles.lovelyButtonText]}>
                       Lovely
@@ -2205,7 +2277,16 @@ export default function StudioScreen() {
                     }}
                     style={[
                       styles.dropdownOptionButton,
-                      selectedFont === 'bold' && styles.dropdownOptionButtonActive,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                      selectedFont === 'bold'
+                        ? [
+                            styles.dropdownOptionButtonActive,
+                            {
+                              backgroundColor: colorTheme.selectionBackground,
+                              borderColor: colorTheme.border,
+                            },
+                          ]
+                        : null,
                     ]}>
                     <Text style={[styles.dropdownOptionText, styles.strongButtonText]}>
                       Strong
@@ -2219,7 +2300,16 @@ export default function StudioScreen() {
                     }}
                     style={[
                       styles.dropdownOptionButton,
-                      selectedFont === 'serif' && styles.dropdownOptionButtonActive,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                      selectedFont === 'serif'
+                        ? [
+                            styles.dropdownOptionButtonActive,
+                            {
+                              backgroundColor: colorTheme.selectionBackground,
+                              borderColor: colorTheme.border,
+                            },
+                          ]
+                        : null,
                     ]}>
                     <Text style={[styles.dropdownOptionText, styles.classicButtonText]}>
                       Classic
@@ -2230,13 +2320,23 @@ export default function StudioScreen() {
 
               {openToolbarMenu === 'size' ? (
                 <View style={styles.sizeDropdownRow}>
-                  <TouchableOpacity onPress={decreaseFontSize} style={styles.sizeDropdownButton}>
+                  <TouchableOpacity
+                    onPress={decreaseFontSize}
+                    style={[
+                      styles.sizeDropdownButton,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                    ]}>
                     <Text style={styles.smallA}>A-</Text>
                   </TouchableOpacity>
 
                   <Text style={styles.sizeDropdownValue}>{fontSize}</Text>
 
-                  <TouchableOpacity onPress={increaseFontSize} style={styles.sizeDropdownButton}>
+                  <TouchableOpacity
+                    onPress={increaseFontSize}
+                    style={[
+                      styles.sizeDropdownButton,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                    ]}>
                     <Text style={styles.largeA}>A+</Text>
                   </TouchableOpacity>
                 </View>
@@ -2297,14 +2397,21 @@ export default function StudioScreen() {
 
         <View style={styles.contentContainer}>
           <View ref={captureViewRef} collapsable={false} style={styles.captureFrame}>
-            <View style={styles.journalBackground}>
+            <View
+              style={[
+                styles.journalBackground,
+                { backgroundColor: colorTheme.editorBackground },
+              ]}>
               <View pointerEvents="none" style={styles.journalLinesOverlay}>
                 {Array.from({ length: journalLineCount }).map((_, index) => (
                   <View
                     key={`journal-line-${index}`}
                     style={[
                       styles.journalLine,
-                      { top: JOURNAL_LINE_TOP_OFFSET + index * JOURNAL_LINE_SPACING },
+                      {
+                        top: JOURNAL_LINE_TOP_OFFSET + index * JOURNAL_LINE_SPACING,
+                        backgroundColor: colorTheme.border,
+                      },
                     ]}
                   />
                 ))}

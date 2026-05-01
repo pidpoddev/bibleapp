@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useAppSettings } from '@/utils/app-settings';
 
 type PrayerJournalListItem = {
   id: string;
@@ -112,6 +113,7 @@ const purgeTodayPrayerEntriesOnce = async () => {
 
 export default function PrayerJournalListScreen() {
   const router = useRouter();
+  const { colorTheme } = useAppSettings();
   const [entries, setEntries] = useState<PrayerJournalListItem[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
 
@@ -169,7 +171,7 @@ export default function PrayerJournalListScreen() {
   }, [loadEntries]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <Text style={styles.title}>🙏 Prayer Journal</Text>
       <Text style={styles.subtitle}>Your prayers, gratitude, and heart notes</Text>
 
@@ -177,7 +179,7 @@ export default function PrayerJournalListScreen() {
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={handleNewEntry}
-          style={styles.newButton}>
+          style={[styles.newButton, { backgroundColor: colorTheme.toolbarBackground }]}>
           <Text style={styles.newButtonText}>+ New Entry</Text>
         </TouchableOpacity>
 
@@ -186,7 +188,13 @@ export default function PrayerJournalListScreen() {
           onPress={() => setShowFavorites((current) => !current)}
           style={[
             styles.filterButton,
-            showFavorites ? styles.filterButtonActive : null,
+            { backgroundColor: colorTheme.toolbarBackground },
+            showFavorites
+              ? [
+                  styles.filterButtonActive,
+                  { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                ]
+              : null,
           ]}>
           <Text style={styles.filterButtonText}>❤️ Favorites</Text>
         </TouchableOpacity>
@@ -216,7 +224,7 @@ export default function PrayerJournalListScreen() {
                     params: { entryId: entry.id },
                   })
                 }
-                style={styles.card}>
+                style={[styles.card, { backgroundColor: colorTheme.cardBackground }]}>
                 <Text style={styles.date}>{formatEntryDate(entry.date)}</Text>
                 <Text numberOfLines={3} style={styles.preview}>
                   {entry.preview || 'Open this entry to keep writing...'}

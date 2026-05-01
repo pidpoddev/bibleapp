@@ -8,7 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 
-export type ColorThemeKey = 'blush' | 'lavender' | 'peach' | 'mint' | 'sky';
+export type ColorThemeKey =
+  | 'default'
+  | 'blush'
+  | 'lavender'
+  | 'peach'
+  | 'mint'
+  | 'sky';
 
 type ColorTheme = {
   key: ColorThemeKey;
@@ -17,6 +23,12 @@ type ColorTheme = {
   soft: string;
   border: string;
   tint: string;
+  screenBackground: string;
+  editorBackground: string;
+  cardBackground: string;
+  paperBackground: string;
+  toolbarBackground: string;
+  selectionBackground: string;
 };
 
 type AppSettingsContextValue = {
@@ -30,12 +42,32 @@ const SETTINGS_STORAGE_KEY = 'app_settings_v1';
 
 const COLOR_THEMES: ColorTheme[] = [
   {
+    key: 'default',
+    name: 'Default',
+    accent: '#F3EDE8',
+    soft: '#FFFDF9',
+    border: '#E8DCD4',
+    tint: '#C88C93',
+    screenBackground: '#FFFDF9',
+    editorBackground: '#F7F4F2',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FFFDF8',
+    toolbarBackground: '#F3EDE8',
+    selectionBackground: '#E8DCD4',
+  },
+  {
     key: 'blush',
     name: 'Blush Pink',
     accent: '#F3D1DC',
     soft: '#FCEEF3',
     border: '#E7B7C7',
     tint: '#D989A7',
+    screenBackground: '#FFF7FA',
+    editorBackground: '#FDF3F6',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FFF9FB',
+    toolbarBackground: '#FCEEF3',
+    selectionBackground: '#F3D1DC',
   },
   {
     key: 'lavender',
@@ -44,6 +76,12 @@ const COLOR_THEMES: ColorTheme[] = [
     soft: '#F4F1FF',
     border: '#C8C0EF',
     tint: '#A58BDE',
+    screenBackground: '#FAF8FF',
+    editorBackground: '#F3EFFC',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FCFBFF',
+    toolbarBackground: '#F4F1FF',
+    selectionBackground: '#DDD6F8',
   },
   {
     key: 'peach',
@@ -52,6 +90,12 @@ const COLOR_THEMES: ColorTheme[] = [
     soft: '#FFF1E8',
     border: '#EEC0A6',
     tint: '#DE9B74',
+    screenBackground: '#FFF9F5',
+    editorBackground: '#FBF1EA',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FFFDFB',
+    toolbarBackground: '#FFF1E8',
+    selectionBackground: '#F8D7C5',
   },
   {
     key: 'mint',
@@ -60,6 +104,12 @@ const COLOR_THEMES: ColorTheme[] = [
     soft: '#EEF9F3',
     border: '#B8DAC7',
     tint: '#79B89A',
+    screenBackground: '#F7FCF9',
+    editorBackground: '#EFF7F2',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FBFEFC',
+    toolbarBackground: '#EEF9F3',
+    selectionBackground: '#CFEADF',
   },
   {
     key: 'sky',
@@ -68,10 +118,16 @@ const COLOR_THEMES: ColorTheme[] = [
     soft: '#EFF7FF',
     border: '#BDD5ED',
     tint: '#7FAFD8',
+    screenBackground: '#F7FBFF',
+    editorBackground: '#EEF4FA',
+    cardBackground: '#FFFFFF',
+    paperBackground: '#FBFDFF',
+    toolbarBackground: '#EFF7FF',
+    selectionBackground: '#D4E6F8',
   },
 ];
 
-const DEFAULT_COLOR_THEME_KEY: ColorThemeKey = 'blush';
+const DEFAULT_COLOR_THEME_KEY: ColorThemeKey = 'default';
 
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
 

@@ -7,7 +7,7 @@ export default function SettingsScreen() {
   const { colorTheme, colorThemes, setColorThemeKey } = useAppSettings();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <Text style={styles.title}>Settings</Text>
       <Text style={styles.subtitle}>
         Pick a soft pastel palette to make the app feel more you.
@@ -27,7 +27,7 @@ export default function SettingsScreen() {
               style={[
                 styles.colorCard,
                 {
-                  backgroundColor: theme.soft,
+                  backgroundColor: theme.cardBackground,
                   borderColor: isSelected ? theme.tint : theme.border,
                 },
               ]}>

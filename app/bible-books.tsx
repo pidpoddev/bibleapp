@@ -232,7 +232,7 @@ export default function BibleBooksScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextBlock}>
           <Text style={styles.title}>Bible ✨</Text>
@@ -242,7 +242,10 @@ export default function BibleBooksScreen() {
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={() => router.push('/settings')}
-          style={[styles.settingsButton, { backgroundColor: colorTheme.soft }]}>
+          style={[
+            styles.settingsButton,
+            { backgroundColor: colorTheme.toolbarBackground },
+          ]}>
           <Ionicons name="settings-outline" size={20} color="#5B514D" />
         </TouchableOpacity>
       </View>
@@ -250,6 +253,7 @@ export default function BibleBooksScreen() {
       <View
         style={[
           styles.searchBar,
+          { backgroundColor: colorTheme.toolbarBackground },
           isSearchFocused
             ? [styles.searchBarFocused, { backgroundColor: colorTheme.accent }]
             : null,
@@ -323,11 +327,12 @@ export default function BibleBooksScreen() {
             onPress={() => handleBookSelect(item)}
             style={[
               styles.bookButton,
+              { backgroundColor: colorTheme.toolbarBackground },
               selectedBook?.book === item.book
                 ? [
                     styles.bookButtonSelected,
                     {
-                      backgroundColor: colorTheme.soft,
+                      backgroundColor: colorTheme.cardBackground,
                       borderColor: colorTheme.border,
                     },
                   ]
@@ -346,7 +351,15 @@ export default function BibleBooksScreen() {
 
       {selectedBook ? (
         <GestureDetector gesture={closeSelectionGesture}>
-          <Animated.View style={[styles.selectionPanel, selectionPanelAnimatedStyle]}>
+          <Animated.View
+            style={[
+              styles.selectionPanel,
+              selectionPanelAnimatedStyle,
+              {
+                backgroundColor: colorTheme.screenBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
             <View style={styles.selectionHandle} />
             <Text style={styles.selectionTitle}>{selectedBook.book}</Text>
 
@@ -362,7 +375,13 @@ export default function BibleBooksScreen() {
                   onPress={() => handleChapterSelect(chapter)}
                   style={[
                     styles.optionPill,
-                    selectedChapter === chapter ? styles.optionPillSelected : null,
+                    { backgroundColor: colorTheme.toolbarBackground },
+                    selectedChapter === chapter
+                      ? [
+                          styles.optionPillSelected,
+                          { backgroundColor: colorTheme.selectionBackground },
+                        ]
+                      : null,
                   ]}>
                   <Text
                     style={[
@@ -387,7 +406,13 @@ export default function BibleBooksScreen() {
                   onPress={() => setSelectedVerse(verse.verse)}
                   style={[
                     styles.optionPill,
-                    selectedVerse === verse.verse ? styles.optionPillSelected : null,
+                    { backgroundColor: colorTheme.toolbarBackground },
+                    selectedVerse === verse.verse
+                      ? [
+                          styles.optionPillSelected,
+                          { backgroundColor: colorTheme.selectionBackground },
+                        ]
+                      : null,
                   ]}>
                   <Text
                     style={[

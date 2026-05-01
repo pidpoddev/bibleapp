@@ -1,9 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppSettings } from '@/utils/app-settings';
 
 export default function JournalScreen() {
   const { template } = useLocalSearchParams<{ template?: string }>();
   const router = useRouter();
+  const { colorTheme } = useAppSettings();
 
   const templateLabel =
     template === 'prayer'
@@ -15,7 +17,7 @@ export default function JournalScreen() {
           : 'Blank Journal';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <Text style={styles.title}>Journal ✍️</Text>
 
       <Text style={styles.subtitle}>
@@ -35,7 +37,7 @@ export default function JournalScreen() {
             return;
           }
         }}
-        style={styles.button}>
+        style={[styles.button, { backgroundColor: colorTheme.toolbarBackground }]}>
         <Text style={styles.buttonText}>+ New Page</Text>
       </TouchableOpacity>
     </View>

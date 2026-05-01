@@ -38,7 +38,7 @@ export default function TabLayout() {
           borderTopRightRadius: 24,
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
-          backgroundColor: colorTheme.soft,
+          backgroundColor: colorTheme.toolbarBackground,
           shadowColor: '#000000',
           shadowOpacity: 0.1,
           shadowRadius: 12,

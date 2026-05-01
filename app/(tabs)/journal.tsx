@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppSettings } from '@/utils/app-settings';
 
 const templates = [
   {
@@ -21,9 +22,10 @@ const templates = [
 
 export default function JournalScreen() {
   const router = useRouter();
+  const { colorTheme } = useAppSettings();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <Text style={styles.title}>Journal ✍️</Text>
       <Text style={styles.subtitle}>Choose your journaling style 💕</Text>
 
@@ -44,7 +46,10 @@ export default function JournalScreen() {
                     }
               )
             }
-            style={styles.templateCard}>
+            style={[
+              styles.templateCard,
+              { backgroundColor: colorTheme.toolbarBackground },
+            ]}>
             <Text style={styles.templateIcon}>{template.icon}</Text>
             <Text style={styles.templateTitle}>{template.title}</Text>
           </TouchableOpacity>

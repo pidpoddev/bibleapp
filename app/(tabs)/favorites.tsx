@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useAppSettings } from '@/utils/app-settings';
 
 type FavoriteVerseDesign = {
   key: string;
@@ -52,6 +53,7 @@ function getPreviewLabel(item: FavoriteVerseDesign) {
 
 export default function FavoritesScreen() {
   const navigation = useNavigation<any>();
+  const { colorTheme } = useAppSettings();
   const [favorites, setFavorites] = useState<FavoriteVerseDesign[]>([]);
 
   const loadFavorites = useCallback(async () => {
@@ -72,7 +74,7 @@ export default function FavoritesScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <Text style={styles.title}>💖 Favorites</Text>
       <Text style={styles.subtitle}>Saved verse designs you love</Text>
 
@@ -96,7 +98,7 @@ export default function FavoritesScreen() {
                 selectedVerse: item.verse,
               });
             }}
-            style={styles.card}>
+            style={[styles.card, { backgroundColor: colorTheme.cardBackground }]}>
             <Text style={styles.cardType}>📖 Verse Design</Text>
             <Text style={styles.cardDate}>{getReferenceLabel(item)}</Text>
             <Text numberOfLines={4} style={styles.cardPreview}>

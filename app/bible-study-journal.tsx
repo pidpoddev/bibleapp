@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
+import { useAppSettings } from '@/utils/app-settings';
 
 type BibleStudySection = {
   id: string;
@@ -63,12 +64,16 @@ type BibleStudySectionFieldProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
+  cardBackground: string;
+  accentColor: string;
 };
 
 const BibleStudySectionField = memo(function BibleStudySectionField({
   label,
   value,
   onChangeText,
+  cardBackground,
+  accentColor,
 }: BibleStudySectionFieldProps) {
   const [draftText, setDraftText] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
@@ -82,7 +87,11 @@ const BibleStudySectionField = memo(function BibleStudySectionField({
   }, [isFocused, value]);
 
   return (
-    <View style={styles.section}>
+    <View
+      style={[
+        styles.section,
+        { backgroundColor: cardBackground, borderLeftColor: accentColor },
+      ]}>
       <Text style={styles.label}>{label}</Text>
 
       <View style={styles.inputWrapper}>
@@ -136,6 +145,7 @@ function normalizeLoadedSectionText(text: string) {
 }
 
 export default function BibleStudyJournalScreen() {
+  const { colorTheme } = useAppSettings();
   const { entryId } = useLocalSearchParams<{ entryId?: string }>();
   const today = useMemo(() => getFormattedDateStamp(), []);
   const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
@@ -296,7 +306,7 @@ export default function BibleStudyJournalScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}>
+      style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -311,7 +321,7 @@ export default function BibleStudyJournalScreen() {
               onPress={() =>
                 setOpenDropdown((current) => (current === 'book' ? null : 'book'))
               }
-              style={styles.referenceCard}>
+              style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }]}>
               <Text numberOfLines={1} style={styles.referenceLabel}>Book</Text>
               <View style={styles.referenceValueRow}>
                 <Text numberOfLines={1} style={styles.referenceValueText}>
@@ -322,7 +332,15 @@ export default function BibleStudyJournalScreen() {
             </Pressable>
 
             {openDropdown === 'book' ? (
-              <View style={[styles.dropdownMenu, styles.bookDropdownMenu]}>
+              <View
+                style={[
+                  styles.dropdownMenu,
+                  styles.bookDropdownMenu,
+                  {
+                    backgroundColor: colorTheme.screenBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}>
                 <ScrollView
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
@@ -333,7 +351,12 @@ export default function BibleStudyJournalScreen() {
                       onPress={() => handleBookSelect(bookOption)}
                       style={[
                         styles.dropdownOption,
-                        book === bookOption && styles.dropdownOptionSelected,
+                        book === bookOption
+                          ? [
+                              styles.dropdownOptionSelected,
+                              { backgroundColor: colorTheme.selectionBackground },
+                            ]
+                          : null,
                       ]}>
                       <Text
                         numberOfLines={1}
@@ -362,6 +385,7 @@ export default function BibleStudyJournalScreen() {
               }}
               style={[
                 styles.referenceCard,
+                { backgroundColor: colorTheme.cardBackground },
                 !book && styles.referenceCardDisabled,
               ]}>
               <Text numberOfLines={1} style={styles.referenceLabel}>Chapter</Text>
@@ -374,7 +398,14 @@ export default function BibleStudyJournalScreen() {
             </Pressable>
 
             {openDropdown === 'chapter' ? (
-              <View style={styles.dropdownMenu}>
+              <View
+                style={[
+                  styles.dropdownMenu,
+                  {
+                    backgroundColor: colorTheme.screenBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}>
                 <ScrollView
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
@@ -385,7 +416,12 @@ export default function BibleStudyJournalScreen() {
                       onPress={() => handleChapterSelect(chapterOption)}
                       style={[
                         styles.dropdownOption,
-                        chapter === chapterOption && styles.dropdownOptionSelected,
+                        chapter === chapterOption
+                          ? [
+                              styles.dropdownOptionSelected,
+                              { backgroundColor: colorTheme.selectionBackground },
+                            ]
+                          : null,
                       ]}>
                       <Text
                         style={[
@@ -412,6 +448,7 @@ export default function BibleStudyJournalScreen() {
               }}
               style={[
                 styles.referenceCard,
+                { backgroundColor: colorTheme.cardBackground },
                 (!book || !chapter) && styles.referenceCardDisabled,
               ]}>
               <Text numberOfLines={1} style={styles.referenceLabel}>Verse</Text>
@@ -424,7 +461,14 @@ export default function BibleStudyJournalScreen() {
             </Pressable>
 
             {openDropdown === 'verse' ? (
-              <View style={styles.dropdownMenu}>
+              <View
+                style={[
+                  styles.dropdownMenu,
+                  {
+                    backgroundColor: colorTheme.screenBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}>
                 <ScrollView
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
@@ -435,7 +479,12 @@ export default function BibleStudyJournalScreen() {
                       onPress={() => handleVerseSelect(verseOption)}
                       style={[
                         styles.dropdownOption,
-                        verse === verseOption && styles.dropdownOptionSelected,
+                        verse === verseOption
+                          ? [
+                              styles.dropdownOptionSelected,
+                              { backgroundColor: colorTheme.selectionBackground },
+                            ]
+                          : null,
                       ]}>
                       <Text
                         style={[
@@ -453,7 +502,7 @@ export default function BibleStudyJournalScreen() {
         </View>
 
         {book && chapter && verse && verseText ? (
-          <View style={styles.verseCard}>
+          <View style={[styles.verseCard, { backgroundColor: colorTheme.paperBackground }]}>
             <Text style={styles.verseReference}>{`${book} ${chapter}:${verse}`}</Text>
             <Text style={styles.verseText}>{verseText}</Text>
           </View>
@@ -465,6 +514,8 @@ export default function BibleStudyJournalScreen() {
             label={section.label}
             value={section.text}
             onChangeText={(text) => updateSection(section.id, text)}
+            cardBackground={colorTheme.cardBackground}
+            accentColor={colorTheme.accent}
           />
         ))}
       </ScrollView>

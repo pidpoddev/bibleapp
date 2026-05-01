@@ -27,6 +27,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { captureRef } from 'react-native-view-shot';
+import { useAppSettings } from '@/utils/app-settings';
 
 type PrayerSection = {
   id: string;
@@ -127,6 +128,8 @@ type PrayerSectionFieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   onFocusField: () => void;
+  cardBackground: string;
+  accentColor: string;
 };
 
 const PrayerSectionField = memo(function PrayerSectionField({
@@ -134,6 +137,8 @@ const PrayerSectionField = memo(function PrayerSectionField({
   value,
   onChangeText,
   onFocusField,
+  cardBackground,
+  accentColor,
 }: PrayerSectionFieldProps) {
   const [draftText, setDraftText] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
@@ -147,7 +152,11 @@ const PrayerSectionField = memo(function PrayerSectionField({
   }, [isFocused, value]);
 
   return (
-    <View style={styles.section}>
+    <View
+      style={[
+        styles.section,
+        { backgroundColor: cardBackground, borderLeftColor: accentColor },
+      ]}>
       <Text style={styles.label}>{label}</Text>
 
       <View style={styles.prayerInputWrapper}>
@@ -333,6 +342,7 @@ function DraggablePrayerSticker({
 }
 
 export default function PrayerJournalScreen() {
+  const { colorTheme } = useAppSettings();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
     newEntryToken?: string;
@@ -630,8 +640,8 @@ export default function PrayerJournalScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}>
-      <View style={styles.container}>
+      style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
+      <View style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -649,7 +659,14 @@ export default function PrayerJournalScreen() {
                 imageStyle={styles.canvasBackgroundImage}
                 resizeMode="stretch"
                 source={require('../assets/images/lined-paper.png')}
-                style={[styles.canvas, styles.linedCanvas, { minHeight: canvasMinHeight }]}>
+                style={[
+                  styles.canvas,
+                  styles.linedCanvas,
+                  {
+                    minHeight: canvasMinHeight,
+                    backgroundColor: colorTheme.paperBackground,
+                  },
+                ]}>
                 <View
                   onLayout={(event) => {
                     setSectionsHeight(event.nativeEvent.layout.height);
@@ -662,6 +679,8 @@ export default function PrayerJournalScreen() {
                       value={section.text}
                       onFocusField={clearStickerSelection}
                       onChangeText={(text) => updateSection(index, text)}
+                      cardBackground={colorTheme.cardBackground}
+                      accentColor={colorTheme.accent}
                     />
                   ))}
                 </View>
@@ -683,7 +702,15 @@ export default function PrayerJournalScreen() {
                 </View>
               </ImageBackground>
             ) : (
-              <View style={[styles.canvas, styles.plainCanvas, { minHeight: canvasMinHeight }]}>
+              <View
+                style={[
+                  styles.canvas,
+                  styles.plainCanvas,
+                  {
+                    minHeight: canvasMinHeight,
+                    backgroundColor: colorTheme.paperBackground,
+                  },
+                ]}>
                 <View
                   onLayout={(event) => {
                     setSectionsHeight(event.nativeEvent.layout.height);
@@ -696,6 +723,8 @@ export default function PrayerJournalScreen() {
                       value={section.text}
                       onFocusField={clearStickerSelection}
                       onChangeText={(text) => updateSection(index, text)}
+                      cardBackground={colorTheme.cardBackground}
+                      accentColor={colorTheme.accent}
                     />
                   ))}
                 </View>
@@ -721,7 +750,14 @@ export default function PrayerJournalScreen() {
         </ScrollView>
 
         {openTray === 'stickers' ? (
-          <View style={styles.tray}>
+          <View
+            style={[
+              styles.tray,
+              {
+                backgroundColor: colorTheme.screenBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
             <Text style={styles.trayTitle}>Pick a sticker</Text>
             <View style={styles.stickerTrayRow}>
               {STICKER_CHOICES.map((choice) => (
@@ -729,7 +765,10 @@ export default function PrayerJournalScreen() {
                   key={choice}
                   activeOpacity={0.85}
                   onPress={() => addSticker(choice)}
-                  style={styles.trayStickerButton}>
+                  style={[
+                    styles.trayStickerButton,
+                    { backgroundColor: colorTheme.toolbarBackground },
+                  ]}>
                   <Text style={styles.trayStickerEmoji}>{choice}</Text>
                 </TouchableOpacity>
               ))}
@@ -738,7 +777,14 @@ export default function PrayerJournalScreen() {
         ) : null}
 
         {openTray === 'background' ? (
-          <View style={styles.tray}>
+          <View
+            style={[
+              styles.tray,
+              {
+                backgroundColor: colorTheme.screenBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
             <Text style={styles.trayTitle}>Choose a background</Text>
             <View style={styles.backgroundOptionRow}>
               <TouchableOpacity
@@ -746,7 +792,13 @@ export default function PrayerJournalScreen() {
                 onPress={() => updateBackground('lined')}
                 style={[
                   styles.backgroundChip,
-                  background === 'lined' ? styles.activeChip : null,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  background === 'lined'
+                    ? [
+                        styles.activeChip,
+                        { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                      ]
+                    : null,
                 ]}>
                 <Text style={styles.backgroundChipText}>Lined</Text>
               </TouchableOpacity>
@@ -756,7 +808,13 @@ export default function PrayerJournalScreen() {
                 onPress={() => updateBackground('plain')}
                 style={[
                   styles.backgroundChip,
-                  background === 'plain' ? styles.activeChip : null,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  background === 'plain'
+                    ? [
+                        styles.activeChip,
+                        { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                      ]
+                    : null,
                 ]}>
                 <Text style={styles.backgroundChipText}>Plain</Text>
               </TouchableOpacity>
@@ -764,13 +822,18 @@ export default function PrayerJournalScreen() {
           </View>
         ) : null}
 
-        <View style={styles.toolbar}>
+        <View style={[styles.toolbar, { backgroundColor: colorTheme.toolbarBackground }]}>
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={toggleFavorite}
             style={[
               styles.toolbarButton,
-              isFavorite ? styles.toolbarButtonActive : null,
+              isFavorite
+                ? [
+                    styles.toolbarButtonActive,
+                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                  ]
+                : null,
             ]}>
             <Text style={styles.toolbarIcon}>{isFavorite ? '❤️' : '🤍'}</Text>
             <Text style={styles.toolbarLabel}>
@@ -787,7 +850,12 @@ export default function PrayerJournalScreen() {
             }
             style={[
               styles.toolbarButton,
-              openTray === 'stickers' ? styles.toolbarButtonActive : null,
+              openTray === 'stickers'
+                ? [
+                    styles.toolbarButtonActive,
+                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                  ]
+                : null,
             ]}>
             <Text style={styles.toolbarIcon}>🌸</Text>
             <Text style={styles.toolbarLabel}>Stickers</Text>
@@ -802,7 +870,12 @@ export default function PrayerJournalScreen() {
             }
             style={[
               styles.toolbarButton,
-              openTray === 'background' ? styles.toolbarButtonActive : null,
+              openTray === 'background'
+                ? [
+                    styles.toolbarButtonActive,
+                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                  ]
+                : null,
             ]}>
             <Text style={styles.toolbarIcon}>🧻</Text>
             <Text style={styles.toolbarLabel}>Background</Text>
