@@ -901,8 +901,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 52,
-    paddingBottom: 170,
+    paddingTop: Platform.OS === 'web' ? 28 : 52,
+    paddingBottom: Platform.OS === 'web' ? 80 : 170,
   },
   title: {
     fontSize: 22,

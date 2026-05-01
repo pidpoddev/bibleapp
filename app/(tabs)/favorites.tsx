@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAppSettings } from '@/utils/app-settings';
 
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
-    paddingTop: 72,
+    paddingTop: Platform.OS === 'web' ? 28 : 72,
   },
   title: {
     fontSize: 26,
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   listContent: {
-    paddingBottom: 120,
+    paddingBottom: Platform.OS === 'web' ? 48 : 120,
   },
   emptyListContent: {
     flexGrow: 1,

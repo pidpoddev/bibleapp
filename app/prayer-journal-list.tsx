@@ -1,7 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings } from '@/utils/app-settings';
 
@@ -254,7 +261,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
-    paddingTop: 52,
+    paddingTop: Platform.OS === 'web' ? 28 : 52,
   },
   title: {
     fontSize: 28,
@@ -311,7 +318,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 20,
-    paddingBottom: 120,
+    paddingBottom: Platform.OS === 'web' ? 48 : 120,
   },
   card: {
     backgroundColor: '#FFFFFF',

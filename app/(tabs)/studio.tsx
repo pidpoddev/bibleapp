@@ -2526,7 +2526,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   headerSection: {
-    marginTop: 56,
+    marginTop: Platform.OS === 'web' ? 24 : 56,
     marginBottom: 10,
   },
   title: {
@@ -2894,7 +2894,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingTop: 16,
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: Platform.OS === 'web' ? 48 : 96,
     marginBottom: 12,
   },
   captureStage: {

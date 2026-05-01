@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
@@ -10,6 +11,7 @@ import { useAppSettings } from '@/utils/app-settings';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { colorTheme, t } = useAppSettings();
+  const isWeb = Platform.OS === 'web';
 
   return (
     <Tabs
@@ -26,13 +28,16 @@ export default function TabLayout() {
           paddingBottom: 2,
         },
         tabBarStyle: {
-          position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: 16,
-          height: 72,
+          position: isWeb ? 'relative' : 'absolute',
+          left: isWeb ? 0 : 16,
+          right: isWeb ? 0 : 16,
+          bottom: isWeb ? 0 : 16,
+          height: isWeb ? 64 : 72,
           paddingTop: 10,
           paddingBottom: 10,
+          marginHorizontal: isWeb ? 12 : 0,
+          marginTop: isWeb ? 8 : 0,
+          marginBottom: isWeb ? 8 : 0,
           borderTopWidth: 0,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,

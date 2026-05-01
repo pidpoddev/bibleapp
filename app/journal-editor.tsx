@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppSettings } from '@/utils/app-settings';
 
 export default function JournalScreen() {
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFDF9',
     padding: 20,
-    paddingTop: 72,
+    paddingTop: Platform.OS === 'web' ? 28 : 72,
   },
   title: {
     fontSize: 28,

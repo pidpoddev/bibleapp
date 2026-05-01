@@ -1,5 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { useAppSettings } from '@/utils/app-settings';
 
@@ -15,7 +22,11 @@ export default function SettingsScreen() {
   } = useAppSettings();
 
   return (
-    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>{t('settingsTitle')}</Text>
       <Text style={styles.subtitle}>{t('settingsSubtitle')}</Text>
 
@@ -90,7 +101,7 @@ export default function SettingsScreen() {
           );
         })}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -98,8 +109,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFDF9',
+  },
+  content: {
     paddingHorizontal: 20,
-    paddingTop: 28,
+    paddingTop: Platform.OS === 'web' ? 20 : 28,
+    paddingBottom: Platform.OS === 'web' ? 48 : 120,
   },
   title: {
     fontSize: 28,

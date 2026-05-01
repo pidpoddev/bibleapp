@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFDF9',
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'web' ? 24 : 60,
   },
   title: {
     fontSize: 30,
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 220,
+    paddingBottom: Platform.OS === 'web' ? 96 : 220,
   },
   sectionTitle: {
     fontSize: 14,
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 88,
+    bottom: Platform.OS === 'web' ? 16 : 88,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.06)',
     backgroundColor: '#FFFDF9',
