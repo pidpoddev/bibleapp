@@ -1,4 +1,5 @@
 import bible from '@/assets/bible.json';
+import bibleEs from '@/assets/bible-es.json';
 
 export type BibleVerse = {
   verse: number;
@@ -15,7 +16,35 @@ export type BibleBook = {
   chapters: BibleChapter[];
 };
 
+export type BibleLanguageKey = 'en' | 'es';
+
+type SpanishBibleVerseEntry = {
+  book_name: string;
+  book: number;
+  chapter: number;
+  verse: number;
+  text: string;
+};
+
+type SpanishBibleData = {
+  metadata: {
+    name: string;
+    lang_short: string;
+  };
+  verses: SpanishBibleVerseEntry[];
+};
+
 const bibleData = bible as BibleBook[];
+const spanishBibleData = bibleEs as SpanishBibleData;
+const englishBookNumberMap = new Map(
+  bibleData.map((entry, index) => [entry.book, index + 1] as const)
+);
+const spanishVerseTextMap = new Map(
+  spanishBibleData.verses.map((entry) => [
+    `${entry.book}-${entry.chapter}-${entry.verse}`,
+    entry.text,
+  ])
+);
 
 function findBook(book: string) {
   return bibleData.find((entry) => entry.book === book);
@@ -37,7 +66,20 @@ export function getVerses(book: string, chapter: number) {
   return findChapter(book, chapter)?.verses.map((entry) => entry.verse) ?? [];
 }
 
-export function getVerseText(book: string, chapter: number, verse: number) {
+export function getVerseText(
+  book: string,
+  chapter: number,
+  verse: number,
+  language: BibleLanguageKey = 'en'
+) {
+  if (language === 'es') {
+    const bookNumber = englishBookNumberMap.get(book);
+
+    if (bookNumber) {
+      return spanishVerseTextMap.get(`${bookNumber}-${chapter}-${verse}`) ?? '';
+    }
+  }
+
   return (
     findChapter(book, chapter)?.verses.find((entry) => entry.verse === verse)?.text ?? ''
   );

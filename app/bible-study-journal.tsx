@@ -145,7 +145,7 @@ function normalizeLoadedSectionText(text: string) {
 }
 
 export default function BibleStudyJournalScreen() {
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, language } = useAppSettings();
   const { entryId } = useLocalSearchParams<{ entryId?: string }>();
   const today = useMemo(() => getFormattedDateStamp(), []);
   const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
@@ -172,9 +172,9 @@ export default function BibleStudyJournalScreen() {
   const verseText = useMemo(
     () =>
       book && chapter && verse
-        ? getVerseText(book, Number(chapter), Number(verse))
+        ? getVerseText(book, Number(chapter), Number(verse), language.key)
         : '',
-    [book, chapter, verse]
+    [book, chapter, language.key, verse]
   );
 
   const updateIndex = useCallback(async (entry: BibleStudyEntry) => {

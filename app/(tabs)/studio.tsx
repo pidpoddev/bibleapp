@@ -45,7 +45,12 @@ import {
   type VerseEditorState,
   type VerseStateMap,
 } from '@/utils/verse-storage';
-import { getChapters, getVerseText, getVerses } from '@/utils/bible-data';
+import {
+  getChapters,
+  getVerseText,
+  getVerses,
+  type BibleLanguageKey,
+} from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 
 type Sticker = StickerData;
@@ -215,11 +220,12 @@ function syncVerseCardsWithSelection(
   currentCards: VerseCard[],
   nextSelectedVerses: number[],
   book: string,
-  chapter: number
+  chapter: number,
+  language: BibleLanguageKey
 ) {
   return nextSelectedVerses.map((verseNumber, index) => {
     const existingCard = currentCards.find((card) => card.verse === verseNumber);
-    const text = getVerseText(book, chapter, verseNumber);
+    const text = getVerseText(book, chapter, verseNumber, language);
 
     if (existingCard) {
       return {
@@ -779,7 +785,7 @@ type FloatingItem =
 type ToolbarMenu = 'fonts' | 'size' | 'highlight' | 'stickers' | null;
 
 export default function StudioScreen() {
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, language } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
@@ -963,7 +969,8 @@ export default function StudioScreen() {
         nextEditorState.verseCards,
         nextSelectedVerses,
         nextBook,
-        nextChapter
+        nextChapter,
+        language.key
       )
     );
     setStickers(nextEditorState.stickers);
@@ -1000,7 +1007,8 @@ export default function StudioScreen() {
         currentEditorState.verseCards,
         nextSelectedVerses,
         selectedBook,
-        selectedChapter
+        selectedChapter,
+        language.key
       ),
     };
 
@@ -1119,7 +1127,8 @@ export default function StudioScreen() {
             initialVerseState.verseCards,
             initialSelectedVerses,
             selectedBook,
-            initialChapter
+            initialChapter,
+            language.key
           )
         );
         setStickers(initialVerseState.stickers);
@@ -1142,6 +1151,7 @@ export default function StudioScreen() {
       isMounted = false;
     };
   }, [
+    language.key,
     routeDesignParam,
     routeRestoreToken,
     routeSelectedBookParam,
@@ -1149,6 +1159,22 @@ export default function StudioScreen() {
     routeSelectedVerseParam,
     selectedBook,
   ]);
+
+  useEffect(() => {
+    if (!hasLoadedState) {
+      return;
+    }
+
+    setVerseCards((current) =>
+      syncVerseCardsWithSelection(
+        current,
+        selectedVerses,
+        selectedBook,
+        selectedChapter,
+        language.key
+      )
+    );
+  }, [hasLoadedState, language.key, selectedBook, selectedChapter, selectedVerses]);
 
   useEffect(() => {
     if (!hasLoadedState) {
@@ -1434,7 +1460,8 @@ export default function StudioScreen() {
         d.verseCards || [],
         nextSelectedVerses,
         d.book,
-        d.chapter
+        d.chapter,
+        language.key
       )
     );
     setStickers(d.stickers || []);
@@ -1450,7 +1477,7 @@ export default function StudioScreen() {
     setOpenToolbarMenu(null);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
-  }, [routeDesignParam, routeRestoreToken]);
+  }, [language.key, routeDesignParam, routeRestoreToken]);
 
   useEffect(() => {
     if (routeDesignParam) {
@@ -1497,7 +1524,8 @@ export default function StudioScreen() {
         nextEditorState.verseCards,
         nextSelectedVerses,
         nextBook,
-        nextChapter
+        nextChapter,
+        language.key
       )
     );
     setStickers(nextEditorState.stickers);
@@ -1514,6 +1542,7 @@ export default function StudioScreen() {
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
   }, [
+    language.key,
     routeDesignParam,
     routeSelectedBookParam,
     routeSelectedChapterParam,
@@ -1676,7 +1705,13 @@ export default function StudioScreen() {
       setSelectedVerse(verseNumber);
       setSelectedVerses(nextSelectedVerses);
       setVerseCards((current) =>
-        syncVerseCardsWithSelection(current, nextSelectedVerses, selectedBook, selectedChapter)
+        syncVerseCardsWithSelection(
+          current,
+          nextSelectedVerses,
+          selectedBook,
+          selectedChapter,
+          language.key
+        )
       );
       setSelectedStickerId(null);
       setSelectedNoteId(null);
@@ -1758,7 +1793,8 @@ export default function StudioScreen() {
         nextEditorState.verseCards,
         nextSelectedVerses,
         selectedBook,
-        chapterNumber
+        chapterNumber,
+        language.key
       )
     );
     setStickers(nextEditorState.stickers);
