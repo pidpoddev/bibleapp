@@ -24,7 +24,7 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const colorScheme = useColorScheme();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
 
   const navigationTheme = useMemo(() => {
     const baseTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
@@ -52,7 +52,7 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="settings"
-          options={{ title: 'Settings', presentation: 'card' }}
+          options={{ title: t('settingsTitle'), presentation: 'card' }}
         />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>

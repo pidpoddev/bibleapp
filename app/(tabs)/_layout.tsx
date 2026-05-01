@@ -9,7 +9,7 @@ import { useAppSettings } from '@/utils/app-settings';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
 
   return (
     <Tabs
@@ -55,7 +55,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="bible"
         options={{
-          title: 'Bible',
+          title: t('tabBible'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               size={22}
@@ -68,7 +68,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="studio"
         options={{
-          title: 'Studio',
+          title: t('tabStudio'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               size={22}
@@ -81,7 +81,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="journal"
         options={{
-          title: 'Journal',
+          title: t('tabJournal'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               size={22}
@@ -94,7 +94,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="favorites"
         options={{
-          title: 'Favorites',
+          title: t('tabFavorites'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               size={22}

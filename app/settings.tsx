@@ -4,17 +4,23 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppSettings } from '@/utils/app-settings';
 
 export default function SettingsScreen() {
-  const { colorTheme, colorThemes, setColorThemeKey } = useAppSettings();
+  const {
+    colorTheme,
+    colorThemes,
+    language,
+    languages,
+    setColorThemeKey,
+    setLanguageKey,
+    t,
+  } = useAppSettings();
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.subtitle}>
-        Pick a soft pastel palette to make the app feel more you.
-      </Text>
+      <Text style={styles.title}>{t('settingsTitle')}</Text>
+      <Text style={styles.subtitle}>{t('settingsSubtitle')}</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Colors</Text>
+        <Text style={styles.sectionTitle}>{t('settingsColors')}</Text>
 
         {colorThemes.map((theme) => {
           const isSelected = theme.key === colorTheme.key;
@@ -35,13 +41,50 @@ export default function SettingsScreen() {
 
               <View style={styles.colorTextBlock}>
                 <Text style={styles.colorName}>{theme.name}</Text>
-                <Text style={styles.colorHint}>
-                  Soft, sweet, and easy on the eyes
-                </Text>
+                <Text style={styles.colorHint}>{t('colorHint')}</Text>
               </View>
 
               {isSelected ? (
                 <Ionicons name="checkmark-circle" size={22} color={theme.tint} />
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('settingsLanguage')}</Text>
+
+        {languages.map((option) => {
+          const isSelected = option.key === language.key;
+          const optionLabel =
+            option.key === 'es' ? t('languageSpanish') : t('languageEnglish');
+
+          return (
+            <TouchableOpacity
+              key={option.key}
+              activeOpacity={0.88}
+              onPress={() => setLanguageKey(option.key)}
+              style={[
+                styles.colorCard,
+                {
+                  backgroundColor: colorTheme.cardBackground,
+                  borderColor: isSelected ? colorTheme.tint : colorTheme.border,
+                },
+              ]}>
+              <View style={[styles.swatch, { backgroundColor: colorTheme.accent }]}>
+                <Ionicons name="language-outline" size={16} color="#5B514D" />
+              </View>
+
+              <View style={styles.colorTextBlock}>
+                <Text style={styles.colorName}>{optionLabel}</Text>
+                <Text style={styles.colorHint}>
+                  {`${option.nativeName} • ${t('languageHint')}`}
+                </Text>
+              </View>
+
+              {isSelected ? (
+                <Ionicons name="checkmark-circle" size={22} color={colorTheme.tint} />
               ) : null}
             </TouchableOpacity>
           );

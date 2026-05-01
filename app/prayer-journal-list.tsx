@@ -113,7 +113,7 @@ const purgeTodayPrayerEntriesOnce = async () => {
 
 export default function PrayerJournalListScreen() {
   const router = useRouter();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
   const [entries, setEntries] = useState<PrayerJournalListItem[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
 
@@ -172,15 +172,15 @@ export default function PrayerJournalListScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>🙏 Prayer Journal</Text>
-      <Text style={styles.subtitle}>Your prayers, gratitude, and heart notes</Text>
+      <Text style={styles.title}>{t('prayerListTitle')}</Text>
+      <Text style={styles.subtitle}>{t('prayerListSubtitle')}</Text>
 
       <View style={styles.actionsRow}>
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={handleNewEntry}
           style={[styles.newButton, { backgroundColor: colorTheme.toolbarBackground }]}>
-          <Text style={styles.newButtonText}>+ New Entry</Text>
+          <Text style={styles.newButtonText}>{t('newEntry')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -196,7 +196,7 @@ export default function PrayerJournalListScreen() {
                 ]
               : null,
           ]}>
-          <Text style={styles.filterButtonText}>❤️ Favorites</Text>
+          <Text style={styles.filterButtonText}>{t('favoritesFilter')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -213,7 +213,7 @@ export default function PrayerJournalListScreen() {
                   activeOpacity={0.88}
                   onPress={() => deleteEntry(entry.id)}
                   style={styles.deleteAction}>
-                  <Text style={styles.deleteActionText}>Delete</Text>
+                  <Text style={styles.deleteActionText}>{t('delete')}</Text>
                 </TouchableOpacity>
               )}>
               <TouchableOpacity
@@ -235,12 +235,12 @@ export default function PrayerJournalListScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>
-              {showFavorites ? 'No favorites yet 💖' : 'No prayer entries yet'}
+              {showFavorites ? t('prayerFavoritesEmptyTitle') : t('prayerEmptyTitle')}
             </Text>
             <Text style={styles.emptyText}>
               {showFavorites
-                ? 'Favorite a prayer entry and it will show up here.'
-                : 'Start your first prayer page and it will show up here.'}
+                ? t('prayerFavoritesEmptyText')
+                : t('prayerEmptyText')}
             </Text>
           </View>
         )}

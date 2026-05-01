@@ -342,7 +342,7 @@ function DraggablePrayerSticker({
 }
 
 export default function PrayerJournalScreen() {
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
     newEntryToken?: string;
@@ -650,7 +650,7 @@ export default function PrayerJournalScreen() {
             setOpenTray(null);
           }}
           showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>🙏 Prayer Journal</Text>
+          <Text style={styles.title}>{t('prayerJournalTitle')}</Text>
           <Text style={styles.date}>{entryDate}</Text>
 
           <View ref={canvasRef} collapsable={false} style={styles.captureFrame}>

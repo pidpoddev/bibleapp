@@ -30,22 +30,33 @@ function getReferenceLabel(item: FavoriteVerseDesign) {
   return `${item.book} ${item.chapter}:${verses}`;
 }
 
-function getPreviewLabel(item: FavoriteVerseDesign) {
+function getPreviewLabel(
+  item: FavoriteVerseDesign,
+  t: ReturnType<typeof useAppSettings>['t']
+) {
   const stickerCount = item.stickers?.length ?? 0;
   const noteCount = item.notes?.length ?? 0;
 
   if (stickerCount === 0 && noteCount === 0) {
-    return 'Saved verse design';
+    return t('savedVerseDesign');
   }
 
   const parts = [];
 
   if (stickerCount > 0) {
-    parts.push(`${stickerCount} sticker${stickerCount === 1 ? '' : 's'}`);
+    parts.push(
+      stickerCount === 1
+        ? t('stickersCount', { count: stickerCount })
+        : t('stickersCountPlural', { count: stickerCount })
+    );
   }
 
   if (noteCount > 0) {
-    parts.push(`${noteCount} note${noteCount === 1 ? '' : 's'}`);
+    parts.push(
+      noteCount === 1
+        ? t('notesCount', { count: noteCount })
+        : t('notesCountPlural', { count: noteCount })
+    );
   }
 
   return parts.join(' • ');
@@ -53,7 +64,7 @@ function getPreviewLabel(item: FavoriteVerseDesign) {
 
 export default function FavoritesScreen() {
   const navigation = useNavigation<any>();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
   const [favorites, setFavorites] = useState<FavoriteVerseDesign[]>([]);
 
   const loadFavorites = useCallback(async () => {
@@ -75,8 +86,8 @@ export default function FavoritesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>💖 Favorites</Text>
-      <Text style={styles.subtitle}>Saved verse designs you love</Text>
+      <Text style={styles.title}>{t('favoritesTitle')}</Text>
+      <Text style={styles.subtitle}>{t('favoritesSubtitle')}</Text>
 
       <FlatList
         data={favorites}
@@ -99,19 +110,17 @@ export default function FavoritesScreen() {
               });
             }}
             style={[styles.card, { backgroundColor: colorTheme.cardBackground }]}>
-            <Text style={styles.cardType}>📖 Verse Design</Text>
+            <Text style={styles.cardType}>{t('verseDesignCardType')}</Text>
             <Text style={styles.cardDate}>{getReferenceLabel(item)}</Text>
             <Text numberOfLines={4} style={styles.cardPreview}>
-              {getPreviewLabel(item)}
+              {getPreviewLabel(item, t)}
             </Text>
           </Pressable>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No verse favorites yet 💖</Text>
-            <Text style={styles.emptyText}>
-              Save a Studio verse design and it will appear here.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('favoritesEmptyTitle')}</Text>
+            <Text style={styles.emptyText}>{t('favoritesEmptyText')}</Text>
           </View>
         }
         showsVerticalScrollIndicator={false}

@@ -2,32 +2,31 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppSettings } from '@/utils/app-settings';
 
-const templates = [
-  {
-    key: 'prayer',
-    icon: '🙏',
-    title: 'Prayer Journal',
-  },
-  {
-    key: 'bible-study',
-    icon: '📖',
-    title: 'Bible Study',
-  },
-  {
-    key: 'daily-devotional',
-    icon: '🌅',
-    title: 'Daily Devotional',
-  },
-] as const;
-
 export default function JournalScreen() {
   const router = useRouter();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
+  const templates = [
+    {
+      key: 'prayer',
+      icon: '🙏',
+      title: t('prayerJournal'),
+    },
+    {
+      key: 'bible-study',
+      icon: '📖',
+      title: t('bibleStudy'),
+    },
+    {
+      key: 'daily-devotional',
+      icon: '🌅',
+      title: t('dailyDevotional'),
+    },
+  ] as const;
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>Journal ✍️</Text>
-      <Text style={styles.subtitle}>Choose your journaling style 💕</Text>
+      <Text style={styles.title}>{t('journalTitle')}</Text>
+      <Text style={styles.subtitle}>{t('journalSubtitle')}</Text>
 
       <View style={styles.cardStack}>
         {templates.map((template) => (

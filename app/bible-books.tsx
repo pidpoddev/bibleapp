@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   Keyboard,
+  Platform,
   ScrollView,
   SectionList,
   StyleSheet,
@@ -35,10 +36,6 @@ type BibleBook = {
 
 const books = bible as BibleBook[];
 
-const sections = [
-  { title: 'Old Testament', data: books.slice(0, 39) },
-  { title: 'New Testament', data: books.slice(39) },
-];
 const BOOK_ROW_HEIGHT = 66;
 const SECTION_HEADER_HEIGHT = 36;
 
@@ -61,7 +58,7 @@ function parseReference(input: string) {
 
 export default function BibleBooksScreen() {
   const router = useRouter();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
   const sectionListRef = useRef<SectionList<BibleBook> | null>(null);
   const pendingScrollTargetRef = useRef<{
     sectionIndex: number;
@@ -73,6 +70,13 @@ export default function BibleBooksScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const panelTranslateY = useSharedValue(0);
+  const sections = useMemo(
+    () => [
+      { title: t('oldTestament'), data: books.slice(0, 39) },
+      { title: t('newTestament'), data: books.slice(39) },
+    ],
+    [t]
+  );
 
   const chapterOptions = selectedBook?.chapters.map((entry) => entry.chapter) ?? [];
   const verseOptions = useMemo(() => {
@@ -92,6 +96,7 @@ export default function BibleBooksScreen() {
   };
 
   const closeSelectionGesture = Gesture.Pan()
+    .enabled(Platform.OS !== 'web')
     .activeOffsetY(1)
     .failOffsetX([-28, 28])
     .onUpdate((event) => {
@@ -223,6 +228,10 @@ export default function BibleBooksScreen() {
     setSelectedVerse(firstVerse);
   };
 
+  const handleVerseSelect = (verse: number) => {
+    setSelectedVerse(verse);
+  };
+
   const handleOpenVerse = () => {
     if (!selectedBook || selectedChapter === null || selectedVerse === null) {
       return;
@@ -235,8 +244,8 @@ export default function BibleBooksScreen() {
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextBlock}>
-          <Text style={styles.title}>Bible ✨</Text>
-          <Text style={styles.subtitle}>Find a verse to create with</Text>
+          <Text style={styles.title}>{t('bibleTitle')}</Text>
+          <Text style={styles.subtitle}>{t('bibleSubtitle')}</Text>
         </View>
 
         <TouchableOpacity
@@ -268,7 +277,7 @@ export default function BibleBooksScreen() {
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder={'Search "John 3:16"'}
+          placeholder={t('searchPlaceholder')}
           placeholderTextColor="#9B928C"
           onSubmitEditing={handleSearch}
           onFocus={() => setIsSearchFocused(true)}
@@ -363,7 +372,7 @@ export default function BibleBooksScreen() {
             <View style={styles.selectionHandle} />
             <Text style={styles.selectionTitle}>{selectedBook.book}</Text>
 
-            <Text style={styles.selectionLabel}>Chapter</Text>
+            <Text style={styles.selectionLabel}>{t('chapter')}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -394,7 +403,9 @@ export default function BibleBooksScreen() {
               ))}
             </ScrollView>
 
-            <Text style={styles.selectionLabel}>Verse</Text>
+            <Text key={`verse-label-${t('verse')}`} style={styles.selectionLabel}>
+              {t('verse')}
+            </Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -403,7 +414,7 @@ export default function BibleBooksScreen() {
                 <TouchableOpacity
                   key={`${selectedBook.book}-${selectedChapter}-verse-${verse.verse}`}
                   activeOpacity={0.85}
-                  onPress={() => setSelectedVerse(verse.verse)}
+                  onPress={() => handleVerseSelect(verse.verse)}
                   style={[
                     styles.optionPill,
                     { backgroundColor: colorTheme.toolbarBackground },
@@ -426,11 +437,16 @@ export default function BibleBooksScreen() {
             </ScrollView>
 
             <TouchableOpacity
+              key={`open-${selectedBook.book}-${selectedChapter}-${selectedVerse}`}
               activeOpacity={0.9}
               onPress={handleOpenVerse}
               style={[styles.openButton, { backgroundColor: colorTheme.tint }]}>
               <Text style={styles.openButtonText}>
-                Open {selectedBook.book} {selectedChapter}:{selectedVerse}
+                {t('openReference', {
+                  book: selectedBook.book,
+                  chapter: selectedChapter ?? '',
+                  verse: selectedVerse ?? '',
+                })}
               </Text>
             </TouchableOpacity>
           </Animated.View>
