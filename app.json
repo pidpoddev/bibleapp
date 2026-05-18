@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "myBibleApp",
-    "slug": "myBibleApp",
+    "slug": "bibleapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -45,6 +45,13 @@
       "baseUrl": "/bibleapp",
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e9392c72-1d1e-48f7-a1c4-4916346afecc"
+      }
+    },
+    "owner": "pidpoddev"
   }
 }
