@@ -46,10 +46,22 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           contentStyle: { backgroundColor: colorTheme.screenBackground },
+          headerBackTitle: 'Back',
           headerStyle: { backgroundColor: colorTheme.screenBackground },
           headerShadowVisible: false,
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="bible-books" options={{ title: t('tabBible') }} />
+        <Stack.Screen name="bible-study-journal" options={{ title: t('bibleStudy') }} />
+        <Stack.Screen name="journal-editor" options={{ title: t('tabJournal') }} />
+        <Stack.Screen
+          name="prayer-journal"
+          options={{ title: t('prayerJournal') }}
+        />
+        <Stack.Screen
+          name="prayer-journal-list"
+          options={{ title: t('prayerJournal') }}
+        />
         <Stack.Screen
           name="settings"
           options={{ title: t('settingsTitle'), presentation: 'card' }}

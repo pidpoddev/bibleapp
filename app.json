@@ -4,7 +4,7 @@
     "slug": "bibleapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon-pretty-bible.png",
     "scheme": "mybibleapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -44,7 +44,8 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "baseUrl": "/bibleapp",
@@ -57,6 +58,12 @@
         "projectId": "e9392c72-1d1e-48f7-a1c4-4916346afecc"
       }
     },
-    "owner": "pidpoddev"
+    "owner": "pidpoddev",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e9392c72-1d1e-48f7-a1c4-4916346afecc"
+    }
   }
 }

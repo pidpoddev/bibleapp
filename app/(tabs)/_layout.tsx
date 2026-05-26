@@ -15,7 +15,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      initialRouteName="bible"
+      initialRouteName="index"
       screenOptions={{
         tabBarActiveTintColor: colorTheme.tint ?? Colors[colorScheme ?? 'light'].tint,
         tabBarInactiveTintColor: '#8F877F',
@@ -23,9 +23,9 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: isWeb ? 12 : 11,
           fontWeight: '600',
-          lineHeight: 16,
+          lineHeight: 15,
           paddingBottom: isWeb ? 0 : 2,
         },
         tabBarItemStyle: {
@@ -37,8 +37,8 @@ export default function TabLayout() {
           left: isWeb ? 0 : 16,
           right: isWeb ? 0 : 16,
           bottom: isWeb ? 0 : 16,
-          height: isWeb ? 78 : 72,
-          paddingTop: isWeb ? 8 : 10,
+          height: isWeb ? 78 : 76,
+          paddingTop: isWeb ? 8 : 9,
           paddingBottom: isWeb ? 12 : 10,
           marginHorizontal: isWeb ? 12 : 0,
           marginTop: isWeb ? 8 : 0,
@@ -59,7 +59,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          href: null,
+          title: t('tabHome'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={22}
+              name={focused ? 'home' : 'home-outline'}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -112,6 +119,25 @@ export default function TabLayout() {
               color={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="shop"
+        options={{
+          title: t('tabShop'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={21}
+              name={focused ? 'cart' : 'cart-outline'}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="verse-designs"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

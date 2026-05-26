@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type StickerData = {
   id: number;
   emoji: string;
+  imageKey?: string;
   x: number;
   y: number;
   scale: number;
@@ -35,6 +36,7 @@ export type VerseEditorState = {
   verseCards: VerseCardData[];
   stickers: StickerData[];
   notes: NoteData[];
+  backgroundKey: string | null;
   selectedFont: string;
   fontSize: number;
   highlightedWords: Record<string, HighlightColor>;
@@ -46,6 +48,7 @@ export const DEFAULT_VERSE_EDITOR_STATE: VerseEditorState = {
   verseCards: [],
   stickers: [],
   notes: [],
+  backgroundKey: null,
   selectedFont: 'Playwrite',
   fontSize: 14,
   highlightedWords: {},
@@ -108,6 +111,9 @@ function isVerseEditorState(value: unknown): value is VerseEditorState {
     candidate.stickers.every(isStickerData) &&
     Array.isArray(candidate.notes) &&
     candidate.notes.every(isNoteData) &&
+    (candidate.backgroundKey === null ||
+      typeof candidate.backgroundKey === 'string' ||
+      typeof candidate.backgroundKey === 'undefined') &&
     typeof candidate.selectedFont === 'string' &&
     typeof candidate.fontSize === 'number' &&
     typeof candidate.highlightedWords === 'object' &&
@@ -199,6 +205,10 @@ function normalizeVerseEditorState(
           accumulator.push({
             id: normalizedSticker.id,
             emoji: normalizedSticker.emoji,
+            imageKey:
+              typeof normalizedSticker.imageKey === 'string'
+                ? normalizedSticker.imageKey
+                : undefined,
             x: normalizedSticker.x,
             y: normalizedSticker.y,
             scale: normalizedSticker.scale,
@@ -286,6 +296,12 @@ function normalizeVerseEditorState(
     verseCards: normalizedVerseCards,
     stickers: normalizedStickers,
     notes: normalizedNotes,
+    backgroundKey:
+      typeof candidate.backgroundKey === 'string'
+        ? candidate.backgroundKey
+        : candidate.backgroundKey === null
+          ? null
+          : defaults.backgroundKey,
     selectedFont:
       typeof candidate.selectedFont === 'string'
         ? candidate.selectedFont

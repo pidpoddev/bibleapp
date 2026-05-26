@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
@@ -28,6 +29,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { captureRef } from 'react-native-view-shot';
 import { useAppSettings } from '@/utils/app-settings';
+import {
+  getShopBackground,
+  TEST_UNLOCKED_BACKGROUND_PACKS,
+} from '@/utils/shop-backgrounds';
+import {
+  getShopSticker,
+  getShopStickerDisplaySize,
+  TEST_UNLOCKED_STICKER_PACKS,
+} from '@/utils/shop-stickers';
 
 type PrayerSection = {
   id: string;
@@ -35,11 +45,12 @@ type PrayerSection = {
   text: string;
 };
 
-type PrayerBackground = 'lined' | 'plain';
+type PrayerBackground = 'lined' | 'plain' | (string & {});
 
 type PrayerSticker = {
   id: string;
   uri: string;
+  imageKey?: string;
   x: number;
   y: number;
   scale: number;
@@ -60,7 +71,18 @@ type PrayerEntry = {
 };
 
 const JOURNAL_INDEX_KEY = 'journal_index';
+const SHOP_BACKGROUND_PREFIX = 'shop:';
 const generateId = () => Date.now().toString();
+
+function getPrayerBackgroundValue(backgroundKey: string) {
+  return `${SHOP_BACKGROUND_PREFIX}${backgroundKey}`;
+}
+
+function getPrayerBackgroundKey(background: PrayerBackground) {
+  return background.startsWith(SHOP_BACKGROUND_PREFIX)
+    ? background.slice(SHOP_BACKGROUND_PREFIX.length)
+    : null;
+}
 const getFormattedDate = () =>
   new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -121,6 +143,7 @@ const defaultSections: PrayerSection[] = [
   { id: '2', label: '💖 What I’m thankful for:', text: '' },
   { id: '3', label: '✨ What’s on my heart:', text: '' },
   { id: '4', label: '🕊 Give me peace about:', text: '' },
+  { id: '5', label: '🙌 Answered prayers:', text: '' },
 ];
 
 type PrayerSectionFieldProps = {
@@ -201,6 +224,36 @@ function normalizeLoadedSectionText(text: string) {
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\n+$/g, '');
+}
+
+function normalizeLoadedSections(sections: PrayerSection[]) {
+  const sectionsById = new Map(sections.map((section) => [section.id, section]));
+  const normalizedDefaultSections = defaultSections.map((section) => {
+    const savedSection = sectionsById.get(section.id);
+
+    return {
+      ...section,
+      text:
+        savedSection && typeof savedSection.text === 'string'
+          ? normalizeLoadedSectionText(savedSection.text)
+          : '',
+    };
+  });
+
+  const customSections = sections.filter(
+    (section) => !defaultSections.some((defaultSection) => defaultSection.id === section.id)
+  );
+
+  return [
+    ...normalizedDefaultSections,
+    ...customSections.map((section) => ({
+      ...section,
+      text:
+        typeof section.text === 'string'
+          ? normalizeLoadedSectionText(section.text)
+          : '',
+    })),
+  ];
 }
 
 function DraggablePrayerSticker({
@@ -334,7 +387,18 @@ function DraggablePrayerSticker({
             </>
           ) : null}
 
-          <Text style={styles.stickerEmoji}>{sticker.uri}</Text>
+          {sticker.imageKey && getShopSticker(sticker.imageKey) ? (
+            <Image
+              source={getShopSticker(sticker.imageKey)!.image}
+              resizeMode="contain"
+              style={[
+                styles.stickerImage,
+                getShopStickerDisplaySize(getShopSticker(sticker.imageKey)!, 142),
+              ]}
+            />
+          ) : (
+            <Text style={styles.stickerEmoji}>{sticker.uri}</Text>
+          )}
         </Pressable>
       </Animated.View>
     </PanGestureHandler>
@@ -374,6 +438,7 @@ export default function PrayerJournalScreen() {
       ),
     [sectionsHeight, stickers]
   );
+  const selectedPrayerBackground = getShopBackground(getPrayerBackgroundKey(background));
 
   const updateIndex = useCallback(async (entry: PrayerEntry) => {
     try {
@@ -482,15 +547,7 @@ export default function PrayerJournalScreen() {
         }
 
         if (Array.isArray(parsedEntry.sections)) {
-          setSections(
-            parsedEntry.sections.map((section) => ({
-              ...section,
-              text:
-                typeof section.text === 'string'
-                  ? normalizeLoadedSectionText(section.text)
-                  : '',
-            }))
-          );
+          setSections(normalizeLoadedSections(parsedEntry.sections));
         }
 
         if (Array.isArray(parsedEntry.stickers)) {
@@ -499,7 +556,7 @@ export default function PrayerJournalScreen() {
 
         setIsFavorite(Boolean(parsedEntry.isFavorite));
 
-        if (parsedEntry.background === 'plain' || parsedEntry.background === 'lined') {
+        if (typeof parsedEntry.background === 'string') {
           setBackground(parsedEntry.background);
         }
       } catch (error) {
@@ -548,6 +605,25 @@ export default function PrayerJournalScreen() {
       x: 150 + stickers.length * 8,
       y: 280 + stickers.length * 8,
       scale: 1,
+      rotation: 0,
+      zIndex: highestStickerDepth + 1,
+    };
+
+    const updatedStickers = [...stickers, newSticker];
+    setStickers(updatedStickers);
+    setSelectedStickerId(newSticker.id);
+    setOpenTray(null);
+    saveEntry(sections, updatedStickers, background);
+  };
+
+  const addShopSticker = (imageKey: string) => {
+    const newSticker: PrayerSticker = {
+      id: Date.now().toString(),
+      uri: '',
+      imageKey,
+      x: 118 + stickers.length * 8,
+      y: 250 + stickers.length * 8,
+      scale: 0.75,
       rotation: 0,
       zIndex: highestStickerDepth + 1,
     };
@@ -650,18 +726,32 @@ export default function PrayerJournalScreen() {
             setOpenTray(null);
           }}
           showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>{t('prayerJournalTitle')}</Text>
+          <Text
+            adjustsFontSizeToFit
+            maxFontSizeMultiplier={1.1}
+            minimumFontScale={0.7}
+            numberOfLines={1}
+            style={styles.title}>
+            {t('prayerJournalTitle')}
+          </Text>
           <Text style={styles.date}>{entryDate}</Text>
 
           <View ref={canvasRef} collapsable={false} style={styles.captureFrame}>
-            {background === 'lined' ? (
+            {background === 'lined' || selectedPrayerBackground ? (
               <ImageBackground
-                imageStyle={styles.canvasBackgroundImage}
-                resizeMode="stretch"
-                source={require('../assets/images/lined-paper.png')}
+                imageStyle={[
+                  styles.canvasBackgroundImage,
+                  selectedPrayerBackground ? styles.shopCanvasBackgroundImage : null,
+                ]}
+                resizeMode={selectedPrayerBackground ? 'cover' : 'stretch'}
+                source={
+                  selectedPrayerBackground
+                    ? selectedPrayerBackground.image
+                    : require('../assets/images/lined-paper.png')
+                }
                 style={[
                   styles.canvas,
-                  styles.linedCanvas,
+                  selectedPrayerBackground ? styles.shopBackgroundCanvas : styles.linedCanvas,
                   {
                     minHeight: canvasMinHeight,
                     backgroundColor: colorTheme.paperBackground,
@@ -773,6 +863,39 @@ export default function PrayerJournalScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <ScrollView
+              style={styles.trayStickerScroll}
+              contentContainerStyle={styles.trayStickerPackList}
+              showsVerticalScrollIndicator={false}>
+              {TEST_UNLOCKED_STICKER_PACKS.map((pack) => (
+                <View key={pack.id} style={styles.trayStickerPackSection}>
+                  <Text style={styles.trayPackTitle}>{pack.title}</Text>
+                  <View style={styles.stickerTrayRow}>
+                    {pack.stickers.map((shopSticker) => (
+                      <TouchableOpacity
+                        key={shopSticker.key}
+                        activeOpacity={0.85}
+                        onPress={() => addShopSticker(shopSticker.key)}
+                        style={[
+                          styles.trayStickerButton,
+                          styles.trayImageStickerButton,
+                          { backgroundColor: colorTheme.toolbarBackground },
+                        ]}>
+                        <Image
+                          source={shopSticker.image}
+                          resizeMode="contain"
+                          style={[
+                            styles.trayStickerImage,
+                            getShopStickerDisplaySize(shopSticker, 52),
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         ) : null}
 
@@ -819,6 +942,51 @@ export default function PrayerJournalScreen() {
                 <Text style={styles.backgroundChipText}>Plain</Text>
               </TouchableOpacity>
             </View>
+
+            <ScrollView
+              style={styles.backgroundPickerScroll}
+              contentContainerStyle={styles.backgroundPickerContent}
+              showsVerticalScrollIndicator={false}>
+              {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
+                <View key={pack.id} style={styles.backgroundPackSection}>
+                  <Text style={styles.trayPackTitle}>{pack.title}</Text>
+                  <View style={styles.backgroundPreviewGrid}>
+                    {pack.backgrounds.map((backgroundOption) => {
+                      const backgroundValue = getPrayerBackgroundValue(backgroundOption.key);
+
+                      return (
+                        <TouchableOpacity
+                          key={backgroundOption.key}
+                          activeOpacity={0.85}
+                          onPress={() => updateBackground(backgroundValue)}
+                          style={[
+                            styles.backgroundPreviewButton,
+                            { backgroundColor: colorTheme.toolbarBackground },
+                            background === backgroundValue
+                              ? [
+                                  styles.activeChip,
+                                  {
+                                    backgroundColor: colorTheme.selectionBackground,
+                                    borderColor: colorTheme.border,
+                                  },
+                                ]
+                              : null,
+                          ]}>
+                          <Image
+                            source={backgroundOption.image}
+                            resizeMode="cover"
+                            style={styles.backgroundPreviewImage}
+                          />
+                          <Text numberOfLines={2} style={styles.backgroundPreviewText}>
+                            {backgroundOption.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         ) : null}
 
@@ -905,8 +1073,9 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'web' ? 80 : 170,
   },
   title: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '600',
+    lineHeight: 24,
     color: '#1F1F1F',
   },
   date: {
@@ -939,6 +1108,12 @@ const styles = StyleSheet.create({
   },
   canvasBackgroundImage: {
     opacity: 0.45,
+  },
+  shopCanvasBackgroundImage: {
+    opacity: 1,
+  },
+  shopBackgroundCanvas: {
+    backgroundColor: '#FFFFFF',
   },
   sectionsContent: {
     paddingBottom: 20,
@@ -1001,6 +1176,10 @@ const styles = StyleSheet.create({
   },
   stickerEmoji: {
     fontSize: 54,
+  },
+  stickerImage: {
+    width: 142,
+    height: 142,
   },
   resizeHandleWrapper: {
     position: 'absolute',
@@ -1072,6 +1251,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
+  trayPackTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#7A6F66',
+    marginTop: 0,
+    marginBottom: 10,
+  },
+  trayStickerScroll: {
+    maxHeight: 220,
+  },
+  trayStickerPackList: {
+    paddingBottom: 4,
+  },
+  trayStickerPackSection: {
+    marginTop: 14,
+  },
   trayStickerButton: {
     width: 56,
     height: 56,
@@ -1082,6 +1277,15 @@ const styles = StyleSheet.create({
   },
   trayStickerEmoji: {
     fontSize: 30,
+  },
+  trayImageStickerButton: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E8DCD4',
+  },
+  trayStickerImage: {
+    width: 52,
+    height: 52,
   },
   backgroundOptionRow: {
     flexDirection: 'row',
@@ -1100,6 +1304,43 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#1F1F1F',
+  },
+  backgroundPickerScroll: {
+    maxHeight: 230,
+    marginTop: 12,
+  },
+  backgroundPickerContent: {
+    paddingBottom: 4,
+  },
+  backgroundPackSection: {
+    marginTop: 4,
+  },
+  backgroundPreviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  backgroundPreviewButton: {
+    width: 92,
+    minHeight: 112,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8DCD4',
+    padding: 7,
+    alignItems: 'center',
+  },
+  backgroundPreviewImage: {
+    width: 76,
+    height: 58,
+    borderRadius: 6,
+    marginBottom: 7,
+  },
+  backgroundPreviewText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#5B514D',
+    textAlign: 'center',
   },
   toolbar: {
     position: 'absolute',

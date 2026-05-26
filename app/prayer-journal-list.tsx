@@ -179,7 +179,14 @@ export default function PrayerJournalListScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>{t('prayerListTitle')}</Text>
+      <Text
+        adjustsFontSizeToFit
+        maxFontSizeMultiplier={1.1}
+        minimumFontScale={0.7}
+        numberOfLines={1}
+        style={styles.title}>
+        {t('prayerListTitle')}
+      </Text>
       <Text style={styles.subtitle}>{t('prayerListSubtitle')}</Text>
 
       <View style={styles.actionsRow}>
@@ -264,8 +271,9 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'web' ? 28 : 52,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '600',
+    lineHeight: 28,
     color: '#1F1F1F',
   },
   subtitle: {

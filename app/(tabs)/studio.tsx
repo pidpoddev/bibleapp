@@ -3,8 +3,9 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -46,12 +47,28 @@ import {
   type VerseStateMap,
 } from '@/utils/verse-storage';
 import {
+  getBooks,
   getChapters,
   getVerseText,
   getVerses,
   type BibleLanguageKey,
 } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
+import {
+  getShopBackground,
+  TEST_UNLOCKED_BACKGROUND_PACKS,
+} from '@/utils/shop-backgrounds';
+import {
+  isVerseDesignDecorated,
+  removeVerseDesignSnapshot,
+  SAVED_DESIGNS_STORAGE_KEY,
+  saveVerseDesignSnapshot,
+} from '@/utils/verse-design-list';
+import {
+  getShopSticker,
+  getShopStickerDisplaySize,
+  TEST_UNLOCKED_STICKER_PACKS,
+} from '@/utils/shop-stickers';
 
 type Sticker = StickerData;
 type Note = NoteData;
@@ -125,6 +142,7 @@ type SavedVerseDesign = {
   verseCards: VerseCard[];
   stickers: Sticker[];
   notes: Note[];
+  backgroundKey: string | null;
   highlights: Record<string, HighlightColor>;
   selectedFont: string;
   fontSize: number;
@@ -145,6 +163,8 @@ const VERSE_CARD_ESTIMATED_LINE_WIDTH = 17;
 const DEFAULT_BOOK = 'John';
 const DEFAULT_CHAPTER = 3;
 const DEFAULT_VERSE = 16;
+const VERSE_DESIGN_AUTOSAVE_DELAY_MS = 700;
+const MAX_UNDO_HISTORY = 25;
 const HIGHLIGHT_COLORS: { key: HighlightColor; color: string }[] = [
   { key: 'yellow', color: '#FFF3A3' },
   { key: 'pink', color: '#FFD2E1' },
@@ -155,8 +175,6 @@ const HIGHLIGHT_COLOR_MAP: Record<HighlightColor, string> = {
   pink: '#FFD2E1',
   blue: '#CFE7FF',
 };
-const SAVED_DESIGNS_STORAGE_KEY = 'favorites';
-
 function clamp(value: number, min: number, max: number) {
   'worklet';
   return Math.min(Math.max(value, min), max);
@@ -167,6 +185,7 @@ function cloneVerseEditorState(state: VerseEditorState): VerseEditorState {
     verseCards: state.verseCards.map((verseCard) => ({ ...verseCard })),
     stickers: state.stickers.map((sticker) => ({ ...sticker })),
     notes: state.notes.map((note) => ({ ...note })),
+    backgroundKey: state.backgroundKey ?? null,
     selectedFont: state.selectedFont,
     fontSize: state.fontSize,
     highlightedWords: { ...state.highlightedWords },
@@ -178,6 +197,7 @@ function getVerseEditorStateFromDesign(design: SavedVerseDesign): VerseEditorSta
     verseCards: (design.verseCards ?? []).map((verseCard) => ({ ...verseCard })),
     stickers: design.stickers.map((sticker) => ({ ...sticker })),
     notes: design.notes.map((note) => ({ ...note })),
+    backgroundKey: design.backgroundKey ?? null,
     selectedFont: design.selectedFont,
     fontSize: design.fontSize,
     highlightedWords: { ...design.highlights },
@@ -400,7 +420,18 @@ function DraggableSticker({
             </>
           ) : null}
 
-          <Text style={styles.stickerText}>{sticker.emoji}</Text>
+          {sticker.imageKey && getShopSticker(sticker.imageKey) ? (
+            <Image
+              source={getShopSticker(sticker.imageKey)!.image}
+              resizeMode="contain"
+              style={[
+                styles.stickerImage,
+                getShopStickerDisplaySize(getShopSticker(sticker.imageKey)!),
+              ]}
+            />
+          ) : (
+            <Text style={styles.stickerText}>{sticker.emoji}</Text>
+          )}
         </Pressable>
       </Animated.View>
     </PanGestureHandler>
@@ -782,16 +813,23 @@ type FloatingItem =
   | { type: 'note'; zIndex: number; item: Note }
   | { type: 'sticker'; zIndex: number; item: Sticker };
 
-type ToolbarMenu = 'fonts' | 'size' | 'highlight' | 'stickers' | null;
+type ToolbarMenu =
+  | 'fonts'
+  | 'size'
+  | 'highlight'
+  | 'stickers'
+  | 'backgrounds'
+  | null;
 
 export default function StudioScreen() {
-  const { colorTheme, language } = useAppSettings();
+  const { colorTheme, language, t } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
   const lastAppliedSelectionParamsRef = useRef<string | null>(null);
   const saveToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedSavedDesignsRef = useRef(false);
+  const lastAutoSavedVerseDesignSignatureRef = useRef<string | null>(null);
   const router = useRouter();
   const route = useRoute<any>();
   const routeDesignParam =
@@ -816,11 +854,12 @@ export default function StudioScreen() {
       : typeof route.params?.selectedVerse === 'number'
         ? route.params.selectedVerse
         : null;
-  const [selectedBook, setSelectedBook] = useState(DEFAULT_BOOK);
-  const [selectedChapter, setSelectedChapter] = useState(DEFAULT_CHAPTER);
-  const [selectedVerse, setSelectedVerse] = useState(DEFAULT_VERSE);
-  const [selectedVerses, setSelectedVerses] = useState<number[]>([DEFAULT_VERSE]);
+  const [selectedBook, setSelectedBook] = useState('');
+  const [selectedChapter, setSelectedChapter] = useState(0);
+  const [selectedVerse, setSelectedVerse] = useState(0);
+  const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
   const [openToolbarMenu, setOpenToolbarMenu] = useState<ToolbarMenu>(null);
+  const [isBookDropdownOpen, setIsBookDropdownOpen] = useState(false);
   const [isChapterDropdownOpen, setIsChapterDropdownOpen] = useState(false);
   const [isVerseDropdownOpen, setIsVerseDropdownOpen] = useState(false);
   const [verseState, setVerseState] = useState<VerseStateMap>({});
@@ -828,6 +867,9 @@ export default function StudioScreen() {
   const [fontSize, setFontSize] = useState(DEFAULT_VERSE_EDITOR_STATE.fontSize);
   const [stickers, setStickers] = useState<Sticker[]>(DEFAULT_VERSE_EDITOR_STATE.stickers);
   const [notes, setNotes] = useState<Note[]>(DEFAULT_VERSE_EDITOR_STATE.notes);
+  const [backgroundKey, setBackgroundKey] = useState<string | null>(
+    DEFAULT_VERSE_EDITOR_STATE.backgroundKey
+  );
   const [selectedFont, setSelectedFont] = useState(
     DEFAULT_VERSE_EDITOR_STATE.selectedFont
   );
@@ -852,17 +894,33 @@ export default function StudioScreen() {
   const [hasLoadedSavedDesigns, setHasLoadedSavedDesigns] = useState(false);
   const [hasLoadedState, setHasLoadedState] = useState(false);
   const [saveToastMessage, setSaveToastMessage] = useState('');
-  const chapterOptions = getChapters(selectedBook);
-  const verseOptions = getVerseOptions(selectedBook, selectedChapter);
+  const [undoHistory, setUndoHistory] = useState<VerseEditorState[]>([]);
+  const bookOptions = getBooks();
+  const hasBookSelection = selectedBook.length > 0;
+  const hasChapterSelection = hasBookSelection && selectedChapter > 0;
+  const hasVerseSelection =
+    hasChapterSelection && selectedVerse > 0 && selectedVerses.length > 0;
+  const chapterOptions = hasBookSelection ? getChapters(selectedBook) : [];
+  const verseOptions = hasChapterSelection ? getVerseOptions(selectedBook, selectedChapter) : [];
   const verseDropdownLabel =
-    selectedVerses.length <= 1
+    !hasVerseSelection
+      ? 'Verse'
+      : selectedVerses.length <= 1
       ? `Verse ${selectedVerse}`
       : `Verse ${selectedVerse} +${selectedVerses.length - 1}`;
-  const normalizedSelectedVerses = normalizeSelectedVerses(selectedVerses, selectedVerse);
-  const designKey = getDesignKey(
-    selectedBook,
-    selectedChapter,
-    normalizedSelectedVerses
+  const normalizedSelectedVerses = useMemo(
+    () =>
+      hasVerseSelection
+        ? normalizeSelectedVerses(selectedVerses, selectedVerse)
+        : [],
+    [hasVerseSelection, selectedVerse, selectedVerses]
+  );
+  const designKey = useMemo(
+    () =>
+      hasVerseSelection
+        ? getDesignKey(selectedBook, selectedChapter, normalizedSelectedVerses)
+        : 'draft',
+    [hasVerseSelection, normalizedSelectedVerses, selectedBook, selectedChapter]
   );
   const verseLineHeight = Math.round(fontSize * 1.42);
   const contentStageMinHeight = Math.max(
@@ -880,7 +938,7 @@ export default function StudioScreen() {
     JOURNAL_LINE_COUNT,
     Math.ceil((contentStageMinHeight + JOURNAL_LINE_TOP_OFFSET + 120) / JOURNAL_LINE_SPACING)
   );
-  const verseTypography = {
+  const verseTypography: DraggableVerseCardProps['verseTypography'] = {
     fontSize,
     lineHeight: verseLineHeight,
     fontFamily:
@@ -896,6 +954,7 @@ export default function StudioScreen() {
     size: { emoji: '🔤', label: 'Size' },
     highlight: { emoji: '🎨', label: 'Highlight' },
     stickers: { emoji: '🌸', label: 'Stickers' },
+    backgrounds: { emoji: '✨', label: 'Backgrounds' },
   } as const;
   const floatingItems: FloatingItem[] = [
     ...notes.map((note) => ({ type: 'note' as const, zIndex: note.zIndex, item: note })),
@@ -912,14 +971,19 @@ export default function StudioScreen() {
   const isCurrentVerseSaved = savedDesigns.some((design) => design.key === designKey);
   const saveToastOpacity = useSharedValue(0);
   const saveToastTranslateY = useSharedValue(12);
-  const currentEditorState: VerseEditorState = {
-    verseCards,
-    stickers,
-    notes,
-    selectedFont,
-    fontSize,
-    highlightedWords,
-  };
+  const currentEditorState: VerseEditorState = useMemo(
+    () => ({
+      verseCards,
+      stickers,
+      notes,
+      backgroundKey,
+      selectedFont,
+      fontSize,
+      highlightedWords,
+    }),
+    [backgroundKey, fontSize, highlightedWords, notes, selectedFont, stickers, verseCards]
+  );
+  const selectedStudioBackground = getShopBackground(backgroundKey);
 
   const getHighestZIndex = () =>
     Math.max(
@@ -946,6 +1010,57 @@ export default function StudioScreen() {
       saveToastOpacity.value = withTiming(0, { duration: 220 });
       saveToastTranslateY.value = withTiming(12, { duration: 220 });
     }, 1800);
+  };
+
+  const applyEditorState = (state: VerseEditorState) => {
+    const nextEditorState = cloneVerseEditorState(state);
+
+    setVerseCards(nextEditorState.verseCards);
+    setStickers(nextEditorState.stickers);
+    setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
+    setSelectedFont(nextEditorState.selectedFont);
+    setFontSize(nextEditorState.fontSize);
+    setHighlightedWords(nextEditorState.highlightedWords);
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setAutoFocusNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
+    setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+  };
+
+  const recordUndoSnapshot = () => {
+    const snapshot = cloneVerseEditorState(currentEditorState);
+
+    setUndoHistory((current) => {
+      const previousSnapshot = current[current.length - 1];
+
+      if (
+        previousSnapshot &&
+        JSON.stringify(previousSnapshot) === JSON.stringify(snapshot)
+      ) {
+        return current;
+      }
+
+      return [...current.slice(-MAX_UNDO_HISTORY + 1), snapshot];
+    });
+  };
+
+  const undoLastEdit = () => {
+    setUndoHistory((current) => {
+      const previousSnapshot = current[current.length - 1];
+
+      if (!previousSnapshot) {
+        return current;
+      }
+
+      applyEditorState(previousSnapshot);
+      return current.slice(0, -1);
+    });
   };
 
   const loadEditorStateForDesign = (
@@ -975,6 +1090,7 @@ export default function StudioScreen() {
     );
     setStickers(nextEditorState.stickers);
     setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
     setSelectedFont(nextEditorState.selectedFont);
     setFontSize(nextEditorState.fontSize);
     setHighlightedWords(nextEditorState.highlightedWords);
@@ -983,6 +1099,7 @@ export default function StudioScreen() {
     setAutoFocusNoteId(null);
     setFocusedNoteId(null);
     setFocusedNoteTarget(null);
+    setUndoHistory([]);
   };
 
   const switchDisplayedVerses = (
@@ -1012,10 +1129,12 @@ export default function StudioScreen() {
       ),
     };
 
-    setVerseState((current) => ({
-      ...current,
-      [designKey]: currentEditorState,
-    }));
+    if (hasVerseSelection) {
+      setVerseState((current) => ({
+        ...current,
+        [designKey]: currentEditorState,
+      }));
+    }
 
     if (nextDesignKey === designKey) {
       setSelectedVerse(nextActiveVerse);
@@ -1053,8 +1172,26 @@ export default function StudioScreen() {
       setFocusedNoteId(null);
       setFocusedNoteTarget(null);
       setOpenToolbarMenu(null);
+      setIsBookDropdownOpen(false);
       setIsChapterDropdownOpen(false);
       setIsVerseDropdownOpen(false);
+
+      if (!selectedBook) {
+        setVerseState({});
+        setSelectedChapter(0);
+        setSelectedVerse(0);
+        setSelectedVerses([]);
+        setVerseCards(DEFAULT_VERSE_EDITOR_STATE.verseCards);
+        setStickers(DEFAULT_VERSE_EDITOR_STATE.stickers);
+        setNotes(DEFAULT_VERSE_EDITOR_STATE.notes);
+        setBackgroundKey(DEFAULT_VERSE_EDITOR_STATE.backgroundKey);
+        setSelectedFont(DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+        setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
+        setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
+        setUndoHistory([]);
+        setHasLoadedState(true);
+        return;
+      }
 
       try {
         const savedVerseState = await loadVerseStateMap(
@@ -1067,6 +1204,33 @@ export default function StudioScreen() {
         }
 
         setVerseState(savedVerseState);
+        const shouldOpenSpecificVerse =
+          routeDesignParam?.book === selectedBook ||
+          (routeSelectedBookParam === selectedBook &&
+            routeSelectedChapterParam !== null &&
+            routeSelectedVerseParam !== null);
+        const bookChapters = getChapters(selectedBook);
+
+        if (!shouldOpenSpecificVerse) {
+          const nextChapter =
+            selectedChapter > 0 && bookChapters.includes(selectedChapter)
+              ? selectedChapter
+              : bookChapters[0] ?? 0;
+
+          setSelectedChapter(nextChapter);
+          setSelectedVerse(0);
+          setSelectedVerses([]);
+          setVerseCards(DEFAULT_VERSE_EDITOR_STATE.verseCards);
+          setStickers(DEFAULT_VERSE_EDITOR_STATE.stickers);
+          setNotes(DEFAULT_VERSE_EDITOR_STATE.notes);
+          setBackgroundKey(DEFAULT_VERSE_EDITOR_STATE.backgroundKey);
+          setSelectedFont(DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+          setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
+          setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
+          setUndoHistory([]);
+          return;
+        }
+
         const routeSelectedVerses =
           routeDesignParam?.book === selectedBook
             ? normalizeSelectedVerses(
@@ -1074,7 +1238,6 @@ export default function StudioScreen() {
                 routeDesignParam.verse
               )
             : null;
-        const bookChapters = getChapters(selectedBook);
         const fallbackChapter =
           selectedBook === DEFAULT_BOOK && bookChapters.includes(DEFAULT_CHAPTER)
             ? DEFAULT_CHAPTER
@@ -1133,9 +1296,11 @@ export default function StudioScreen() {
         );
         setStickers(initialVerseState.stickers);
         setNotes(initialVerseState.notes);
+        setBackgroundKey(initialVerseState.backgroundKey ?? null);
         setSelectedFont(initialVerseState.selectedFont);
         setFontSize(initialVerseState.fontSize);
         setHighlightedWords(initialVerseState.highlightedWords);
+        setUndoHistory([]);
       } catch (error) {
         console.warn(`Failed to load saved state for ${selectedBook}`, error);
       } finally {
@@ -1158,10 +1323,11 @@ export default function StudioScreen() {
     routeSelectedChapterParam,
     routeSelectedVerseParam,
     selectedBook,
+    selectedChapter,
   ]);
 
   useEffect(() => {
-    if (!hasLoadedState) {
+    if (!hasLoadedState || !hasVerseSelection) {
       return;
     }
 
@@ -1174,10 +1340,17 @@ export default function StudioScreen() {
         language.key
       )
     );
-  }, [hasLoadedState, language.key, selectedBook, selectedChapter, selectedVerses]);
+  }, [
+    hasLoadedState,
+    hasVerseSelection,
+    language.key,
+    selectedBook,
+    selectedChapter,
+    selectedVerses,
+  ]);
 
   useEffect(() => {
-    if (!hasLoadedState) {
+    if (!hasLoadedState || !hasBookSelection) {
       return;
     }
 
@@ -1204,6 +1377,7 @@ export default function StudioScreen() {
     designKey,
     fontSize,
     hasLoadedState,
+    hasBookSelection,
     highlightedWords,
     notes,
     selectedFont,
@@ -1212,14 +1386,74 @@ export default function StudioScreen() {
   ]);
 
   useEffect(() => {
-    if (!hasLoadedState) {
+    if (!hasLoadedState || !hasBookSelection) {
       return;
     }
 
     saveVerseStateMap(selectedBook, verseState).catch((error) => {
       console.warn(`Failed to save state for ${selectedBook}`, error);
     });
-  }, [hasLoadedState, selectedBook, verseState]);
+  }, [hasBookSelection, hasLoadedState, selectedBook, verseState]);
+
+  useEffect(() => {
+    if (
+      !hasLoadedState ||
+      !hasVerseSelection ||
+      !isVerseDesignDecorated(currentEditorState)
+    ) {
+      return;
+    }
+
+    const autosaveSignature = JSON.stringify({
+      selectedBook,
+      designKey,
+      verseCards,
+      stickers,
+      notes,
+      selectedFont,
+      fontSize,
+      highlightedWords,
+    });
+
+    if (lastAutoSavedVerseDesignSignatureRef.current === autosaveSignature) {
+      return;
+    }
+
+    const autosaveTimeout = setTimeout(() => {
+      const nextVerseState: VerseStateMap = {
+        ...verseState,
+        [designKey]: currentEditorState,
+      };
+
+      saveVerseStateMap(selectedBook, nextVerseState)
+        .then(() =>
+          saveVerseDesignSnapshot(selectedBook, designKey, currentEditorState)
+        )
+        .then(() => {
+          lastAutoSavedVerseDesignSignatureRef.current = autosaveSignature;
+        })
+        .catch((error) => {
+          console.warn('Failed to auto-save decorated verse design', error);
+        });
+    }, VERSE_DESIGN_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      clearTimeout(autosaveTimeout);
+    };
+  }, [
+    currentEditorState,
+    designKey,
+    fontSize,
+    hasLoadedState,
+    hasVerseSelection,
+    highlightedWords,
+    notes,
+    selectedBook,
+    selectedFont,
+    stickers,
+    verseCards,
+    verseState,
+  ]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -1466,6 +1700,7 @@ export default function StudioScreen() {
     );
     setStickers(d.stickers || []);
     setNotes(d.notes || []);
+    setBackgroundKey(d.backgroundKey ?? null);
     setHighlightedWords(d.highlights || {});
     setSelectedFont(d.selectedFont);
     setFontSize(d.fontSize);
@@ -1475,8 +1710,10 @@ export default function StudioScreen() {
     setFocusedNoteId(null);
     setFocusedNoteTarget(null);
     setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
   }, [language.key, routeDesignParam, routeRestoreToken]);
 
   useEffect(() => {
@@ -1530,6 +1767,7 @@ export default function StudioScreen() {
     );
     setStickers(nextEditorState.stickers);
     setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
     setHighlightedWords(nextEditorState.highlightedWords);
     setSelectedFont(nextEditorState.selectedFont);
     setFontSize(nextEditorState.fontSize);
@@ -1539,8 +1777,10 @@ export default function StudioScreen() {
     setFocusedNoteId(null);
     setFocusedNoteTarget(null);
     setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
   }, [
     language.key,
     routeDesignParam,
@@ -1551,14 +1791,26 @@ export default function StudioScreen() {
   ]);
 
   const decreaseFontSize = () => {
+    if (fontSize <= 14) {
+      return;
+    }
+
+    recordUndoSnapshot();
     setFontSize((current) => Math.max(14, current - 2));
   };
 
   const increaseFontSize = () => {
+    if (fontSize >= 26) {
+      return;
+    }
+
+    recordUndoSnapshot();
     setFontSize((current) => Math.min(26, current + 2));
   };
 
   const addSticker = (emoji: string) => {
+    recordUndoSnapshot();
+
     const newSticker: Sticker = {
       id: Date.now() + stickers.length,
       emoji,
@@ -1572,7 +1824,39 @@ export default function StudioScreen() {
     setSelectedStickerId(newSticker.id);
   };
 
+  const addShopSticker = (imageKey: string) => {
+    recordUndoSnapshot();
+
+    const newSticker: Sticker = {
+      id: Date.now() + stickers.length,
+      emoji: '',
+      imageKey,
+      x: 34 + stickers.length * 20,
+      y: 150 + stickers.length * 20,
+      scale: 0.9,
+      zIndex: getHighestZIndex() + 1,
+    };
+
+    setStickers((prev) => [...prev, newSticker]);
+    setSelectedStickerId(newSticker.id);
+  };
+
+  const updateStudioBackground = (nextBackgroundKey: string | null) => {
+    if (backgroundKey === nextBackgroundKey) {
+      setOpenToolbarMenu(null);
+      return;
+    }
+
+    recordUndoSnapshot();
+    setBackgroundKey(nextBackgroundKey);
+    setOpenToolbarMenu(null);
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+  };
+
   const addNote = () => {
+    recordUndoSnapshot();
+
     const newNote: Note = {
       id: `${Date.now()}-${notes.length}`,
       text: '',
@@ -1594,6 +1878,8 @@ export default function StudioScreen() {
   };
 
   const updateSticker = (id: number, updates: StickerUpdate) => {
+    recordUndoSnapshot();
+
     setStickers((prev) =>
       prev.map((sticker) =>
         sticker.id === id ? { ...sticker, ...updates } : sticker
@@ -1602,6 +1888,10 @@ export default function StudioScreen() {
   };
 
   const updateNote = (id: string, updates: NoteUpdate) => {
+    if (!('text' in updates) || Object.keys(updates).some((key) => key !== 'text')) {
+      recordUndoSnapshot();
+    }
+
     setNotes((prev) =>
       prev.map((note) =>
         note.id === id ? { ...note, ...updates } : note
@@ -1610,6 +1900,8 @@ export default function StudioScreen() {
   };
 
   const updateVerseCard = (id: string, updates: VerseCardUpdate) => {
+    recordUndoSnapshot();
+
     setVerseCards((prev) =>
       prev.map((card) => (card.id === id ? { ...card, ...updates } : card))
     );
@@ -1661,6 +1953,10 @@ export default function StudioScreen() {
     setFocusedNoteTarget(null);
   };
 
+  const clearStickerSelection = () => {
+    setSelectedStickerId(null);
+  };
+
   const selectNote = (id: string) => {
     bringNoteToFront(id);
     setSelectedNoteId(id);
@@ -1668,11 +1964,13 @@ export default function StudioScreen() {
   };
 
   const deleteSticker = (id: number) => {
+    recordUndoSnapshot();
     setStickers((prev) => prev.filter((sticker) => sticker.id !== id));
     setSelectedStickerId((current) => (current === id ? null : current));
   };
 
   const deleteNote = (id: string) => {
+    recordUndoSnapshot();
     setNotes((prev) => prev.filter((note) => note.id !== id));
     setSelectedNoteId((current) => (current === id ? null : current));
     setAutoFocusNoteId((current) => (current === id ? null : current));
@@ -1696,10 +1994,12 @@ export default function StudioScreen() {
     );
     const nextDesignKey = getDesignKey(selectedBook, selectedChapter, nextSelectedVerses);
 
-    setVerseState((current) => ({
-      ...current,
-      [designKey]: currentEditorState,
-    }));
+    if (hasVerseSelection) {
+      setVerseState((current) => ({
+        ...current,
+        [designKey]: currentEditorState,
+      }));
+    }
 
     if (nextDesignKey === designKey) {
       setSelectedVerse(verseNumber);
@@ -1728,6 +2028,10 @@ export default function StudioScreen() {
   };
 
   const handleVerseSelect = (verseNumber: number) => {
+    if (!hasChapterSelection) {
+      return;
+    }
+
     const nextSelectedVerses = selectedVerses.includes(verseNumber)
       ? selectedVerses
       : [...selectedVerses, verseNumber].sort((left, right) => left - right);
@@ -1739,13 +2043,17 @@ export default function StudioScreen() {
   };
 
   const toggleDisplayedVerse = (verseNumber: number) => {
+    if (!hasChapterSelection) {
+      return;
+    }
+
     const isCurrentlySelected = selectedVerses.includes(verseNumber);
 
     if (!isCurrentlySelected) {
       const nextSelectedVerses = [...selectedVerses, verseNumber].sort(
         (left, right) => left - right
       );
-      switchDisplayedVerses(nextSelectedVerses, selectedVerse, {
+      switchDisplayedVerses(nextSelectedVerses, verseNumber, {
         closeDropdown: false,
       });
       return;
@@ -1771,34 +2079,23 @@ export default function StudioScreen() {
     });
   };
 
-  const handleChapterSelect = (chapterNumber: number) => {
-    const nextVerse = getDefaultVerseForChapter(selectedBook, chapterNumber);
-    const nextSelectedVerses = [nextVerse];
-    const nextDesignKey = getDesignKey(selectedBook, chapterNumber, nextSelectedVerses);
+  const resetCurrentDesign = () => {
+    const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
 
-    setVerseState((current) => ({
-      ...current,
-      [designKey]: currentEditorState,
-    }));
-
-    const nextEditorState = cloneVerseEditorState(
-      verseState[nextDesignKey] ?? DEFAULT_VERSE_EDITOR_STATE
-    );
-
-    setSelectedChapter(chapterNumber);
-    setSelectedVerse(nextVerse);
-    setSelectedVerses(nextSelectedVerses);
-    setVerseCards(
-      syncVerseCardsWithSelection(
-        nextEditorState.verseCards,
-        nextSelectedVerses,
-        selectedBook,
-        chapterNumber,
-        language.key
-      )
-    );
+    if (hasVerseSelection) {
+      setVerseState((current) => ({
+        ...current,
+        [designKey]: nextEditorState,
+      }));
+    }
+    setVerseCards(nextEditorState.verseCards);
     setStickers(nextEditorState.stickers);
     setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
+    setSelectedBook('');
+    setSelectedChapter(0);
+    setSelectedVerse(0);
+    setSelectedVerses([]);
     setSelectedFont(nextEditorState.selectedFont);
     setFontSize(nextEditorState.fontSize);
     setHighlightedWords(nextEditorState.highlightedWords);
@@ -1807,11 +2104,119 @@ export default function StudioScreen() {
     setAutoFocusNoteId(null);
     setFocusedNoteId(null);
     setFocusedNoteTarget(null);
+    setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
+    if (hasVerseSelection) {
+      void removeVerseDesignSnapshot(selectedBook, designKey);
+    }
+    showSaveToast(t('studioStartOverToast'));
+  };
+
+  const handleBackToVerseDesigns = async () => {
+    Keyboard.dismiss();
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setAutoFocusNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
+    setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+
+    if (hasVerseSelection && isVerseDesignDecorated(currentEditorState)) {
+      const nextVerseState: VerseStateMap = {
+        ...verseState,
+        [designKey]: currentEditorState,
+      };
+
+      setVerseState(nextVerseState);
+
+      try {
+        await saveVerseStateMap(selectedBook, nextVerseState);
+        await saveVerseDesignSnapshot(selectedBook, designKey, currentEditorState);
+      } catch (error) {
+        console.warn('Failed to auto-save verse design before leaving Studio', error);
+      }
+    }
+
+    router.push('/verse-designs' as never);
+  };
+
+  const handleBookSelect = (book: string) => {
+    if (hasVerseSelection) {
+      setVerseState((current) => ({
+        ...current,
+        [designKey]: currentEditorState,
+      }));
+    }
+
+    const nextChapter = getChapters(book)[0] ?? 0;
+    const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
+
+    setSelectedBook(book);
+    setSelectedChapter(nextChapter);
+    setSelectedVerse(0);
+    setSelectedVerses([]);
+    setVerseCards(nextEditorState.verseCards);
+    setStickers(nextEditorState.stickers);
+    setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
+    setSelectedFont(nextEditorState.selectedFont);
+    setFontSize(nextEditorState.fontSize);
+    setHighlightedWords(nextEditorState.highlightedWords);
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setAutoFocusNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
+  };
+
+  const handleChapterSelect = (chapterNumber: number) => {
+    if (!hasBookSelection) {
+      return;
+    }
+
+    if (hasVerseSelection) {
+      setVerseState((current) => ({
+        ...current,
+        [designKey]: currentEditorState,
+      }));
+    }
+
+    const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
+
+    setSelectedChapter(chapterNumber);
+    setSelectedVerse(0);
+    setSelectedVerses([]);
+    setVerseCards(nextEditorState.verseCards);
+    setStickers(nextEditorState.stickers);
+    setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
+    setSelectedFont(nextEditorState.selectedFont);
+    setFontSize(nextEditorState.fontSize);
+    setHighlightedWords(nextEditorState.highlightedWords);
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setAutoFocusNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
   };
 
   const toggleWordHighlight = (wordIndex: number) => {
+    recordUndoSnapshot();
+
     setHighlightedWords((current) => {
       const wordKey = String(wordIndex);
       const currentColor = current[wordKey];
@@ -1831,22 +2236,25 @@ export default function StudioScreen() {
 
   const toggleToolbarMenu = (menu: Exclude<ToolbarMenu, null>) => {
     setOpenToolbarMenu((current) => (current === menu ? null : menu));
+    setIsBookDropdownOpen(false);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
   };
 
-  const clearSelections = () => {
-    Keyboard.dismiss();
-    setSelectedStickerId(null);
-    setSelectedNoteId(null);
-    setFocusedNoteId(null);
-    setFocusedNoteTarget(null);
+  const selectFont = (font: string) => {
+    if (selectedFont !== font) {
+      recordUndoSnapshot();
+    }
+
+    setSelectedFont(font);
     setOpenToolbarMenu(null);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
   };
 
   const toggleFavorite = async () => {
+    if (!hasVerseSelection) {
+      return;
+    }
+
     try {
       const existingData = await AsyncStorage.getItem(SAVED_DESIGNS_STORAGE_KEY);
       const favorites = existingData ? (JSON.parse(existingData) as SavedVerseDesign[]) : [];
@@ -1871,6 +2279,7 @@ export default function StudioScreen() {
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
         notes: notes.map((note) => ({ ...note })),
+        backgroundKey,
         highlights: { ...highlightedWords },
         selectedFont,
         fontSize,
@@ -1919,6 +2328,7 @@ export default function StudioScreen() {
       setAutoFocusNoteId(null);
       setFocusedNoteTarget(null);
       setOpenToolbarMenu(null);
+      setIsBookDropdownOpen(false);
       setIsChapterDropdownOpen(false);
       setIsVerseDropdownOpen(false);
 
@@ -1987,30 +2397,30 @@ export default function StudioScreen() {
       <ScrollView
         ref={scrollViewRef}
         style={styles.screenPressable}
-        scrollEnabled={!isChapterDropdownOpen && !isVerseDropdownOpen}
+        scrollEnabled={!isBookDropdownOpen && !isChapterDropdownOpen && !isVerseDropdownOpen}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 32 : 32 },
         ]}
         keyboardShouldPersistTaps="handled">
-        <Pressable
-          style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}
-          onPress={clearSelections}>
+        <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
         <View style={styles.headerSection}>
           <View style={styles.titleRow}>
             <View style={styles.titleGroup}>
               <Pressable
                 onPress={(event) => {
                   event.stopPropagation();
-                  router.push('/bible');
+                  void handleBackToVerseDesigns();
                 }}
                 style={styles.backButton}
                 accessibilityRole="button"
-                accessibilityLabel="Go to book selection">
+                accessibilityLabel={t('studioBackToDesigns')}>
                 <Ionicons name="chevron-back" size={22} color="#5B514D" />
               </Pressable>
               <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
-                {selectedBook}
+                {hasVerseSelection
+                  ? `${selectedBook} ${selectedChapter}:${selectedVerse}`
+                  : 'Choose a verse'}
               </Text>
             </View>
 
@@ -2043,10 +2453,70 @@ export default function StudioScreen() {
           </View>
 
           <View style={styles.controlsHeaderRow}>
+            <View style={styles.bookDropdownContainer}>
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setIsBookDropdownOpen((current) => !current);
+                  setIsChapterDropdownOpen(false);
+                  setIsVerseDropdownOpen(false);
+                }}
+                style={[
+                  styles.bookDropdownButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
+                <Text numberOfLines={1} style={styles.bookDropdownButtonText}>
+                  {selectedBook || 'Book'}
+                </Text>
+                <Text style={styles.bookDropdownChevron}>▼</Text>
+              </Pressable>
+
+              {isBookDropdownOpen ? (
+                <View
+                  style={[
+                    styles.bookDropdownMenu,
+                    {
+                      backgroundColor: colorTheme.screenBackground,
+                      borderColor: colorTheme.border,
+                    },
+                  ]}>
+                  <GestureHandlerScrollView
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled">
+                    {bookOptions.map((book) => (
+                      <Pressable
+                        key={book}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          handleBookSelect(book);
+                        }}
+                        style={[
+                          styles.bookDropdownOption,
+                          selectedBook === book
+                            ? [
+                                styles.bookDropdownOptionSelected,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
+                        ]}>
+                        <Text style={styles.bookDropdownOptionText}>{book}</Text>
+                      </Pressable>
+                    ))}
+                  </GestureHandlerScrollView>
+                </View>
+              ) : null}
+            </View>
+
             <View style={styles.chapterDropdownContainer}>
               <Pressable
                 onPress={(event) => {
                   event.stopPropagation();
+                  if (!hasBookSelection) {
+                    setIsBookDropdownOpen(true);
+                    return;
+                  }
+                  setIsBookDropdownOpen(false);
                   setIsChapterDropdownOpen((current) => !current);
                   setIsVerseDropdownOpen(false);
                 }}
@@ -2055,7 +2525,7 @@ export default function StudioScreen() {
                   { backgroundColor: colorTheme.toolbarBackground },
                 ]}>
                 <Text style={styles.chapterDropdownButtonText}>
-                  {selectedChapter}
+                  {hasChapterSelection ? selectedChapter : 'Chapter'}
                 </Text>
                 <Text style={styles.chapterDropdownChevron}>▼</Text>
               </Pressable>
@@ -2103,6 +2573,12 @@ export default function StudioScreen() {
               <Pressable
                 onPress={(event) => {
                   event.stopPropagation();
+                  if (!hasChapterSelection) {
+                    setIsBookDropdownOpen(!hasBookSelection);
+                    setIsChapterDropdownOpen(hasBookSelection);
+                    return;
+                  }
+                  setIsBookDropdownOpen(false);
                   setIsChapterDropdownOpen(false);
                   setIsVerseDropdownOpen((current) => !current);
                 }}
@@ -2199,7 +2675,7 @@ export default function StudioScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.dropdownToolbarRow}
             keyboardShouldPersistTaps="handled">
-            {(['fonts', 'size', 'highlight', 'stickers'] as const).map((menu) => (
+            {(['fonts', 'size', 'highlight', 'stickers', 'backgrounds'] as const).map((menu) => (
               <Pressable
                 key={menu}
                 onPress={(event) => {
@@ -2232,6 +2708,20 @@ export default function StudioScreen() {
             ))}
 
               <TouchableOpacity
+                onPress={undoLastEdit}
+                disabled={undoHistory.length === 0}
+                style={[
+                  styles.undoButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  undoHistory.length === 0 ? styles.undoButtonDisabled : null,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Undo last edit">
+                <Ionicons name="arrow-undo-outline" size={19} color="#5B514D" />
+                <Text style={styles.undoButtonText}>Undo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 onPress={addNote}
                 style={[
                   styles.noteButton,
@@ -2241,6 +2731,18 @@ export default function StudioScreen() {
                   <Text style={styles.dropdownToolbarEmoji}>📝</Text>
                   <Text style={styles.noteButtonText}>Note</Text>
                 </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={resetCurrentDesign}
+                style={[
+                  styles.resetButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('studioStartOver')}>
+                <Ionicons name="refresh-outline" size={19} color="#5B514D" />
+                <Text style={styles.resetButtonText}>{t('studioStartOver')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -2285,8 +2787,7 @@ export default function StudioScreen() {
                 <View style={styles.dropdownOptionList}>
                   <Pressable
                     onPress={() => {
-                      setSelectedFont('Playwrite');
-                      setOpenToolbarMenu(null);
+                      selectFont('Playwrite');
                     }}
                     style={[
                       styles.dropdownOptionButton,
@@ -2308,8 +2809,7 @@ export default function StudioScreen() {
 
                   <Pressable
                     onPress={() => {
-                      setSelectedFont('bold');
-                      setOpenToolbarMenu(null);
+                      selectFont('bold');
                     }}
                     style={[
                       styles.dropdownOptionButton,
@@ -2331,8 +2831,7 @@ export default function StudioScreen() {
 
                   <Pressable
                     onPress={() => {
-                      setSelectedFont('serif');
-                      setOpenToolbarMenu(null);
+                      selectFont('serif');
                     }}
                     style={[
                       styles.dropdownOptionButton,
@@ -2399,31 +2898,105 @@ export default function StudioScreen() {
               ) : null}
 
               {openToolbarMenu === 'stickers' ? (
-                <View style={styles.stickerDropdownRow}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      addSticker('🌸');
-                      setOpenToolbarMenu(null);
-                    }}>
-                    <Text style={styles.stickerButtonEmoji}>🌸</Text>
-                  </TouchableOpacity>
+                <ScrollView
+                  style={styles.stickerDropdownScroll}
+                  contentContainerStyle={styles.stickerDropdownContent}
+                  showsVerticalScrollIndicator={false}>
+                  <Text style={styles.stickerPackLabel}>Quick stickers</Text>
+                  <View style={styles.stickerDropdownRow}>
+                    {['🌸', '💖', '✨'].map((emoji) => (
+                      <TouchableOpacity
+                        key={emoji}
+                        onPress={() => {
+                          addSticker(emoji);
+                          setOpenToolbarMenu(null);
+                        }}
+                        style={styles.emojiStickerButton}>
+                        <Text style={styles.stickerButtonEmoji}>{emoji}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                  <TouchableOpacity
-                    onPress={() => {
-                      addSticker('💖');
-                      setOpenToolbarMenu(null);
-                    }}>
-                    <Text style={styles.stickerButtonEmoji}>💖</Text>
-                  </TouchableOpacity>
+                  {TEST_UNLOCKED_STICKER_PACKS.map((pack) => (
+                    <View key={pack.id} style={styles.shopStickerPackSection}>
+                      <Text style={styles.stickerPackLabel}>{pack.title}</Text>
+                      <View style={styles.shopStickerGrid}>
+                        {pack.stickers.map((shopSticker) => (
+                          <TouchableOpacity
+                            key={shopSticker.key}
+                            onPress={() => {
+                              addShopSticker(shopSticker.key);
+                              setOpenToolbarMenu(null);
+                            }}
+                            style={styles.stickerImageButton}>
+                            <Image
+                              source={shopSticker.image}
+                              resizeMode="contain"
+                              style={[
+                                styles.stickerButtonImage,
+                                getShopStickerDisplaySize(shopSticker, 52),
+                              ]}
+                            />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
 
-                  <TouchableOpacity
-                    onPress={() => {
-                      addSticker('✨');
-                      setOpenToolbarMenu(null);
-                    }}>
-                    <Text style={styles.stickerButtonEmoji}>✨</Text>
-                  </TouchableOpacity>
-                </View>
+              {openToolbarMenu === 'backgrounds' ? (
+                <ScrollView
+                  style={styles.backgroundDropdownScroll}
+                  contentContainerStyle={styles.backgroundDropdownContent}
+                  showsVerticalScrollIndicator={false}>
+                  <Text style={styles.stickerPackLabel}>Basic</Text>
+                  <View style={styles.backgroundGrid}>
+                    <TouchableOpacity
+                      onPress={() => updateStudioBackground(null)}
+                      style={[
+                        styles.backgroundImageButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        backgroundKey === null ? styles.backgroundImageButtonActive : null,
+                      ]}>
+                      <View style={styles.linedBackgroundPreview}>
+                        {Array.from({ length: 4 }).map((_, index) => (
+                          <View key={`lined-preview-${index}`} style={styles.linedPreviewLine} />
+                        ))}
+                      </View>
+                      <Text style={styles.backgroundButtonText}>Lined</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
+                    <View key={pack.id} style={styles.shopStickerPackSection}>
+                      <Text style={styles.stickerPackLabel}>{pack.title}</Text>
+                      <View style={styles.backgroundGrid}>
+                        {pack.backgrounds.map((backgroundOption) => (
+                          <TouchableOpacity
+                            key={backgroundOption.key}
+                            onPress={() => updateStudioBackground(backgroundOption.key)}
+                            style={[
+                              styles.backgroundImageButton,
+                              { backgroundColor: colorTheme.toolbarBackground },
+                              backgroundKey === backgroundOption.key
+                                ? styles.backgroundImageButtonActive
+                                : null,
+                            ]}>
+                            <Image
+                              source={backgroundOption.image}
+                              resizeMode="cover"
+                              style={styles.backgroundButtonImage}
+                            />
+                            <Text numberOfLines={2} style={styles.backgroundButtonText}>
+                              {backgroundOption.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
               ) : null}
             </View>
           ) : null}
@@ -2433,31 +3006,42 @@ export default function StudioScreen() {
 
         <View style={styles.contentContainer}>
           <View ref={captureViewRef} collapsable={false} style={styles.captureFrame}>
-            <View
-              style={[
-                styles.journalBackground,
-                { backgroundColor: colorTheme.editorBackground },
-              ]}>
-              <View pointerEvents="none" style={styles.journalLinesOverlay}>
-                {Array.from({ length: journalLineCount }).map((_, index) => (
-                  <View
-                    key={`journal-line-${index}`}
-                    style={[
-                      styles.journalLine,
-                      {
-                        top: JOURNAL_LINE_TOP_OFFSET + index * JOURNAL_LINE_SPACING,
-                        backgroundColor: colorTheme.border,
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
+            <View style={styles.journalBackgroundShell}>
+              {selectedStudioBackground ? (
+                <Image
+                  source={selectedStudioBackground.image}
+                  resizeMode="cover"
+                  style={styles.journalBackgroundImage}
+                />
+              ) : null}
+              <View
+                style={[
+                  styles.journalBackground,
+                  { backgroundColor: selectedStudioBackground ? 'transparent' : colorTheme.editorBackground },
+                ]}>
+              {!selectedStudioBackground ? (
+                <View pointerEvents="none" style={styles.journalLinesOverlay}>
+                  {Array.from({ length: journalLineCount }).map((_, index) => (
+                    <View
+                      key={`journal-line-${index}`}
+                      style={[
+                        styles.journalLine,
+                        {
+                          top: JOURNAL_LINE_TOP_OFFSET + index * JOURNAL_LINE_SPACING,
+                          backgroundColor: colorTheme.border,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ) : null}
               <View
                 onLayout={(event) => {
                   setCaptureCanvasTop(event.nativeEvent.layout.y);
                 }}
                 style={styles.captureCanvas}>
-              <View
+              <Pressable
+                onPress={clearStickerSelection}
                 style={[
                   styles.captureStage,
                   { minHeight: contentStageMinHeight },
@@ -2516,12 +3100,13 @@ export default function StudioScreen() {
                     )
                   )}
                 </View>
+              </Pressable>
               </View>
               </View>
             </View>
           </View>
         </View>
-        </Pressable>
+        </View>
       </ScrollView>
 
       {focusedNoteId ? (
@@ -2584,6 +3169,7 @@ const styles = StyleSheet.create({
   },
   controlsHeaderRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 10,
   },
@@ -2632,16 +3218,71 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 0,
   },
+  bookDropdownContainer: {
+    position: 'relative',
+    zIndex: 50,
+    width: '100%',
+  },
+  bookDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#F3EDE8',
+  },
+  bookDropdownButtonText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    flex: 1,
+  },
+  bookDropdownChevron: {
+    color: '#1F1F1F',
+    fontSize: 12,
+  },
+  bookDropdownMenu: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    width: '100%',
+    maxHeight: 320,
+    borderRadius: 18,
+    backgroundColor: '#FFFDF9',
+    borderWidth: 1,
+    borderColor: '#E8DCD4',
+    paddingVertical: 6,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  bookDropdownOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  bookDropdownOptionSelected: {
+    backgroundColor: '#F3EDE8',
+  },
+  bookDropdownOptionText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+  },
   chapterDropdownContainer: {
     position: 'relative',
     zIndex: 45,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
   },
   chapterDropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: '#F3EDE8',
@@ -2649,6 +3290,7 @@ const styles = StyleSheet.create({
   chapterDropdownButtonText: {
     color: '#1F1F1F',
     fontSize: 15,
+    flexShrink: 1,
   },
   chapterDropdownChevron: {
     color: '#1F1F1F',
@@ -2658,7 +3300,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 0,
-    minWidth: 136,
+    width: '100%',
+    minWidth: 0,
     maxHeight: 320,
     borderRadius: 18,
     backgroundColor: '#FFFDF9',
@@ -2691,8 +3334,9 @@ const styles = StyleSheet.create({
   verseDropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: '#F3EDE8',
@@ -2909,6 +3553,16 @@ const styles = StyleSheet.create({
   captureFrame: {
     width: '100%',
   },
+  journalBackgroundShell: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#FCFAF6',
+  },
+  journalBackgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
   journalBackground: {
     width: '100%',
     padding: 16,
@@ -3011,6 +3665,57 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  undoButton: {
+    minHeight: 44,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    backgroundColor: '#F3EDE8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginRight: 10,
+    shadowColor: '#000000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2.5,
+    shadowOffset: { width: 0, height: 1.5 },
+    elevation: 1,
+  },
+  undoButtonDisabled: {
+    opacity: 0.45,
+  },
+  undoButtonText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 20,
+    marginLeft: 6,
+  },
+  resetButton: {
+    minHeight: 44,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    backgroundColor: '#F3EDE8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginRight: 10,
+    shadowColor: '#000000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2.5,
+    shadowOffset: { width: 0, height: 1.5 },
+    elevation: 1,
+  },
+  resetButtonText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 20,
+    marginLeft: 6,
+  },
   shareButton: {
     minWidth: 44,
     minHeight: 44,
@@ -3031,8 +3736,89 @@ const styles = StyleSheet.create({
   stickerDropdownRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 12,
+  },
+  stickerDropdownScroll: {
+    maxHeight: 280,
+  },
+  stickerDropdownContent: {
+    paddingBottom: 4,
+  },
+  stickerPackLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7A6F66',
+    marginBottom: 8,
+  },
+  emojiStickerButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: '#F8F5F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  shopStickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  shopStickerPackSection: {
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  backgroundDropdownScroll: {
+    maxHeight: 280,
+  },
+  backgroundDropdownContent: {
+    paddingBottom: 4,
+  },
+  backgroundGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  backgroundImageButton: {
+    width: 92,
+    minHeight: 112,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8DCD4',
+    padding: 7,
+    alignItems: 'center',
+  },
+  backgroundImageButtonActive: {
+    borderColor: '#C88C93',
+    backgroundColor: '#F8EDEF',
+  },
+  backgroundButtonImage: {
+    width: 76,
+    height: 58,
+    borderRadius: 6,
+    marginBottom: 7,
+  },
+  linedBackgroundPreview: {
+    width: 76,
+    height: 58,
+    borderRadius: 6,
+    marginBottom: 7,
+    backgroundColor: '#FFFDF8',
+    paddingHorizontal: 8,
+    paddingTop: 10,
+  },
+  linedPreviewLine: {
+    height: 1,
+    backgroundColor: '#D4C8BE',
+    marginBottom: 9,
+  },
+  backgroundButtonText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#5B514D',
+    textAlign: 'center',
   },
   stickerButtonEmoji: {
     fontSize: 24,
@@ -3134,6 +3920,25 @@ const styles = StyleSheet.create({
   },
   stickerText: {
     fontSize: 30,
+  },
+  stickerImage: {
+    width: 122,
+    height: 122,
+  },
+  stickerImageButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8DCD4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  stickerButtonImage: {
+    width: 48,
+    height: 48,
   },
   deleteButton: {
     position: 'absolute',
