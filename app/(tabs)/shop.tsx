@@ -169,12 +169,24 @@ export default function ShopScreen() {
           ]}>
           <View style={styles.packDetailHeader}>
             <View style={styles.packDetailTitleBlock}>
-              <Text style={styles.packDetailCategory}>{selectedPack.category}</Text>
-              <Text style={styles.packDetailTitle}>{selectedPack.title}</Text>
-              <Text style={styles.packDetailText}>{selectedPack.subtitle}</Text>
+              <Text maxFontSizeMultiplier={1.15} style={styles.packDetailCategory}>
+                {selectedPack.category}
+              </Text>
+              <Text
+                maxFontSizeMultiplier={1.15}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                style={styles.packDetailTitle}>
+                {selectedPack.title}
+              </Text>
+              <Text maxFontSizeMultiplier={1.15} style={styles.packDetailText}>
+                {selectedPack.subtitle}
+              </Text>
             </View>
             <View style={styles.testPill}>
-              <Text style={styles.testPillText}>{selectedPack.price ?? 'Preview'}</Text>
+              <Text maxFontSizeMultiplier={1.1} style={styles.testPillText}>
+                {selectedPack.price ?? 'Preview'}
+              </Text>
             </View>
           </View>
 
@@ -192,7 +204,11 @@ export default function ShopScreen() {
               ))}
             </View>
           ) : selectedPack.backgrounds ? (
-            <View style={styles.stickerPreviewGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.backgroundPreviewScroll}
+              contentContainerStyle={styles.backgroundPreviewRow}>
               {selectedPack.backgrounds.map((background) => (
                 <View key={background.key} style={styles.backgroundPreviewCard}>
                   <Image
@@ -200,10 +216,15 @@ export default function ShopScreen() {
                     resizeMode="cover"
                     style={styles.backgroundPreviewImage}
                   />
-                  <Text style={styles.stickerPreviewName}>{background.name}</Text>
+                  <Text
+                    maxFontSizeMultiplier={1.05}
+                    numberOfLines={2}
+                    style={styles.backgroundPreviewName}>
+                    {background.name}
+                  </Text>
                 </View>
               ))}
-            </View>
+            </ScrollView>
           ) : (
             <View style={styles.placeholderDetail}>
               <Ionicons name={selectedPack.icon} size={26} color="#5B514D" />
@@ -427,6 +448,7 @@ const styles = StyleSheet.create({
   },
   packDetailTitleBlock: {
     flex: 1,
+    minWidth: 0,
   },
   packDetailCategory: {
     fontSize: 12,
@@ -453,6 +475,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F8EDEF',
+    flexShrink: 0,
   },
   testPillText: {
     fontSize: 12,
@@ -479,6 +502,38 @@ const styles = StyleSheet.create({
   },
   stickerPreviewName: {
     fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  backgroundPreviewScroll: {
+    marginTop: 16,
+    maxWidth: '100%',
+  },
+  backgroundPreviewRow: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  backgroundPreviewCard: {
+    width: 108,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EFE6DD',
+    backgroundColor: '#FFFDF9',
+    padding: 7,
+    overflow: 'hidden',
+  },
+  backgroundPreviewImage: {
+    width: 92,
+    height: 62,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  backgroundPreviewName: {
+    minHeight: 28,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: '700',
     color: '#5B514D',
     marginTop: 6,
