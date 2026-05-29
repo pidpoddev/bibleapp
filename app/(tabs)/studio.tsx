@@ -985,6 +985,14 @@ const TOOLBAR_ICON_SOURCE = {
   more: require('../../assets/images/toolbar-icons/more-tight.png'),
 } as const;
 
+const TOOLBAR_ICON_OFFSET_Y = {
+  text: -3,
+  decor: -3,
+  canvas: -4,
+  note: -4,
+  more: -3,
+} as const;
+
 export default function StudioScreen() {
   const { colorTheme, language, t } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -3147,7 +3155,10 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE[iconKey]}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        { transform: [{ translateY: TOOLBAR_ICON_OFFSET_Y[iconKey] }] },
+                      ]}
                     />
                   </View>
                   <Text style={styles.dropdownToolbarButtonText}>{label}</Text>
@@ -3167,7 +3178,10 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE.note}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        { transform: [{ translateY: TOOLBAR_ICON_OFFSET_Y.note }] },
+                      ]}
                     />
                   </View>
                   <Text style={styles.noteButtonText}>Note</Text>
@@ -3197,7 +3211,10 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE.more}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        { transform: [{ translateY: TOOLBAR_ICON_OFFSET_Y.more }] },
+                      ]}
                     />
                   </View>
                   <Text style={styles.dropdownToolbarButtonText}>More</Text>
@@ -3983,15 +4000,16 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   toolbarIconSlot: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 30,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     marginRight: 4,
+    paddingTop: 3,
   },
   toolbarIconImage: {
-    width: 30,
-    height: 30,
+    width: 26,
+    height: 26,
   },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
