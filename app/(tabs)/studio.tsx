@@ -3984,15 +3984,15 @@ const styles = StyleSheet.create({
   },
   toolbarIconSlot: {
     width: 36,
-    height: 30,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 2,
-    marginTop: -2,
   },
   toolbarIconImage: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
+    transform: [{ translateY: -2 }],
   },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
