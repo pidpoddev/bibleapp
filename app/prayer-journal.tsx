@@ -38,6 +38,8 @@ import {
   getShopStickerDisplaySize,
   TEST_UNLOCKED_STICKER_PACKS,
 } from '@/utils/shop-stickers';
+import { formatEntryDateTime } from '@/utils/date-time';
+import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 
 type PrayerSection = {
   id: string;
@@ -70,7 +72,6 @@ type PrayerEntry = {
   updatedAt: number;
 };
 
-const JOURNAL_INDEX_KEY = 'journal_index';
 const SHOP_BACKGROUND_PREFIX = 'shop:';
 const generateId = () => Date.now().toString();
 
@@ -100,30 +101,8 @@ const getFormattedTime = () =>
 const getFormattedDateStamp = () =>
   `${getFormattedDate()} • ${getFormattedTime()}`;
 
-const normalizeEntryDate = (value?: string) => {
-  if (!value) {
-    return getFormattedDateStamp();
-  }
-
-  const parsedDate = new Date(value);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return value;
-  }
-
-  const normalizedDate = parsedDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-  const normalizedTime = parsedDate.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-  return `${normalizedDate} • ${normalizedTime}`;
-};
+const normalizeEntryDate = (value?: string) =>
+  value ? formatEntryDateTime(value) : getFormattedDateStamp();
 
 type DraggablePrayerStickerProps = {
   isSelected: boolean;
@@ -134,6 +113,13 @@ type DraggablePrayerStickerProps = {
 };
 
 const STICKER_CHOICES = ['🌸', '💖', '✨', '🕊️', '🌿', '⭐️'] as const;
+const JOURNAL_TOOLBAR_ICONS = {
+  text: require('../assets/images/toolbar-icons/text-tight.png'),
+  canvas: require('../assets/images/toolbar-icons/canvas-tight.png'),
+  decor: require('../assets/images/toolbar-icons/decor-tight.png'),
+  note: require('../assets/images/toolbar-icons/notes-tight.png'),
+  more: require('../assets/images/toolbar-icons/more-tight.png'),
+} as const;
 const MIN_STICKER_SCALE = 0.35;
 const MAX_STICKER_SCALE = 2.2;
 const MIN_INPUT_HEIGHT = 72;
@@ -419,7 +405,8 @@ export default function PrayerJournalScreen() {
   const [background, setBackground] = useState<PrayerBackground>('lined');
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
-  const [openTray, setOpenTray] = useState<'stickers' | 'background' | null>(null);
+  const [openTray, setOpenTray] = useState<'text' | 'stickers' | 'background' | 'more' | null>(null);
+  const [sectionAccent, setSectionAccent] = useState('#E8BFCF');
   const [sectionsHeight, setSectionsHeight] = useState(0);
   const [isSharing, setIsSharing] = useState(false);
   const canvasRef = useRef<View>(null);
@@ -576,6 +563,24 @@ export default function PrayerJournalScreen() {
       saveEntry(updatedSections, stickers, background);
       return updatedSections;
     });
+  };
+
+  const addNoteSection = () => {
+    const updatedSections = [
+      ...sections,
+      { id: generateId(), label: '📝 Note', text: '' },
+    ];
+    setSections(updatedSections);
+    saveEntry(updatedSections, stickers, background);
+  };
+
+  const resetPrayerJournal = () => {
+    setSections(defaultSections);
+    setStickers([]);
+    setBackground('lined');
+    setSelectedStickerId(null);
+    setOpenTray(null);
+    saveEntry(defaultSections, [], 'lined');
   };
 
   const clearStickerSelection = () => {
@@ -770,7 +775,7 @@ export default function PrayerJournalScreen() {
                       onFocusField={clearStickerSelection}
                       onChangeText={(text) => updateSection(index, text)}
                       cardBackground={colorTheme.cardBackground}
-                      accentColor={colorTheme.accent}
+                      accentColor={sectionAccent}
                     />
                   ))}
                 </View>
@@ -848,7 +853,7 @@ export default function PrayerJournalScreen() {
                 borderColor: colorTheme.border,
               },
             ]}>
-            <Text style={styles.trayTitle}>Pick a sticker</Text>
+            <Text style={styles.trayTitle}>Pick decor</Text>
             <View style={styles.stickerTrayRow}>
               {STICKER_CHOICES.map((choice) => (
                 <TouchableOpacity
@@ -908,7 +913,7 @@ export default function PrayerJournalScreen() {
                 borderColor: colorTheme.border,
               },
             ]}>
-            <Text style={styles.trayTitle}>Choose a background</Text>
+            <Text style={styles.trayTitle}>Choose a canvas</Text>
             <View style={styles.backgroundOptionRow}>
               <TouchableOpacity
                 activeOpacity={0.85}
@@ -990,23 +995,75 @@ export default function PrayerJournalScreen() {
           </View>
         ) : null}
 
+        {openTray === 'text' ? (
+          <View
+            style={[
+              styles.tray,
+              {
+                backgroundColor: colorTheme.screenBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
+            <Text style={styles.trayTitle}>Text style</Text>
+            <View style={styles.highlightDropdownRow}>
+              {['#FFF3A3', '#FFD2E1', '#CFE7FF'].map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  onPress={() => setSectionAccent(color)}
+                  style={[
+                    styles.highlightColorButton,
+                    { backgroundColor: color },
+                    sectionAccent === color ? styles.highlightColorButtonSelected : null,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {openTray === 'more' ? (
+          <View
+            style={[
+              styles.tray,
+              {
+                backgroundColor: colorTheme.screenBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
+            <Text style={styles.trayTitle}>More</Text>
+            <View style={styles.backgroundOptionRow}>
+              <TouchableOpacity activeOpacity={0.85} onPress={toggleFavorite} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Text style={styles.backgroundChipText}>{isFavorite ? 'Unsave' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Text style={styles.backgroundChipText}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Text style={styles.backgroundChipText}>Start over</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         <View style={[styles.toolbar, { backgroundColor: colorTheme.toolbarBackground }]}>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={toggleFavorite}
+            onPress={() =>
+              setOpenTray((currentTray) =>
+                currentTray === 'text' ? null : 'text'
+              )
+            }
             style={[
               styles.toolbarButton,
-              isFavorite
+              openTray === 'text'
                 ? [
                     styles.toolbarButtonActive,
                     { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
                   ]
                 : null,
             ]}>
-            <Text style={styles.toolbarIcon}>{isFavorite ? '❤️' : '🤍'}</Text>
-            <Text style={styles.toolbarLabel}>
-              {isFavorite ? 'Saved' : 'Favorite'}
-            </Text>
+            <Image source={JOURNAL_TOOLBAR_ICONS.text} resizeMode="contain" style={styles.toolbarImageIcon} />
+            <Text style={styles.toolbarLabel}>Text</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1025,8 +1082,8 @@ export default function PrayerJournalScreen() {
                   ]
                 : null,
             ]}>
-            <Text style={styles.toolbarIcon}>🌸</Text>
-            <Text style={styles.toolbarLabel}>Stickers</Text>
+            <Image source={JOURNAL_TOOLBAR_ICONS.decor} resizeMode="contain" style={styles.toolbarImageIcon} />
+            <Text style={styles.toolbarLabel}>Decor</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1045,16 +1102,34 @@ export default function PrayerJournalScreen() {
                   ]
                 : null,
             ]}>
-            <Text style={styles.toolbarIcon}>🧻</Text>
-            <Text style={styles.toolbarLabel}>Background</Text>
+            <Image source={JOURNAL_TOOLBAR_ICONS.canvas} resizeMode="contain" style={styles.toolbarImageIcon} />
+            <Text style={styles.toolbarLabel}>Canvas</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={shareJournalImage}
+            onPress={addNoteSection}
             style={styles.toolbarButton}>
-            <Text style={styles.toolbarIcon}>↗️</Text>
-            <Text style={styles.toolbarLabel}>Share</Text>
+            <Image source={JOURNAL_TOOLBAR_ICONS.note} resizeMode="contain" style={styles.toolbarImageIcon} />
+            <Text style={styles.toolbarLabel}>Note</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() =>
+              setOpenTray((currentTray) => (currentTray === 'more' ? null : 'more'))
+            }
+            style={[
+              styles.toolbarButton,
+              openTray === 'more'
+                ? [
+                    styles.toolbarButtonActive,
+                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                  ]
+                : null,
+            ]}>
+            <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
+            <Text style={styles.toolbarLabel}>More</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1371,6 +1446,27 @@ const styles = StyleSheet.create({
   },
   toolbarIcon: {
     fontSize: 22,
+  },
+  toolbarImageIcon: {
+    width: 22,
+    height: 22,
+  },
+  highlightDropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  highlightColorButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D7CCC5',
+  },
+  highlightColorButtonSelected: {
+    borderColor: '#1F1F1F',
+    borderWidth: 2,
   },
   toolbarLabel: {
     marginTop: 2,
