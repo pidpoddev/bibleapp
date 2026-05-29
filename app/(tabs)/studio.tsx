@@ -4001,7 +4001,7 @@ const styles = StyleSheet.create({
   },
   toolbarIconSlot: {
     width: 34,
-    height: 30,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 6,
