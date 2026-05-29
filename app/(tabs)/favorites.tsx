@@ -179,7 +179,6 @@ export default function FavoritesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <View style={[styles.heroCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
-        <Text style={styles.kicker}>SAVED PAGES</Text>
         <View style={styles.titleRow}>
           <Image source={FAVORITES_ICON} resizeMode="contain" style={styles.titleIcon} />
           <Text style={styles.title}>{t('tabFavorites')}</Text>
@@ -257,37 +256,30 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 14,
-  },
-  kicker: {
-    fontSize: 11,
-    color: '#8A7F76',
-    letterSpacing: 0.8,
-    fontWeight: '700',
+    paddingVertical: 12,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: '700',
     color: '#1F1F1F',
   },
   titleRow: {
-    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   titleIcon: {
-    width: 44,
-    height: 44,
+    width: 28,
+    height: 28,
   },
   subtitle: {
     fontSize: 14,
-    marginTop: 8,
+    marginTop: 6,
     lineHeight: 21,
     color: '#6E645E',
-    marginBottom: 16,
+    marginBottom: 6,
   },
   listContent: {
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
