@@ -308,23 +308,43 @@ export default function BibleStudyJournalScreen() {
 
         {openDecor === 'bg' ? (
           <View style={styles.decorPanel}>
-            <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
-            {TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).map((bg) => (
-              <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}>
-                <Image source={bg.image} style={styles.bgPreview} />
-              </TouchableOpacity>
+            <Text style={styles.panelSectionTitle}>Basic</Text>
+            <View style={styles.panelItemRow}>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
+            </View>
+            {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
+              <View key={pack.id} style={styles.panelSection}>
+                <Text style={styles.panelSectionTitle}>{pack.title}</Text>
+                <View style={styles.panelItemRow}>
+                  {pack.backgrounds.map((bg) => (
+                    <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}>
+                      <Image source={bg.image} style={styles.bgPreview} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
         ) : null}
 
         {openDecor === 'sticker' ? (
           <View style={styles.decorPanel}>
-            {STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => addEmojiSticker(emoji)}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}
-            {TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).map((sticker) => (
-              <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => addShopSticker(sticker.key)}>
-                <Image source={sticker.image} style={styles.stickerPreview} />
-              </TouchableOpacity>
+            <Text style={styles.panelSectionTitle}>Quick Stickers</Text>
+            <View style={styles.panelItemRow}>
+              {STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => addEmojiSticker(emoji)}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}
+            </View>
+            {TEST_UNLOCKED_STICKER_PACKS.map((pack) => (
+              <View key={pack.id} style={styles.panelSection}>
+                <Text style={styles.panelSectionTitle}>{pack.title}</Text>
+                <View style={styles.panelItemRow}>
+                  {pack.stickers.map((sticker) => (
+                    <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => addShopSticker(sticker.key)}>
+                      <Image source={sticker.image} style={styles.stickerPreview} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             ))}
           </View>
         ) : null}
@@ -441,6 +461,9 @@ const styles = StyleSheet.create({
   decorButtonIcon: { width: 20, height: 20 },
   decorButtonText: { fontSize: 12, fontWeight: '600', color: '#4A403C' },
   decorPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  panelSection: { width: '100%' },
+  panelSectionTitle: { width: '100%', fontSize: 12, fontWeight: '700', color: '#6B5F57', marginTop: 2, marginBottom: 6 },
+  panelItemRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   simpleChip: { borderRadius: 12, backgroundColor: '#F8F5F2', paddingHorizontal: 10, paddingVertical: 8 },
   emojiChip: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8F5F2', alignItems: 'center', justifyContent: 'center' },
   emojiText: { fontSize: 21 },

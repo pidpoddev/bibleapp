@@ -869,7 +869,8 @@ export default function PrayerJournalScreen() {
                 borderColor: colorTheme.border,
               },
             ]}>
-            <Text style={styles.trayTitle}>Pick decor</Text>
+            <Text style={styles.trayTitle}>Decor</Text>
+            <Text style={styles.traySectionTitle}>Quick Stickers</Text>
             <View style={styles.stickerTrayRow}>
               {STICKER_CHOICES.map((choice) => (
                 <TouchableOpacity
@@ -929,7 +930,8 @@ export default function PrayerJournalScreen() {
                 borderColor: colorTheme.border,
               },
             ]}>
-            <Text style={styles.trayTitle}>Choose a canvas</Text>
+            <Text style={styles.trayTitle}>Canvas</Text>
+            <Text style={styles.traySectionTitle}>Basic</Text>
             <View style={styles.backgroundOptionRow}>
               <TouchableOpacity
                 activeOpacity={0.85}
@@ -1343,6 +1345,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F1F1F',
     marginBottom: 12,
+  },
+  traySectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B5F57',
+    marginBottom: 8,
   },
   stickerTrayRow: {
     flexDirection: 'row',
