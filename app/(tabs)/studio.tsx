@@ -986,11 +986,11 @@ const TOOLBAR_ICON_SOURCE = {
 } as const;
 
 const TOOLBAR_ICON_OFFSET_Y = {
-  text: -3,
-  decor: -3,
-  canvas: -4,
-  note: -4,
-  more: -3,
+  text: -1,
+  decor: -1,
+  canvas: -1,
+  note: -2,
+  more: -2,
 } as const;
 
 export default function StudioScreen() {
@@ -4003,9 +4003,8 @@ const styles = StyleSheet.create({
     width: 34,
     height: 30,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginRight: 4,
-    paddingTop: 3,
+    justifyContent: 'center',
+    marginRight: 6,
   },
   toolbarIconImage: {
     width: 26,
