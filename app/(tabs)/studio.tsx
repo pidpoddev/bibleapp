@@ -3990,8 +3990,8 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   toolbarIconImage: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
   },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
