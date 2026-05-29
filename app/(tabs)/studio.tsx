@@ -978,11 +978,11 @@ type ToolbarMenu =
   | null;
 
 const TOOLBAR_ICON_SOURCE = {
-  text: require('../../assets/images/toolbar-icons/text.png'),
-  decor: require('../../assets/images/toolbar-icons/decor.png'),
-  canvas: require('../../assets/images/toolbar-icons/canvas.png'),
-  note: require('../../assets/images/toolbar-icons/notes.png'),
-  more: require('../../assets/images/toolbar-icons/more.png'),
+  text: require('../../assets/images/toolbar-icons/text-tight.png'),
+  decor: require('../../assets/images/toolbar-icons/decor-tight.png'),
+  canvas: require('../../assets/images/toolbar-icons/canvas-tight.png'),
+  note: require('../../assets/images/toolbar-icons/notes-tight.png'),
+  more: require('../../assets/images/toolbar-icons/more-tight.png'),
 } as const;
 
 export default function StudioScreen() {
