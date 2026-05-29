@@ -3143,11 +3143,13 @@ export default function StudioScreen() {
                     : null,
                 ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
-                  <Image
-                    source={TOOLBAR_ICON_SOURCE[iconKey]}
-                    resizeMode="contain"
-                    style={styles.toolbarIconImage}
-                  />
+                  <View style={styles.toolbarIconSlot}>
+                    <Image
+                      source={TOOLBAR_ICON_SOURCE[iconKey]}
+                      resizeMode="contain"
+                      style={styles.toolbarIconImage}
+                    />
+                  </View>
                   <Text style={styles.dropdownToolbarButtonText}>{label}</Text>
                   <Text style={styles.dropdownToolbarChevron}>▼</Text>
                 </View>
@@ -3161,11 +3163,13 @@ export default function StudioScreen() {
                   { backgroundColor: colorTheme.toolbarBackground },
                 ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
-                  <Image
-                    source={TOOLBAR_ICON_SOURCE.note}
-                    resizeMode="contain"
-                    style={styles.toolbarIconImage}
-                  />
+                  <View style={styles.toolbarIconSlot}>
+                    <Image
+                      source={TOOLBAR_ICON_SOURCE.note}
+                      resizeMode="contain"
+                      style={styles.toolbarIconImage}
+                    />
+                  </View>
                   <Text style={styles.noteButtonText}>Note</Text>
                 </View>
               </TouchableOpacity>
@@ -3189,11 +3193,13 @@ export default function StudioScreen() {
                     : null,
                 ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
-                  <Image
-                    source={TOOLBAR_ICON_SOURCE.more}
-                    resizeMode="contain"
-                    style={styles.toolbarIconImage}
-                  />
+                  <View style={styles.toolbarIconSlot}>
+                    <Image
+                      source={TOOLBAR_ICON_SOURCE.more}
+                      resizeMode="contain"
+                      style={styles.toolbarIconImage}
+                    />
+                  </View>
                   <Text style={styles.dropdownToolbarButtonText}>More</Text>
                   <Text style={styles.dropdownToolbarChevron}>▼</Text>
                 </View>
@@ -3941,7 +3947,7 @@ const styles = StyleSheet.create({
   },
   dropdownToolbarButton: {
     minWidth: 64,
-    minHeight: 50,
+    minHeight: 56,
     paddingHorizontal: 6,
     paddingVertical: 6,
     borderRadius: 18,
@@ -3976,11 +3982,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginRight: 6,
   },
+  toolbarIconSlot: {
+    width: 36,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
+    marginTop: -2,
+  },
   toolbarIconImage: {
     width: 34,
     height: 34,
-    marginRight: 2,
-    transform: [{ translateY: -3 }],
   },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
@@ -4165,7 +4177,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   noteButton: {
-    minHeight: 50,
+    minHeight: 56,
     paddingHorizontal: 6,
     paddingVertical: 6,
     borderRadius: 18,
@@ -4188,7 +4200,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   undoButton: {
-    minHeight: 50,
+    minHeight: 56,
     paddingHorizontal: 15,
     paddingVertical: 6,
     borderRadius: 18,
