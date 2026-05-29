@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 18 : 34,
+    paddingTop: Platform.OS === 'web' ? 20 : 58,
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
   },
   heroCard: {
