@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 18 : 34,
+    paddingTop: Platform.OS === 'web' ? 18 : 52,
   },
   heroCard: {
     borderRadius: 22,
