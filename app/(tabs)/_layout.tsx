@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAppSettings } from '@/utils/app-settings';
 
 const FAVORITES_TAB_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
+const JOURNAL_TAB_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -88,11 +89,15 @@ export default function TabLayout() {
         name="journal"
         options={{
           title: t('tabJournal'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              size={22}
-              name={focused ? 'create' : 'create-outline'}
-              color={color}
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={JOURNAL_TAB_ICON}
+              style={{
+                width: 22,
+                height: 22,
+                opacity: focused ? 1 : 0.72,
+              }}
+              resizeMode="contain"
             />
           ),
         }}
