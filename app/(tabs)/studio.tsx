@@ -985,6 +985,14 @@ const TOOLBAR_ICON_SOURCE = {
   more: require('../../assets/images/toolbar-icons/more.png'),
 } as const;
 
+const TOOLBAR_ICON_ADJUSTMENTS = {
+  text: { size: 30, offsetY: -6 },
+  decor: { size: 30, offsetY: -5 },
+  canvas: { size: 30, offsetY: -5 },
+  note: { size: 30, offsetY: -4 },
+  more: { size: 30, offsetY: -5 },
+} as const;
+
 export default function StudioScreen() {
   const { colorTheme, language, t } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -3147,7 +3155,14 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE[iconKey]}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        {
+                          width: TOOLBAR_ICON_ADJUSTMENTS[iconKey].size,
+                          height: TOOLBAR_ICON_ADJUSTMENTS[iconKey].size,
+                          transform: [{ translateY: TOOLBAR_ICON_ADJUSTMENTS[iconKey].offsetY }],
+                        },
+                      ]}
                     />
                   </View>
                   <Text style={styles.dropdownToolbarButtonText}>{label}</Text>
@@ -3167,7 +3182,14 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE.note}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        {
+                          width: TOOLBAR_ICON_ADJUSTMENTS.note.size,
+                          height: TOOLBAR_ICON_ADJUSTMENTS.note.size,
+                          transform: [{ translateY: TOOLBAR_ICON_ADJUSTMENTS.note.offsetY }],
+                        },
+                      ]}
                     />
                   </View>
                   <Text style={styles.noteButtonText}>Note</Text>
@@ -3197,7 +3219,14 @@ export default function StudioScreen() {
                     <Image
                       source={TOOLBAR_ICON_SOURCE.more}
                       resizeMode="contain"
-                      style={styles.toolbarIconImage}
+                      style={[
+                        styles.toolbarIconImage,
+                        {
+                          width: TOOLBAR_ICON_ADJUSTMENTS.more.size,
+                          height: TOOLBAR_ICON_ADJUSTMENTS.more.size,
+                          transform: [{ translateY: TOOLBAR_ICON_ADJUSTMENTS.more.offsetY }],
+                        },
+                      ]}
                     />
                   </View>
                   <Text style={styles.dropdownToolbarButtonText}>More</Text>
@@ -3990,9 +4019,8 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   toolbarIconImage: {
-    width: 32,
-    height: 32,
-    transform: [{ translateY: -2 }],
+    width: 30,
+    height: 30,
   },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
