@@ -3943,7 +3943,7 @@ const styles = StyleSheet.create({
   dropdownToolbarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
   },
   dropdownToolbarButton: {
     minWidth: 64,
