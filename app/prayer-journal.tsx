@@ -744,7 +744,6 @@ export default function PrayerJournalScreen() {
           keyboardShouldPersistTaps="handled"
           onScrollBeginDrag={() => {
             setSelectedStickerId(null);
-            setOpenTray(null);
           }}
           showsVerticalScrollIndicator={false}>
           <Text
