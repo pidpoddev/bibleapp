@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useFonts } from 'expo-font';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -64,6 +64,11 @@ import {
   SAVED_DESIGNS_STORAGE_KEY,
   saveVerseDesignSnapshot,
 } from '@/utils/verse-design-list';
+import {
+  LEGACY_SAVED_DESIGNS_STORAGE_KEY,
+  JOURNAL_INDEX_KEY,
+  SAVED_DESIGNS_BACKUP_STORAGE_KEY,
+} from '@/utils/storage-keys';
 import {
   getShopSticker,
   getShopStickerDisplaySize,
@@ -149,6 +154,15 @@ type SavedVerseDesign = {
   savedAt: string;
 };
 
+type StudioJournalIndexEntry = {
+  id: string;
+  type: 'journal-studio';
+  date: string;
+  preview: string;
+  updatedAt: number;
+  isFavorite: boolean;
+};
+
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 2.4;
 const MIN_NOTE_WIDTH = 100;
@@ -178,6 +192,10 @@ const HIGHLIGHT_COLOR_MAP: Record<HighlightColor, string> = {
 function clamp(value: number, min: number, max: number) {
   'worklet';
   return Math.min(Math.max(value, min), max);
+}
+
+function generateId() {
+  return Date.now().toString();
 }
 
 function cloneVerseEditorState(state: VerseEditorState): VerseEditorState {
@@ -234,6 +252,116 @@ function buildDefaultVerseCard(verse: number, text: string, index: number): Vers
     scale: 1,
     rotation: Math.random() * 4 - 2,
   };
+}
+
+function getSelectedVersesFromCardsOrFallback(
+  cards: VerseCard[],
+  fallbackVerses: number[],
+  fallbackVerse: number
+) {
+  const fromCards = Array.from(
+    new Set(
+      cards
+        .map((card) => card.verse)
+        .filter((verseNumber) => Number.isFinite(verseNumber))
+    )
+  ).sort((left, right) => left - right);
+
+  if (fromCards.length > 0) {
+    return fromCards;
+  }
+
+  return normalizeSelectedVerses(fallbackVerses, fallbackVerse);
+}
+
+function upsertFavoriteDesign(
+  favorites: SavedVerseDesign[],
+  nextFavorite: SavedVerseDesign,
+  candidateKeys: (string | null | undefined)[]
+) {
+  const keySet = new Set(
+    candidateKeys.filter((key): key is string => typeof key === 'string' && key.length > 0)
+  );
+  keySet.add(nextFavorite.key);
+
+  const index = favorites.findIndex((favorite) => keySet.has(favorite.key));
+
+  if (index === -1) {
+    return [...favorites, nextFavorite];
+  }
+
+  const next = [...favorites];
+  next[index] = nextFavorite;
+  return next;
+}
+
+async function readAndSanitizeSavedDesigns(): Promise<SavedVerseDesign[]> {
+  const rawValue = await AsyncStorage.getItem(SAVED_DESIGNS_STORAGE_KEY);
+  const backupValue = await AsyncStorage.getItem(SAVED_DESIGNS_BACKUP_STORAGE_KEY);
+
+  if (!rawValue && backupValue) {
+    try {
+      const backupParsed = JSON.parse(backupValue) as unknown;
+      if (Array.isArray(backupParsed)) {
+        await AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, JSON.stringify(backupParsed));
+        return backupParsed as SavedVerseDesign[];
+      }
+    } catch {}
+  }
+
+  if (!rawValue) {
+    const legacyValue = await AsyncStorage.getItem(LEGACY_SAVED_DESIGNS_STORAGE_KEY);
+
+    if (!legacyValue) {
+      return [];
+    }
+
+    try {
+      const legacyParsed = JSON.parse(legacyValue) as unknown;
+
+      if (!Array.isArray(legacyParsed)) {
+        return [];
+      }
+
+      const migrated = legacyParsed as SavedVerseDesign[];
+      await AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    } catch {
+      return [];
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      await AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, JSON.stringify([]));
+      return [];
+    }
+
+    return parsed as SavedVerseDesign[];
+  } catch {
+    await AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, JSON.stringify([]));
+    return [];
+  }
+}
+
+async function writeSavedDesigns(designs: SavedVerseDesign[]) {
+  const json = JSON.stringify(designs);
+  await Promise.all([
+    AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, json),
+    AsyncStorage.setItem(SAVED_DESIGNS_BACKUP_STORAGE_KEY, json),
+  ]);
+}
+
+async function upsertStudioJournalIndex(entry: StudioJournalIndexEntry) {
+  const existingIndex = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
+  const parsedIndex = existingIndex ? (JSON.parse(existingIndex) as StudioJournalIndexEntry[]) : [];
+  const nextIndex = parsedIndex.some((item) => item.id === entry.id)
+    ? parsedIndex.map((item) => (item.id === entry.id ? entry : item))
+    : [entry, ...parsedIndex];
+  nextIndex.sort((left, right) => right.updatedAt - left.updatedAt);
+  await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
 }
 
 function syncVerseCardsWithSelection(
@@ -449,6 +577,7 @@ function DraggableNote({
   onFocus,
   onBlur,
 }: DraggableNoteProps) {
+  const NOTE_LINE_BUMP = 28;
   const resizeHandleRef = useRef(null);
   const translateX = useSharedValue(note.x);
   const translateY = useSharedValue(note.y);
@@ -464,6 +593,13 @@ function DraggableNote({
     selectionScale.value = withTiming(isSelected ? 1.02 : 1, { duration: 140 });
   }, [isSelected, selectionScale]);
 
+  useEffect(() => {
+    translateX.value = note.x;
+    translateY.value = note.y;
+    width.value = note.width;
+    height.value = note.height;
+  }, [height, note.height, note.width, note.x, note.y, translateX, translateY, width]);
+
   const dismissKeyboard = () => {
     Keyboard.dismiss();
   };
@@ -474,6 +610,26 @@ function DraggableNote({
 
   const commitSize = (nextWidth: number, nextHeight: number) => {
     onUpdate(note.id, { width: nextWidth, height: nextHeight });
+  };
+
+  const handleNoteTextChange = (text: string) => {
+    const previousLineCount = (note.text.match(/\n/g)?.length ?? 0) + 1;
+    const nextLineCount = (text.match(/\n/g)?.length ?? 0) + 1;
+
+    if (nextLineCount > previousLineCount) {
+      const nextHeight = clamp(
+        note.height + (nextLineCount - previousLineCount) * NOTE_LINE_BUMP,
+        MIN_NOTE_HEIGHT,
+        MAX_NOTE_HEIGHT
+      );
+
+      if (nextHeight > note.height) {
+        onUpdate(note.id, { text, height: nextHeight });
+        return;
+      }
+    }
+
+    onUpdate(note.id, { text });
   };
 
   const onDragStateChange = (event: PanGestureHandlerStateChangeEvent) => {
@@ -593,6 +749,7 @@ function DraggableNote({
           <TextInput
             autoFocus={shouldAutoFocus}
             multiline
+            scrollEnabled={false}
             placeholder="Write your thoughts..."
             placeholderTextColor="#8F877F"
             style={styles.noteCardInput}
@@ -607,7 +764,7 @@ function DraggableNote({
             onBlur={() => {
               onBlur(note.id);
             }}
-            onChangeText={(text) => onUpdate(note.id, { text })}
+            onChangeText={handleNoteTextChange}
             textAlignVertical="top"
           />
         </Pressable>
@@ -815,22 +972,30 @@ type FloatingItem =
 
 type ToolbarMenu =
   | 'fonts'
-  | 'size'
-  | 'highlight'
   | 'stickers'
   | 'backgrounds'
+  | 'more'
   | null;
+
+const TOOLBAR_ICON_SOURCE = {
+  text: require('../../assets/images/toolbar-icons/text.png'),
+  decor: require('../../assets/images/toolbar-icons/decor.png'),
+  canvas: require('../../assets/images/toolbar-icons/canvas.png'),
+  note: require('../../assets/images/toolbar-icons/notes.png'),
+  more: require('../../assets/images/toolbar-icons/more.png'),
+} as const;
 
 export default function StudioScreen() {
   const { colorTheme, language, t } = useAppSettings();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
+  const draftFavoriteKeyRef = useRef<string | null>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
   const lastAppliedSelectionParamsRef = useRef<string | null>(null);
   const saveToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const favoriteAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedSavedDesignsRef = useRef(false);
   const lastAutoSavedVerseDesignSignatureRef = useRef<string | null>(null);
-  const router = useRouter();
   const route = useRoute<any>();
   const routeDesignParam =
     route.params?.design &&
@@ -854,6 +1019,13 @@ export default function StudioScreen() {
       : typeof route.params?.selectedVerse === 'number'
         ? route.params.selectedVerse
         : null;
+  const routeSourceParam =
+    typeof route.params?.source === 'string' ? route.params.source : null;
+  const routeFavoriteKeyParam =
+    typeof route.params?.favoriteKey === 'string' ? route.params.favoriteKey : null;
+  const routeEntryIdParam =
+    typeof route.params?.entryId === 'string' ? route.params.entryId : null;
+  const [currentEntryId, setCurrentEntryId] = useState(() => routeEntryIdParam ?? generateId());
   const [selectedBook, setSelectedBook] = useState('');
   const [selectedChapter, setSelectedChapter] = useState(0);
   const [selectedVerse, setSelectedVerse] = useState(0);
@@ -895,6 +1067,7 @@ export default function StudioScreen() {
   const [hasLoadedState, setHasLoadedState] = useState(false);
   const [saveToastMessage, setSaveToastMessage] = useState('');
   const [undoHistory, setUndoHistory] = useState<VerseEditorState[]>([]);
+  const [isFavoriteActive, setIsFavoriteActive] = useState(false);
   const bookOptions = getBooks();
   const hasBookSelection = selectedBook.length > 0;
   const hasChapterSelection = hasBookSelection && selectedChapter > 0;
@@ -949,13 +1122,6 @@ export default function StudioScreen() {
           : 'System',
     ...(selectedFont === 'bold' ? { fontWeight: '700' as const } : null),
   };
-  const toolbarMenuLabel = {
-    fonts: { emoji: '✍️', label: 'Fonts' },
-    size: { emoji: '🔤', label: 'Size' },
-    highlight: { emoji: '🎨', label: 'Highlight' },
-    stickers: { emoji: '🌸', label: 'Stickers' },
-    backgrounds: { emoji: '✨', label: 'Backgrounds' },
-  } as const;
   const floatingItems: FloatingItem[] = [
     ...notes.map((note) => ({ type: 'note' as const, zIndex: note.zIndex, item: note })),
     ...stickers.map((sticker) => ({
@@ -968,7 +1134,13 @@ export default function StudioScreen() {
   const [fontsLoaded] = useFonts({
     Playwrite: require('../../assets/fonts/PlaywriteDEGrund.ttf'),
   });
-  const isCurrentVerseSaved = savedDesigns.some((design) => design.key === designKey);
+  const isCurrentVerseSaved = savedDesigns.some(
+    (design) =>
+      design.key === designKey ||
+      design.key === routeFavoriteKeyParam ||
+      design.key === routeDesignParam?.key ||
+      (draftFavoriteKeyRef.current !== null && design.key === draftFavoriteKeyRef.current)
+  );
   const saveToastOpacity = useSharedValue(0);
   const saveToastTranslateY = useSharedValue(12);
   const currentEditorState: VerseEditorState = useMemo(
@@ -984,6 +1156,23 @@ export default function StudioScreen() {
     [backgroundKey, fontSize, highlightedWords, notes, selectedFont, stickers, verseCards]
   );
   const selectedStudioBackground = getShopBackground(backgroundKey);
+  const favoriteBaseBook = selectedBook || routeDesignParam?.book || DEFAULT_BOOK;
+  const favoriteBaseChapter = selectedChapter || routeDesignParam?.chapter || DEFAULT_CHAPTER;
+  const favoriteBaseVerse = selectedVerse || routeDesignParam?.verse || DEFAULT_VERSE;
+  const favoriteBaseVerses =
+    normalizedSelectedVerses.length > 0
+      ? normalizedSelectedVerses
+      : normalizeSelectedVerses(
+          routeDesignParam?.selectedVerses ?? [favoriteBaseVerse],
+          favoriteBaseVerse
+        );
+  const favoritePersistKey = routeFavoriteKeyParam ?? routeDesignParam?.key ?? designKey;
+  const favoriteStableKey = routeFavoriteKeyParam ?? routeDesignParam?.key ?? designKey;
+  const favoritePersistVerses = getSelectedVersesFromCardsOrFallback(
+    verseCards,
+    favoriteBaseVerses,
+    favoriteBaseVerse
+  );
 
   const getHighestZIndex = () =>
     Math.max(
@@ -1011,6 +1200,112 @@ export default function StudioScreen() {
       saveToastTranslateY.value = withTiming(12, { duration: 220 });
     }, 1800);
   };
+
+  const ensureFavoriteKey = useCallback(() => {
+    if (routeFavoriteKeyParam) {
+      return routeFavoriteKeyParam;
+    }
+
+    if (routeDesignParam?.key) {
+      return routeDesignParam.key;
+    }
+
+    if (hasVerseSelection) {
+      return designKey;
+    }
+
+    if (!draftFavoriteKeyRef.current) {
+      draftFavoriteKeyRef.current = `studio-${Date.now()}`;
+    }
+
+    return draftFavoriteKeyRef.current;
+  }, [designKey, hasVerseSelection, routeDesignParam, routeFavoriteKeyParam]);
+
+  const persistFavoriteToStorage = useCallback(async () => {
+    if (!isFavoriteActive) {
+      return;
+    }
+
+    if (!isVerseDesignDecorated(currentEditorState)) {
+      return;
+    }
+
+    const favoriteKey = ensureFavoriteKey();
+
+    const nextFavorite: SavedVerseDesign = {
+      key: favoriteKey,
+      book: favoriteBaseBook,
+      chapter: favoriteBaseChapter,
+      verse: favoriteBaseVerse,
+      selectedVerses: favoritePersistVerses,
+      verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
+      stickers: stickers.map((sticker) => ({ ...sticker })),
+      notes: notes.map((note) => ({ ...note })),
+      backgroundKey,
+      highlights: { ...highlightedWords },
+      selectedFont,
+      fontSize,
+      savedAt: new Date().toISOString(),
+    };
+
+    const favorites = await readAndSanitizeSavedDesigns();
+    const nextFavorites = upsertFavoriteDesign(favorites, nextFavorite, [
+      favoriteKey,
+      favoritePersistKey,
+      routeFavoriteKeyParam,
+      routeDesignParam?.key,
+      designKey,
+    ]);
+
+    await writeSavedDesigns(nextFavorites);
+    setSavedDesigns(nextFavorites);
+
+    const entryId = currentEntryId || generateId();
+    if (!currentEntryId) {
+      setCurrentEntryId(entryId);
+    }
+    const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
+    const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
+    const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
+    const studioJournalPayload = {
+      id: entryId,
+      type: 'journal-studio' as const,
+      date: new Date().toLocaleString(),
+      preview,
+      updatedAt: Date.now(),
+      isFavorite: true,
+      design: nextFavorite,
+    };
+    await AsyncStorage.setItem(`journal_studio_${entryId}`, JSON.stringify(studioJournalPayload));
+    await upsertStudioJournalIndex({
+      id: entryId,
+      type: 'journal-studio',
+      date: studioJournalPayload.date,
+      preview,
+      updatedAt: studioJournalPayload.updatedAt,
+      isFavorite: true,
+    });
+  }, [
+    backgroundKey,
+    designKey,
+    favoriteBaseBook,
+    favoriteBaseChapter,
+    favoriteBaseVerse,
+    favoritePersistKey,
+    favoritePersistVerses,
+    ensureFavoriteKey,
+    fontSize,
+    highlightedWords,
+    isFavoriteActive,
+    currentEditorState,
+    currentEntryId,
+    notes,
+    routeDesignParam,
+    routeFavoriteKeyParam,
+    selectedFont,
+    stickers,
+    verseCards,
+  ]);
 
   const applyEditorState = (state: VerseEditorState) => {
     const nextEditorState = cloneVerseEditorState(state);
@@ -1165,6 +1460,11 @@ export default function StudioScreen() {
     let isMounted = true;
 
     const loadStoredVerseState = async () => {
+      if (routeEntryIdParam && !routeDesignParam) {
+        setHasLoadedState(true);
+        return;
+      }
+
       setHasLoadedState(false);
       setSelectedStickerId(null);
       setSelectedNoteId(null);
@@ -1318,6 +1618,7 @@ export default function StudioScreen() {
   }, [
     language.key,
     routeDesignParam,
+    routeEntryIdParam,
     routeRestoreToken,
     routeSelectedBookParam,
     routeSelectedChapterParam,
@@ -1482,15 +1783,9 @@ export default function StudioScreen() {
 
     const loadSavedDesigns = async () => {
       try {
-        const savedValue = await AsyncStorage.getItem(SAVED_DESIGNS_STORAGE_KEY);
+        const parsedValue = await readAndSanitizeSavedDesigns();
 
-        if (!savedValue || !isMounted) {
-          return;
-        }
-
-        const parsedValue = JSON.parse(savedValue) as unknown;
-
-        if (!Array.isArray(parsedValue)) {
+        if (!isMounted) {
           return;
         }
 
@@ -1538,6 +1833,8 @@ export default function StudioScreen() {
                 : [],
               stickers: candidate.stickers as Sticker[],
               notes: candidate.notes as Note[],
+              backgroundKey:
+                typeof candidate.backgroundKey === 'string' ? candidate.backgroundKey : null,
               highlights: ((candidate.highlights ??
                 (candidate as { highlightedWords?: Record<string, HighlightColor> }).highlightedWords) ??
                 {}) as Record<string, HighlightColor>,
@@ -1574,15 +1871,8 @@ export default function StudioScreen() {
     useCallback(() => {
       const refreshSavedDesigns = async () => {
         try {
-          const savedValue = await AsyncStorage.getItem(SAVED_DESIGNS_STORAGE_KEY);
-
-          if (!savedValue) {
-            setSavedDesigns([]);
-            return;
-          }
-
-          const parsedValue = JSON.parse(savedValue) as SavedVerseDesign[];
-          setSavedDesigns(Array.isArray(parsedValue) ? parsedValue : []);
+          const parsedValue = await readAndSanitizeSavedDesigns();
+          setSavedDesigns(parsedValue);
         } catch (error) {
           console.warn('Failed to refresh saved verse designs', error);
         }
@@ -1611,15 +1901,45 @@ export default function StudioScreen() {
   }, [hasLoadedSavedDesigns, savedDesigns]);
 
   useEffect(() => {
-    if (!hasLoadedSavedDesigns || !hasLoadedState || !isCurrentVerseSaved) {
+    if (!hasLoadedSavedDesigns || !hasLoadedState || !hasVerseSelection) {
+      return;
+    }
+
+    const fallbackDesignKey = routeDesignParam?.key ?? null;
+    const shouldSyncFavorite =
+      isCurrentVerseSaved ||
+      (routeSourceParam === 'favorites' && fallbackDesignKey !== null);
+
+    if (!shouldSyncFavorite) {
       return;
     }
 
     setSavedDesigns((current) => {
-      const existingIndex = current.findIndex((design) => design.key === designKey);
+      const existingIndex = current.findIndex(
+        (design) => design.key === designKey || design.key === fallbackDesignKey
+      );
 
       if (existingIndex === -1) {
-        return current;
+        return routeSourceParam === 'favorites'
+          ? [
+              ...current,
+              {
+                key: designKey,
+                book: selectedBook,
+                chapter: selectedChapter,
+                verse: selectedVerse,
+                selectedVerses: normalizedSelectedVerses,
+                verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
+                stickers: stickers.map((sticker) => ({ ...sticker })),
+                notes: notes.map((note) => ({ ...note })),
+                backgroundKey,
+                highlights: { ...highlightedWords },
+                selectedFont,
+                fontSize,
+                savedAt: new Date().toISOString(),
+              },
+            ]
+          : current;
       }
 
       const nextDesign: SavedVerseDesign = {
@@ -1631,6 +1951,7 @@ export default function StudioScreen() {
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
         notes: notes.map((note) => ({ ...note })),
+        backgroundKey,
         highlights: { ...highlightedWords },
         selectedFont,
         fontSize,
@@ -1648,12 +1969,16 @@ export default function StudioScreen() {
       return nextDesigns;
     });
   }, [
+    backgroundKey,
     fontSize,
     hasLoadedState,
     hasLoadedSavedDesigns,
+    hasVerseSelection,
     highlightedWords,
     isCurrentVerseSaved,
     notes,
+    routeDesignParam,
+    routeSourceParam,
     selectedBook,
     selectedChapter,
     selectedFont,
@@ -1666,11 +1991,60 @@ export default function StudioScreen() {
   ]);
 
   useEffect(() => {
-    if (!routeDesignParam) {
+    if (!hasLoadedSavedDesigns || !favoritePersistKey || !isFavoriteActive) {
       return;
     }
 
-    const d = routeDesignParam;
+    if (favoriteAutosaveTimeoutRef.current) {
+      clearTimeout(favoriteAutosaveTimeoutRef.current);
+    }
+
+    favoriteAutosaveTimeoutRef.current = setTimeout(() => {
+      void persistFavoriteToStorage().catch((error) => {
+        console.warn('Failed to persist favorite during edit', error);
+      });
+    }, VERSE_DESIGN_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (favoriteAutosaveTimeoutRef.current) {
+        clearTimeout(favoriteAutosaveTimeoutRef.current);
+      }
+    };
+  }, [
+    backgroundKey,
+    designKey,
+    favoriteBaseBook,
+    favoriteBaseChapter,
+    favoriteBaseVerse,
+    favoriteBaseVerses,
+    favoritePersistVerses,
+    favoritePersistKey,
+    favoriteStableKey,
+    fontSize,
+    hasLoadedSavedDesigns,
+    highlightedWords,
+    notes,
+    routeDesignParam,
+    routeFavoriteKeyParam,
+    routeSourceParam,
+    isFavoriteActive,
+    persistFavoriteToStorage,
+    selectedFont,
+    stickers,
+    verseCards,
+  ]);
+
+  useEffect(() => {
+    const resolvedRouteDesign =
+      routeSourceParam === 'favorites' && routeFavoriteKeyParam
+        ? savedDesigns.find((design) => design.key === routeFavoriteKeyParam) ?? routeDesignParam
+        : routeDesignParam;
+
+    if (!resolvedRouteDesign) {
+      return;
+    }
+
+    const d = resolvedRouteDesign;
     const restoreToken =
       routeRestoreToken ?? d.key;
 
@@ -1714,7 +2088,79 @@ export default function StudioScreen() {
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
     setUndoHistory([]);
-  }, [language.key, routeDesignParam, routeRestoreToken]);
+    setIsFavoriteActive(routeSourceParam === 'favorites');
+  }, [
+    language.key,
+    routeDesignParam,
+    routeFavoriteKeyParam,
+    routeRestoreToken,
+    routeSourceParam,
+    savedDesigns,
+  ]);
+
+  useEffect(() => {
+    const loadStudioEntryById = async () => {
+      if (!routeEntryIdParam || routeDesignParam) {
+        return;
+      }
+
+      try {
+        const stored = await AsyncStorage.getItem(`journal_studio_${routeEntryIdParam}`);
+        if (!stored) {
+          return;
+        }
+
+        const parsed = JSON.parse(stored) as { design?: SavedVerseDesign; updatedAt?: number };
+        if (!parsed?.design) {
+          return;
+        }
+
+        const d = parsed.design;
+        const restoreToken = `entry-${routeEntryIdParam}-${parsed.updatedAt ?? 0}`;
+        if (lastAppliedDesignKeyRef.current === restoreToken) {
+          return;
+        }
+        lastAppliedDesignKeyRef.current = restoreToken;
+
+        setCurrentEntryId(routeEntryIdParam);
+        setSelectedBook(d.book);
+        setSelectedChapter(d.chapter);
+        setSelectedVerse(d.verse);
+        const nextSelectedVerses = normalizeSelectedVerses(d.selectedVerses ?? [d.verse], d.verse);
+        setSelectedVerses(nextSelectedVerses);
+        setVerseCards(
+          syncVerseCardsWithSelection(
+            d.verseCards || [],
+            nextSelectedVerses,
+            d.book,
+            d.chapter,
+            language.key
+          )
+        );
+        setStickers(d.stickers || []);
+        setNotes(d.notes || []);
+        setBackgroundKey(d.backgroundKey ?? null);
+        setHighlightedWords(d.highlights || {});
+        setSelectedFont(d.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+        setFontSize(d.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
+        setSelectedStickerId(null);
+        setSelectedNoteId(null);
+        setAutoFocusNoteId(null);
+        setFocusedNoteId(null);
+        setFocusedNoteTarget(null);
+        setOpenToolbarMenu(null);
+        setIsBookDropdownOpen(false);
+        setIsChapterDropdownOpen(false);
+        setIsVerseDropdownOpen(false);
+        setUndoHistory([]);
+        setIsFavoriteActive(true);
+      } catch (error) {
+        console.warn('Failed to load studio journal entry', error);
+      }
+    };
+
+    void loadStudioEntryById();
+  }, [language.key, routeDesignParam, routeEntryIdParam]);
 
   useEffect(() => {
     if (routeDesignParam) {
@@ -1862,8 +2308,8 @@ export default function StudioScreen() {
       text: '',
       x: 28 + notes.length * 18,
       y: 210 + notes.length * 18,
-      width: 170,
-      height: 120,
+      width: 150,
+      height: 150,
       zIndex: getHighestZIndex() + 1,
     };
 
@@ -1953,8 +2399,12 @@ export default function StudioScreen() {
     setFocusedNoteTarget(null);
   };
 
-  const clearStickerSelection = () => {
+  const clearCanvasSelection = () => {
+    Keyboard.dismiss();
     setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
   };
 
   const selectNote = (id: string) => {
@@ -2080,6 +2530,8 @@ export default function StudioScreen() {
   };
 
   const resetCurrentDesign = () => {
+    recordUndoSnapshot();
+
     const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
 
     if (hasVerseSelection) {
@@ -2108,42 +2560,10 @@ export default function StudioScreen() {
     setIsBookDropdownOpen(false);
     setIsChapterDropdownOpen(false);
     setIsVerseDropdownOpen(false);
-    setUndoHistory([]);
     if (hasVerseSelection) {
       void removeVerseDesignSnapshot(selectedBook, designKey);
     }
     showSaveToast(t('studioStartOverToast'));
-  };
-
-  const handleBackToVerseDesigns = async () => {
-    Keyboard.dismiss();
-    setSelectedStickerId(null);
-    setSelectedNoteId(null);
-    setAutoFocusNoteId(null);
-    setFocusedNoteId(null);
-    setFocusedNoteTarget(null);
-    setOpenToolbarMenu(null);
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-
-    if (hasVerseSelection && isVerseDesignDecorated(currentEditorState)) {
-      const nextVerseState: VerseStateMap = {
-        ...verseState,
-        [designKey]: currentEditorState,
-      };
-
-      setVerseState(nextVerseState);
-
-      try {
-        await saveVerseStateMap(selectedBook, nextVerseState);
-        await saveVerseDesignSnapshot(selectedBook, designKey, currentEditorState);
-      } catch (error) {
-        console.warn('Failed to auto-save verse design before leaving Studio', error);
-      }
-    }
-
-    router.push('/verse-designs' as never);
   };
 
   const handleBookSelect = (book: string) => {
@@ -2251,31 +2671,20 @@ export default function StudioScreen() {
   };
 
   const toggleFavorite = async () => {
-    if (!hasVerseSelection) {
-      return;
-    }
-
     try {
-      const existingData = await AsyncStorage.getItem(SAVED_DESIGNS_STORAGE_KEY);
-      const favorites = existingData ? (JSON.parse(existingData) as SavedVerseDesign[]) : [];
-      const index = favorites.findIndex((favorite) => favorite.key === designKey);
-
-      if (index !== -1) {
-        const nextFavorites = favorites.filter((favorite) => favorite.key !== designKey);
-        setSavedDesigns(nextFavorites);
-        await AsyncStorage.setItem(
-          SAVED_DESIGNS_STORAGE_KEY,
-          JSON.stringify(nextFavorites)
-        );
+      if (!isVerseDesignDecorated(currentEditorState)) {
         return;
       }
 
+      const favoriteKey = ensureFavoriteKey();
       const newItem: SavedVerseDesign = {
-        key: designKey,
-        book: selectedBook,
-        chapter: selectedChapter,
-        verse: selectedVerse,
-        selectedVerses: normalizedSelectedVerses,
+        book: favoriteBaseBook,
+        chapter: favoriteBaseChapter,
+        verse: favoriteBaseVerse,
+        selectedVerses:
+          normalizedSelectedVerses.length > 0
+            ? normalizedSelectedVerses
+            : favoritePersistVerses,
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
         notes: notes.map((note) => ({ ...note })),
@@ -2284,12 +2693,48 @@ export default function StudioScreen() {
         selectedFont,
         fontSize,
         savedAt: new Date().toISOString(),
+        key: favoriteKey,
       };
 
-      favorites.push(newItem);
+      const entryId = currentEntryId || generateId();
+      if (!currentEntryId) {
+        setCurrentEntryId(entryId);
+      }
+      const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
+      const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
+      const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
+      const studioJournalPayload = {
+        id: entryId,
+        type: 'journal-studio' as const,
+        date: new Date().toLocaleString(),
+        preview,
+        updatedAt: Date.now(),
+        isFavorite: !isFavoriteActive,
+        design: newItem,
+      };
+      await AsyncStorage.setItem(`journal_studio_${entryId}`, JSON.stringify(studioJournalPayload));
+      await upsertStudioJournalIndex({
+        id: entryId,
+        type: 'journal-studio',
+        date: studioJournalPayload.date,
+        preview,
+        updatedAt: studioJournalPayload.updatedAt,
+        isFavorite: studioJournalPayload.isFavorite,
+      });
 
-      setSavedDesigns(favorites);
-      await AsyncStorage.setItem(SAVED_DESIGNS_STORAGE_KEY, JSON.stringify(favorites));
+      const favorites = await readAndSanitizeSavedDesigns();
+      const nextFavorites = studioJournalPayload.isFavorite
+        ? upsertFavoriteDesign(favorites, newItem, [
+            favoriteKey,
+            favoritePersistKey,
+            routeFavoriteKeyParam,
+            routeDesignParam?.key,
+            designKey,
+          ])
+        : favorites.filter((favorite) => favorite.key !== favoriteKey);
+      setSavedDesigns(nextFavorites);
+      await writeSavedDesigns(nextFavorites);
+      setIsFavoriteActive(studioJournalPayload.isFavorite);
     } catch (error) {
       console.log('Save error', error);
     }
@@ -2404,19 +2849,15 @@ export default function StudioScreen() {
         ]}
         keyboardShouldPersistTaps="handled">
         <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-        <View style={styles.headerSection}>
+        <View
+          style={[
+            styles.headerSection,
+            routeSourceParam === 'favorites' || Boolean(routeEntryIdParam)
+              ? styles.headerSectionCompact
+              : null,
+          ]}>
           <View style={styles.titleRow}>
             <View style={styles.titleGroup}>
-              <Pressable
-                onPress={(event) => {
-                  event.stopPropagation();
-                  void handleBackToVerseDesigns();
-                }}
-                style={styles.backButton}
-                accessibilityRole="button"
-                accessibilityLabel={t('studioBackToDesigns')}>
-                <Ionicons name="chevron-back" size={22} color="#5B514D" />
-              </Pressable>
               <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
                 {hasVerseSelection
                   ? `${selectedBook} ${selectedChapter}:${selectedVerse}`
@@ -2432,7 +2873,7 @@ export default function StudioScreen() {
                 style={[
                   styles.saveDesignButton,
                   { backgroundColor: colorTheme.toolbarBackground },
-                  isCurrentVerseSaved
+                  isFavoriteActive
                     ? [
                         styles.saveDesignButtonActive,
                         {
@@ -2443,11 +2884,11 @@ export default function StudioScreen() {
                     : null,
                 ]}
               accessibilityRole="button"
-              accessibilityLabel={isCurrentVerseSaved ? 'Unsave verse design' : 'Save verse design'}>
+              accessibilityLabel={isFavoriteActive ? 'Unsave verse design' : 'Save verse design'}>
               <Ionicons
-                name={isCurrentVerseSaved ? 'heart' : 'heart-outline'}
+                name={isFavoriteActive ? 'heart' : 'heart-outline'}
                 size={22}
-                color={isCurrentVerseSaved ? '#C05A67' : '#5B514D'}
+                color={isFavoriteActive ? '#C05A67' : '#5B514D'}
               />
             </Pressable>
           </View>
@@ -2525,7 +2966,7 @@ export default function StudioScreen() {
                   { backgroundColor: colorTheme.toolbarBackground },
                 ]}>
                 <Text style={styles.chapterDropdownButtonText}>
-                  {hasChapterSelection ? selectedChapter : 'Chapter'}
+                  {hasChapterSelection ? `Chapter ${selectedChapter}` : 'Chapter'}
                 </Text>
                 <Text style={styles.chapterDropdownChevron}>▼</Text>
               </Pressable>
@@ -2675,7 +3116,13 @@ export default function StudioScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.dropdownToolbarRow}
             keyboardShouldPersistTaps="handled">
-            {(['fonts', 'size', 'highlight', 'stickers', 'backgrounds'] as const).map((menu) => (
+            {(
+              [
+                { menu: 'fonts', iconKey: 'text', label: 'Text' },
+                { menu: 'stickers', iconKey: 'decor', label: 'Decor' },
+                { menu: 'backgrounds', iconKey: 'canvas', label: 'Canvas' },
+              ] as const
+            ).map(({ menu, iconKey, label }) => (
               <Pressable
                 key={menu}
                 onPress={(event) => {
@@ -2696,16 +3143,61 @@ export default function StudioScreen() {
                     : null,
                 ]}>
                 <View style={styles.dropdownToolbarButtonContent}>
-                  <Text style={styles.dropdownToolbarEmoji}>
-                    {toolbarMenuLabel[menu].emoji}
-                  </Text>
-                  <Text style={styles.dropdownToolbarButtonText}>
-                    {toolbarMenuLabel[menu].label}
-                  </Text>
+                  <Image
+                    source={TOOLBAR_ICON_SOURCE[iconKey]}
+                    resizeMode="contain"
+                    style={styles.toolbarIconImage}
+                  />
+                  <Text style={styles.dropdownToolbarButtonText}>{label}</Text>
                   <Text style={styles.dropdownToolbarChevron}>▼</Text>
                 </View>
               </Pressable>
             ))}
+
+              <TouchableOpacity
+                onPress={addNote}
+                style={[
+                  styles.noteButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
+                <View style={styles.dropdownToolbarButtonContent}>
+                  <Image
+                    source={TOOLBAR_ICON_SOURCE.note}
+                    resizeMode="contain"
+                    style={styles.toolbarIconImage}
+                  />
+                  <Text style={styles.noteButtonText}>Note</Text>
+                </View>
+              </TouchableOpacity>
+
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  toggleToolbarMenu('more');
+                }}
+                style={[
+                  styles.dropdownToolbarButton,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                  openToolbarMenu === 'more'
+                    ? [
+                        styles.dropdownToolbarButtonActive,
+                        {
+                          backgroundColor: colorTheme.selectionBackground,
+                          borderColor: colorTheme.border,
+                        },
+                      ]
+                    : null,
+                ]}>
+                <View style={styles.dropdownToolbarButtonContent}>
+                  <Image
+                    source={TOOLBAR_ICON_SOURCE.more}
+                    resizeMode="contain"
+                    style={styles.toolbarIconImage}
+                  />
+                  <Text style={styles.dropdownToolbarButtonText}>More</Text>
+                  <Text style={styles.dropdownToolbarChevron}>▼</Text>
+                </View>
+              </Pressable>
 
               <TouchableOpacity
                 onPress={undoLastEdit}
@@ -2721,57 +3213,6 @@ export default function StudioScreen() {
                 <Text style={styles.undoButtonText}>Undo</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={addNote}
-                style={[
-                  styles.noteButton,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                ]}>
-                <View style={styles.dropdownToolbarButtonContent}>
-                  <Text style={styles.dropdownToolbarEmoji}>📝</Text>
-                  <Text style={styles.noteButtonText}>Note</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={resetCurrentDesign}
-                style={[
-                  styles.resetButton,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={t('studioStartOver')}>
-                <Ionicons name="refresh-outline" size={19} color="#5B514D" />
-                <Text style={styles.resetButtonText}>{t('studioStartOver')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  void handleSaveImage();
-                }}
-                style={[
-                  styles.shareButton,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                  isSharingImage && styles.shareImageButtonDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={isSharingImage ? 'Saving image' : 'Save image'}>
-                <Ionicons name="download-outline" size={21} color="#333" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  void shareViaSMS();
-                }}
-                style={[
-                  styles.shareButton,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                  isSharingImage && styles.shareImageButtonDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={isSharingImage ? 'Sharing image' : 'Share image'}>
-                <Ionicons name="share-outline" size={22} color="#333" />
-              </TouchableOpacity>
           </ScrollView>
 
           {openToolbarMenu ? (
@@ -2785,115 +3226,116 @@ export default function StudioScreen() {
               ]}>
               {openToolbarMenu === 'fonts' ? (
                 <View style={styles.dropdownOptionList}>
-                  <Pressable
-                    onPress={() => {
-                      selectFont('Playwrite');
-                    }}
-                    style={[
-                      styles.dropdownOptionButton,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                      selectedFont === 'Playwrite'
-                        ? [
-                            styles.dropdownOptionButtonActive,
-                            {
-                              backgroundColor: colorTheme.selectionBackground,
-                              borderColor: colorTheme.border,
-                            },
-                          ]
-                        : null,
-                    ]}>
-                    <Text style={[styles.dropdownOptionText, styles.lovelyButtonText]}>
-                      Lovely
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      selectFont('bold');
-                    }}
-                    style={[
-                      styles.dropdownOptionButton,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                      selectedFont === 'bold'
-                        ? [
-                            styles.dropdownOptionButtonActive,
-                            {
-                              backgroundColor: colorTheme.selectionBackground,
-                              borderColor: colorTheme.border,
-                            },
-                          ]
-                        : null,
-                    ]}>
-                    <Text style={[styles.dropdownOptionText, styles.strongButtonText]}>
-                      Strong
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      selectFont('serif');
-                    }}
-                    style={[
-                      styles.dropdownOptionButton,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                      selectedFont === 'serif'
-                        ? [
-                            styles.dropdownOptionButtonActive,
-                            {
-                              backgroundColor: colorTheme.selectionBackground,
-                              borderColor: colorTheme.border,
-                            },
-                          ]
-                        : null,
-                    ]}>
-                    <Text style={[styles.dropdownOptionText, styles.classicButtonText]}>
-                      Classic
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-
-              {openToolbarMenu === 'size' ? (
-                <View style={styles.sizeDropdownRow}>
-                  <TouchableOpacity
-                    onPress={decreaseFontSize}
-                    style={[
-                      styles.sizeDropdownButton,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                    ]}>
-                    <Text style={styles.smallA}>A-</Text>
-                  </TouchableOpacity>
-
-                  <Text style={styles.sizeDropdownValue}>{fontSize}</Text>
-
-                  <TouchableOpacity
-                    onPress={increaseFontSize}
-                    style={[
-                      styles.sizeDropdownButton,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                    ]}>
-                    <Text style={styles.largeA}>A+</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              {openToolbarMenu === 'highlight' ? (
-                <View style={styles.highlightDropdownRow}>
-                  {HIGHLIGHT_COLORS.map(({ key, color }) => (
+                  <View style={styles.textMenuFontRow}>
                     <Pressable
-                      key={key}
                       onPress={() => {
-                        setSelectedHighlightColor(key);
-                        setOpenToolbarMenu(null);
+                        selectFont('Playwrite');
                       }}
                       style={[
-                        styles.highlightColorButton,
-                        { backgroundColor: color },
-                        selectedHighlightColor === key &&
-                          styles.highlightColorButtonSelected,
-                      ]}
-                    />
-                  ))}
+                        styles.dropdownOptionButton,
+                        styles.textMenuFontButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        selectedFont === 'Playwrite'
+                          ? [
+                              styles.dropdownOptionButtonActive,
+                              {
+                                backgroundColor: colorTheme.selectionBackground,
+                                borderColor: colorTheme.border,
+                              },
+                            ]
+                          : null,
+                      ]}>
+                      <Text style={[styles.dropdownOptionText, styles.lovelyButtonText]}>
+                        Lovely
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        selectFont('bold');
+                      }}
+                      style={[
+                        styles.dropdownOptionButton,
+                        styles.textMenuFontButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        selectedFont === 'bold'
+                          ? [
+                              styles.dropdownOptionButtonActive,
+                              {
+                                backgroundColor: colorTheme.selectionBackground,
+                                borderColor: colorTheme.border,
+                              },
+                            ]
+                          : null,
+                      ]}>
+                      <Text style={[styles.dropdownOptionText, styles.strongButtonText]}>
+                        Strong
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        selectFont('serif');
+                      }}
+                      style={[
+                        styles.dropdownOptionButton,
+                        styles.textMenuFontButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        selectedFont === 'serif'
+                          ? [
+                              styles.dropdownOptionButtonActive,
+                              {
+                                backgroundColor: colorTheme.selectionBackground,
+                                borderColor: colorTheme.border,
+                              },
+                            ]
+                          : null,
+                      ]}>
+                      <Text style={[styles.dropdownOptionText, styles.classicButtonText]}>
+                        Classic
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.sizeDropdownRow}>
+                    <TouchableOpacity
+                      onPress={decreaseFontSize}
+                      style={[
+                        styles.sizeDropdownButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                      ]}>
+                      <Text style={styles.smallA}>A-</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.sizeDropdownValue}>{fontSize}</Text>
+
+                    <TouchableOpacity
+                      onPress={increaseFontSize}
+                      style={[
+                        styles.sizeDropdownButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                      ]}>
+                      <Text style={styles.largeA}>A+</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.highlightDropdownRow}>
+                    {HIGHLIGHT_COLORS.map(({ key, color }) => (
+                      <Pressable
+                        key={key}
+                        onPress={() => {
+                          setSelectedHighlightColor(key);
+                          setOpenToolbarMenu(null);
+                        }}
+                        style={[
+                          styles.highlightColorButton,
+                          { backgroundColor: color },
+                          selectedHighlightColor === key &&
+                            styles.highlightColorButtonSelected,
+                        ]}
+                      />
+                    ))}
+                  </View>
                 </View>
               ) : null}
 
@@ -2998,6 +3440,54 @@ export default function StudioScreen() {
                   ))}
                 </ScrollView>
               ) : null}
+
+              {openToolbarMenu === 'more' ? (
+                <View style={styles.dropdownOptionList}>
+                  <View style={styles.moreActionsRow}>
+                    <TouchableOpacity
+                      onPress={resetCurrentDesign}
+                      style={[
+                        styles.moreActionButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('studioStartOver')}>
+                      <Ionicons name="refresh-outline" size={17} color="#5B514D" />
+                      <Text style={styles.moreActionButtonText}>{t('studioStartOver')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        void handleSaveImage();
+                      }}
+                      style={[
+                        styles.moreActionButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        isSharingImage ? styles.shareImageButtonDisabled : null,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={isSharingImage ? 'Saving image' : 'Save image'}>
+                      <Ionicons name="download-outline" size={17} color="#333" />
+                      <Text style={styles.moreActionButtonText}>Save image</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => {
+                        void shareViaSMS();
+                      }}
+                      style={[
+                        styles.moreActionButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                        isSharingImage ? styles.shareImageButtonDisabled : null,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={isSharingImage ? 'Sharing image' : 'Share image'}>
+                      <Ionicons name="share-outline" size={17} color="#333" />
+                      <Text style={styles.moreActionButtonText}>Share</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -3041,7 +3531,7 @@ export default function StudioScreen() {
                 }}
                 style={styles.captureCanvas}>
               <Pressable
-                onPress={clearStickerSelection}
+                onPress={clearCanvasSelection}
                 style={[
                   styles.captureStage,
                   { minHeight: contentStageMinHeight },
@@ -3144,11 +3634,17 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     backgroundColor: '#FFFDF9',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 4,
   },
   headerSection: {
-    marginTop: Platform.OS === 'web' ? 24 : 56,
-    marginBottom: 10,
+    marginTop: Platform.OS === 'web' ? 0 : 2,
+    marginBottom: 4,
+  },
+  headerSectionCompact: {
+    marginTop: 0,
+    marginBottom: 6,
   },
   title: {
     fontSize: 19,
@@ -3173,16 +3669,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  backButton: {
-    paddingLeft: 0,
-    paddingRight: 6,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -4,
-  },
   shareImageButtonDisabled: {
     opacity: 0.65,
+  },
+  moreActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  moreActionButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  moreActionButtonText: {
+    color: '#1F1F1F',
+    fontSize: 13,
+    fontWeight: '600',
   },
   verse: {
     lineHeight: 28,
@@ -3431,16 +3940,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   dropdownToolbarButton: {
-    minWidth: 88,
-    minHeight: 44,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+    minWidth: 64,
+    minHeight: 50,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     borderRadius: 18,
     borderCurve: 'continuous',
     backgroundColor: '#F3EDE8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
     shadowColor: '#000000',
     shadowOpacity: 0.05,
     shadowRadius: 2.5,
@@ -3467,6 +3976,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginRight: 6,
   },
+  toolbarIconImage: {
+    width: 34,
+    height: 34,
+    marginRight: 2,
+    transform: [{ translateY: -3 }],
+  },
   dropdownToolbarButtonText: {
     color: '#1F1F1F',
     fontSize: 15,
@@ -3478,7 +3993,7 @@ const styles = StyleSheet.create({
     color: '#1F1F1F',
     fontSize: 13,
     lineHeight: 20,
-    marginLeft: 6,
+    marginLeft: 2,
   },
   dropdownPanel: {
     marginTop: 10,
@@ -3495,6 +4010,13 @@ const styles = StyleSheet.create({
   },
   dropdownOptionList: {
     gap: 8,
+  },
+  textMenuFontRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  textMenuFontButton: {
+    flex: 1,
   },
   dropdownOptionButton: {
     height: 42,
@@ -3643,15 +4165,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   noteButton: {
-    minHeight: 44,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+    minHeight: 50,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     borderRadius: 18,
     borderCurve: 'continuous',
     backgroundColor: '#F3EDE8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
     shadowColor: '#000000',
     shadowOpacity: 0.05,
     shadowRadius: 2.5,
@@ -3666,9 +4188,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   undoButton: {
-    minHeight: 44,
+    minHeight: 50,
     paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingVertical: 6,
     borderRadius: 18,
     borderCurve: 'continuous',
     backgroundColor: '#F3EDE8',
