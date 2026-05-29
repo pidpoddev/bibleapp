@@ -250,13 +250,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 18 : 52,
+    paddingTop: Platform.OS === 'web' ? 20 : 68,
   },
   heroCard: {
     borderRadius: 22,
     borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 11,
     marginBottom: 12,
   },
   title: {
@@ -276,10 +276,10 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    marginTop: 6,
+    marginTop: 2,
     lineHeight: 21,
     color: '#6E645E',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   listContent: {
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
