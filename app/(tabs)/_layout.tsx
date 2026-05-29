@@ -1,12 +1,14 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAppSettings } from '@/utils/app-settings';
+
+const FAVORITES_TAB_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -83,19 +85,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="studio"
-        options={{
-          title: t('tabStudio'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              size={22}
-              name={focused ? 'color-wand' : 'color-wand-outline'}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="journal"
         options={{
           title: t('tabJournal'),
@@ -112,30 +101,27 @@ export default function TabLayout() {
         name="favorites"
         options={{
           title: t('tabFavorites'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              size={22}
-              name={focused ? 'heart' : 'heart-outline'}
-              color={color}
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={FAVORITES_TAB_ICON}
+              style={{
+                width: 22,
+                height: 22,
+                opacity: focused ? 1 : 0.72,
+              }}
+              resizeMode="contain"
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="studio"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
         name="shop"
-        options={{
-          title: t('tabShop'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              size={21}
-              name={focused ? 'cart' : 'cart-outline'}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="verse-designs"
         options={{
           href: null,
         }}
