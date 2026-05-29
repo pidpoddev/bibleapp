@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
@@ -109,6 +111,7 @@ export default function BibleStudyJournalScreen() {
   const [chapter, setChapter] = useState('');
   const [verse, setVerse] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'book' | 'chapter' | 'verse' | null>(null);
+  const canvasRef = useRef<View>(null);
   const [sections, setSections] = useState<BibleStudySection[]>(defaultSections);
   const [stickers, setStickers] = useState<DecorSticker[]>([]);
   const [background, setBackground] = useState<string>('lined');
@@ -241,6 +244,22 @@ export default function BibleStudyJournalScreen() {
     void saveEntry(book, chapter, verse, defaultSections, [], 'lined', '#FFF3A3');
   };
 
+  const saveJournalImage = async () => {
+    if (!canvasRef.current) return;
+    const permission = await MediaLibrary.requestPermissionsAsync();
+    if (!permission.granted) return;
+    const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
+    await MediaLibrary.createAssetAsync(uri);
+    setOpenDecor(null);
+  };
+
+  const shareJournalImage = async () => {
+    if (!canvasRef.current) return;
+    const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
+    await Share.share({ url: uri });
+    setOpenDecor(null);
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); setOpenDecor(null); }} showsVerticalScrollIndicator={false}>
@@ -291,7 +310,7 @@ export default function BibleStudyJournalScreen() {
           <View style={styles.decorPanel}>
             <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
             <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
-            {TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).slice(0, 6).map((bg) => (
+            {TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).map((bg) => (
               <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}>
                 <Image source={bg.image} style={styles.bgPreview} />
               </TouchableOpacity>
@@ -302,7 +321,7 @@ export default function BibleStudyJournalScreen() {
         {openDecor === 'sticker' ? (
           <View style={styles.decorPanel}>
             {STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => addEmojiSticker(emoji)}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}
-            {TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).slice(0, 8).map((sticker) => (
+            {TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).map((sticker) => (
               <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => addShopSticker(sticker.key)}>
                 <Image source={sticker.image} style={styles.stickerPreview} />
               </TouchableOpacity>
@@ -319,6 +338,12 @@ export default function BibleStudyJournalScreen() {
         ) : null}
         {openDecor === 'more' ? (
           <View style={styles.decorPanel}>
+            <TouchableOpacity style={styles.simpleChip} onPress={() => void saveJournalImage()}>
+              <Text>Save image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.simpleChip} onPress={() => void shareJournalImage()}>
+              <Text>Share</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.simpleChip} onPress={resetJournal}>
               <Text>Start over</Text>
             </TouchableOpacity>
@@ -349,6 +374,7 @@ export default function BibleStudyJournalScreen() {
           </View>
         </View>
 
+        <View ref={canvasRef} collapsable={false}>
         <ImageBackground source={selectedBg ? selectedBg.image : require('../assets/images/lined-paper.png')} resizeMode={selectedBg ? 'cover' : 'stretch'} style={[styles.canvasWrap, background === 'plain' ? { backgroundColor: colorTheme.paperBackground } : null]}>
           {stickers.length ? (
             <View style={styles.stickerRow}>{stickers.map((sticker) => (
@@ -373,6 +399,7 @@ export default function BibleStudyJournalScreen() {
             <BibleStudySectionField key={section.id} label={section.label} value={section.text} onChangeText={(text) => updateSection(section.id, text)} cardBackground={colorTheme.cardBackground} accentColor={highlightColor} />
           ))}
         </ImageBackground>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

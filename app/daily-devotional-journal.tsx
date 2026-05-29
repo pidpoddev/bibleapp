@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
@@ -59,6 +61,7 @@ export default function DailyDevotionalJournalScreen() {
   const [chapter, setChapter] = useState('');
   const [verse, setVerse] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'book' | 'chapter' | 'verse' | null>(null);
+  const canvasRef = useRef<View>(null);
   const [sections, setSections] = useState<DailyDevotionalSection[]>(defaultSections);
   const [stickers, setStickers] = useState<DecorSticker[]>([]);
   const [background, setBackground] = useState<string>('lined');
@@ -137,6 +140,20 @@ export default function DailyDevotionalJournalScreen() {
     setOpenDecor(null);
     void saveEntry(book, chapter, verse, defaultSections, [], 'lined', '#FFF3A3');
   };
+  const saveJournalImage = async () => {
+    if (!canvasRef.current) return;
+    const permission = await MediaLibrary.requestPermissionsAsync();
+    if (!permission.granted) return;
+    const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
+    await MediaLibrary.createAssetAsync(uri);
+    setOpenDecor(null);
+  };
+  const shareJournalImage = async () => {
+    if (!canvasRef.current) return;
+    const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
+    await Share.share({ url: uri });
+    setOpenDecor(null);
+  };
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
@@ -167,18 +184,18 @@ export default function DailyDevotionalJournalScreen() {
             <Text style={styles.decorButtonText}>More</Text>
           </TouchableOpacity>
         </ScrollView>
-        {openDecor === 'bg' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>{TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).slice(0, 6).map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View> : null}
-        {openDecor === 'sticker' ? <View style={styles.decorPanel}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}{TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).slice(0, 8).map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View> : null}
+        {openDecor === 'bg' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>{TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View> : null}
+        {openDecor === 'sticker' ? <View style={styles.decorPanel}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}{TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View> : null}
         {openDecor === 'highlight' ? <View style={styles.decorPanel}>{HIGHLIGHTER_COLORS.map((color) => <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />)}</View> : null}
-        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={resetJournal}><Text>Start over</Text></TouchableOpacity></View> : null}
+        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={() => void saveJournalImage()}><Text>Save image</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => void shareJournalImage()}><Text>Share</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={resetJournal}><Text>Start over</Text></TouchableOpacity></View> : null}
 
         <View style={styles.referenceRow}><View style={[styles.referenceDropdownContainer, styles.bookCard]}><Pressable onPress={() => setOpenDropdown((current) => (current === 'book' ? null : 'book'))} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }]}><Text numberOfLines={1} style={styles.referenceLabel}>Book</Text><View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{book || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View></Pressable>{openDropdown === 'book' ? <View style={[styles.dropdownMenu, styles.bookDropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{bookOptions.map((bookOption) => <Pressable key={bookOption} onPress={() => { setBook(bookOption); setChapter(''); setVerse(''); setOpenDropdown(null); void saveEntry(bookOption, '', '', sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{bookOption}</Text></Pressable>)}</ScrollView></View> : null}</View><View style={styles.referenceDropdownContainer}><Pressable onPress={() => { if (!book) return; setOpenDropdown((current) => (current === 'chapter' ? null : 'chapter')); }} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }, !book ? styles.referenceCardDisabled : null]}><Text numberOfLines={1} style={styles.referenceLabel}>Chapter</Text><View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{chapter || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View></Pressable>{openDropdown === 'chapter' ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{chapterOptions.map((chapterOption) => <Pressable key={chapterOption} onPress={() => { setChapter(chapterOption); setVerse(''); setOpenDropdown(null); void saveEntry(book, chapterOption, '', sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{chapterOption}</Text></Pressable>)}</ScrollView></View> : null}</View><View style={styles.referenceDropdownContainer}><Pressable onPress={() => { if (!book || !chapter) return; setOpenDropdown((current) => (current === 'verse' ? null : 'verse')); }} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }, !book || !chapter ? styles.referenceCardDisabled : null]}><Text numberOfLines={1} style={styles.referenceLabel}>Verse</Text><View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{verse || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View></Pressable>{openDropdown === 'verse' ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{verseOptions.map((verseOption) => <Pressable key={verseOption} onPress={() => { setVerse(verseOption); setOpenDropdown(null); void saveEntry(book, chapter, verseOption, sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{verseOption}</Text></Pressable>)}</ScrollView></View> : null}</View></View>
 
-        <ImageBackground source={selectedBg ? selectedBg.image : require('../assets/images/lined-paper.png')} resizeMode={selectedBg ? 'cover' : 'stretch'} style={[styles.canvasWrap, background === 'plain' ? { backgroundColor: colorTheme.paperBackground } : null]}>
+        <View ref={canvasRef} collapsable={false}><ImageBackground source={selectedBg ? selectedBg.image : require('../assets/images/lined-paper.png')} resizeMode={selectedBg ? 'cover' : 'stretch'} style={[styles.canvasWrap, background === 'plain' ? { backgroundColor: colorTheme.paperBackground } : null]}>
           {stickers.length ? <View style={styles.stickerRow}>{stickers.map((sticker) => <Pressable key={sticker.id} onPress={() => { const next = stickers.filter((item) => item.id !== sticker.id); setStickers(next); void saveEntry(book, chapter, verse, sections, next); }} style={styles.stickerItem}>{sticker.imageKey && getShopSticker(sticker.imageKey) ? <Image source={getShopSticker(sticker.imageKey)!.image} style={styles.inlineStickerImage} resizeMode="contain" /> : <Text style={styles.inlineStickerEmoji}>{sticker.emoji}</Text>}</Pressable>)}</View> : null}
           {book && chapter && verse && verseText ? <View style={[styles.verseCard, { backgroundColor: colorTheme.paperBackground }]}><Text style={styles.verseReference}>{`${book} ${chapter}:${verse}`}</Text><Text style={styles.verseText}>{verseText}</Text></View> : null}
           {sections.map((section) => <Field key={section.id} label={section.label} value={section.text} onChangeText={(text) => updateSection(section.id, text)} cardBackground={colorTheme.cardBackground} accentColor={highlightColor} />)}
-        </ImageBackground>
+        </ImageBackground></View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

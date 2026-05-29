@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -718,6 +719,21 @@ export default function PrayerJournalScreen() {
     }
   };
 
+  const saveJournalImage = async () => {
+    if (!canvasRef.current) {
+      return;
+    }
+    const permission = await MediaLibrary.requestPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+    const imageUri = await captureRef(canvasRef, {
+      format: 'png',
+      quality: 1,
+    });
+    await MediaLibrary.createAssetAsync(imageUri);
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1032,6 +1048,9 @@ export default function PrayerJournalScreen() {
             ]}>
             <Text style={styles.trayTitle}>More</Text>
             <View style={styles.backgroundOptionRow}>
+              <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Text style={styles.backgroundChipText}>Save image</Text>
+              </TouchableOpacity>
               <TouchableOpacity activeOpacity={0.85} onPress={toggleFavorite} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
                 <Text style={styles.backgroundChipText}>{isFavorite ? 'Unsave' : 'Save'}</Text>
               </TouchableOpacity>
