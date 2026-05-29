@@ -250,7 +250,11 @@ export default function BibleStudyJournalScreen() {
           <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
         </TouchableOpacity>
 
-        <View style={styles.decorToolbar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.decorToolbar}
+          keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             style={[styles.decorButton, openDecor === 'highlight' ? styles.decorButtonActive : null]}
             onPress={() => setOpenDecor((current) => current === 'highlight' ? null : 'highlight')}>
@@ -281,7 +285,7 @@ export default function BibleStudyJournalScreen() {
             <Image source={JOURNAL_TOOLBAR_ICONS.more} style={styles.decorButtonIcon} resizeMode="contain" />
             <Text style={styles.decorButtonText}>More</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
 
         {openDecor === 'bg' ? (
           <View style={styles.decorPanel}>

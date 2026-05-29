@@ -145,7 +145,7 @@ export default function DailyDevotionalJournalScreen() {
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
 
-        <View style={styles.decorToolbar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.decorToolbar} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={[styles.decorButton, openDecor === 'highlight' ? styles.decorButtonActive : null]} onPress={() => setOpenDecor((c) => c === 'highlight' ? null : 'highlight')}>
             <Image source={JOURNAL_TOOLBAR_ICONS.text} style={styles.decorButtonIcon} resizeMode="contain" />
             <Text style={styles.decorButtonText}>Text</Text>
@@ -166,7 +166,7 @@ export default function DailyDevotionalJournalScreen() {
             <Image source={JOURNAL_TOOLBAR_ICONS.more} style={styles.decorButtonIcon} resizeMode="contain" />
             <Text style={styles.decorButtonText}>More</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
         {openDecor === 'bg' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>{TEST_UNLOCKED_BACKGROUND_PACKS.flatMap((pack) => pack.backgrounds).slice(0, 6).map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View> : null}
         {openDecor === 'sticker' ? <View style={styles.decorPanel}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}{TEST_UNLOCKED_STICKER_PACKS.flatMap((pack) => pack.stickers).slice(0, 8).map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View> : null}
         {openDecor === 'highlight' ? <View style={styles.decorPanel}>{HIGHLIGHTER_COLORS.map((color) => <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />)}</View> : null}

@@ -1045,7 +1045,11 @@ export default function PrayerJournalScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.toolbar, { backgroundColor: colorTheme.toolbarBackground }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.toolbar, { backgroundColor: colorTheme.toolbarBackground }]}
+          keyboardShouldPersistTaps="handled">
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() =>
@@ -1131,7 +1135,7 @@ export default function PrayerJournalScreen() {
             <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
             <Text style={styles.toolbarLabel}>More</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   );
@@ -1423,7 +1427,9 @@ const styles = StyleSheet.create({
     right: 20,
     bottom: 24,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
     paddingVertical: 14,
     borderRadius: 30,
     backgroundColor: '#F6F1EB',
