@@ -88,7 +88,7 @@ export default function JournalScreen() {
         <View style={[styles.heroCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
           <View style={styles.heroTitleRow}>
             <Image source={JOURNAL_HEADER_ICON} style={styles.heroIcon} resizeMode="contain" />
-            <Text style={styles.title}>{t('journalTitle')}</Text>
+            <Text style={styles.title}>{t('tabJournal')}</Text>
           </View>
           <Text style={styles.subtitle}>
             Choose your page style and start writing.
@@ -140,8 +140,8 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 14,
+    paddingVertical: 11,
+    marginBottom: 12,
   },
   heroTitleRow: {
     flexDirection: 'row',
@@ -153,16 +153,17 @@ const styles = StyleSheet.create({
     height: 28,
   },
   title: {
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: '700',
     color: '#1F1F1F',
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: 2,
     fontSize: 14,
     lineHeight: 21,
     color: '#6E645E',
+    marginBottom: 4,
   },
   cardStack: {
     gap: 10,
