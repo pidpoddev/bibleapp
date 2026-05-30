@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import {
+  Image,
   Keyboard,
   Platform,
   ScrollView,
@@ -38,48 +39,7 @@ const books = bible as BibleBook[];
 
 const BOOK_ROW_HEIGHT = 66;
 const SECTION_HEADER_HEIGHT = 36;
-const START_HERE_ITEMS = [
-  {
-    titleKey: 'startHereAnxiousTitle',
-    subtitleKey: 'startHereAnxiousSubtitle',
-    icon: 'leaf-outline',
-    book: 'Philippians',
-    chapter: 4,
-    verse: 6,
-  },
-  {
-    titleKey: 'startHereFriendTitle',
-    subtitleKey: 'startHereFriendSubtitle',
-    icon: 'heart-outline',
-    book: 'Ephesians',
-    chapter: 4,
-    verse: 32,
-  },
-  {
-    titleKey: 'startHereCourageTitle',
-    subtitleKey: 'startHereCourageSubtitle',
-    icon: 'sparkles-outline',
-    book: 'Joshua',
-    chapter: 1,
-    verse: 9,
-  },
-  {
-    titleKey: 'startHereLovedTitle',
-    subtitleKey: 'startHereLovedSubtitle',
-    icon: 'flower-outline',
-    book: 'Romans',
-    chapter: 8,
-    verse: 39,
-  },
-  {
-    titleKey: 'startHereChurchTitle',
-    subtitleKey: 'startHereChurchSubtitle',
-    icon: 'book-outline',
-    book: 'James',
-    chapter: 1,
-    verse: 22,
-  },
-] as const;
+const BIBLE_HEADER_ICON = require('../assets/images/toolbar-icons/bible-tab.png');
 
 function normalizeBookName(value: string) {
   return value.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
@@ -286,7 +246,10 @@ export default function BibleBooksScreen() {
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <View style={styles.headerRow}>
         <View style={styles.headerTextBlock}>
-          <Text style={styles.title}>{t('bibleTitle')}</Text>
+          <View style={styles.titleRow}>
+            <Image source={BIBLE_HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
+            <Text style={styles.title}>{t('tabBible')}</Text>
+          </View>
           <Text style={styles.subtitle}>{t('bibleSubtitle')}</Text>
         </View>
 
@@ -343,50 +306,6 @@ export default function BibleBooksScreen() {
         sections={sections}
         keyExtractor={(item) => item.book}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View style={styles.startHereSection}>
-            <View style={styles.startHereHeader}>
-              <Text style={styles.startHereTitle}>{t('startHereTitle')}</Text>
-              <Text style={styles.startHereSubtitle}>{t('startHereSubtitle')}</Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.startHereList}>
-              {START_HERE_ITEMS.map((item) => (
-                <TouchableOpacity
-                  key={`${item.book}-${item.chapter}-${item.verse}`}
-                  activeOpacity={0.88}
-                  onPress={() => navigateToVerse(item.book, item.chapter, item.verse)}
-                  style={[
-                    styles.startHereCard,
-                    {
-                      backgroundColor: colorTheme.cardBackground,
-                      borderColor: colorTheme.border,
-                    },
-                  ]}>
-                  <View
-                    style={[
-                      styles.startHereIcon,
-                      { backgroundColor: colorTheme.toolbarBackground },
-                    ]}>
-                    <Ionicons name={item.icon} size={18} color="#7A6F66" />
-                  </View>
-                  <Text style={styles.startHereCardTitle}>
-                    {t(item.titleKey)}
-                  </Text>
-                  <Text style={styles.startHereCardSubtitle}>
-                    {t(item.subtitleKey)}
-                  </Text>
-                  <Text style={styles.startHereReference}>
-                    {item.book} {item.chapter}:{item.verse}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        }
         onScrollToIndexFailed={(info) => {
           const pendingTarget = pendingScrollTargetRef.current;
 
@@ -555,10 +474,20 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'web' ? 24 : 60,
   },
   title: {
-    fontSize: 30,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700',
     color: '#1F1F1F',
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  titleIcon: {
+    width: 28,
+    height: 28,
   },
   subtitle: {
     fontSize: 14,
@@ -631,70 +560,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'web' ? 96 : 220,
-  },
-  startHereSection: {
-    marginBottom: 6,
-  },
-  startHereHeader: {
-    marginBottom: 12,
-  },
-  startHereTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F1F1F',
-    marginBottom: 2,
-  },
-  startHereSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#7A6F66',
-  },
-  startHereList: {
-    gap: 10,
-    paddingRight: 4,
-    paddingBottom: 12,
-  },
-  startHereCard: {
-    width: 154,
-    minHeight: 156,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E8DCD4',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  startHereIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3EDE8',
-    marginBottom: 12,
-  },
-  startHereCardTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '700',
-    color: '#1F1F1F',
-    marginBottom: 4,
-  },
-  startHereCardSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#7A6F66',
-    marginBottom: 10,
-  },
-  startHereReference: {
-    marginTop: 'auto',
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8D7C70',
   },
   sectionTitle: {
     fontSize: 14,
