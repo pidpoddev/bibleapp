@@ -109,7 +109,11 @@ export default function JournalScreen() {
                 styles.templateCard,
                 { backgroundColor: template.soft, borderColor: colorTheme.border },
               ]}>
-              <View style={[styles.iconShell, { backgroundColor: '#FFFFFF' }]}>
+              <View
+                style={[
+                  styles.iconShell,
+                  template.iconImage ? styles.iconShellTransparent : { backgroundColor: '#FFFFFF' },
+                ]}>
                 {template.iconImage ? (
                   <Image source={template.iconImage} resizeMode="contain" style={styles.templateImageIcon} />
                 ) : (
@@ -197,12 +201,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  iconShellTransparent: {
+    backgroundColor: 'transparent',
+  },
   templateEmoji: {
     fontSize: 24,
   },
   templateImageIcon: {
-    width: 30,
-    height: 30,
+    width: 60,
+    height: 60,
   },
   templateContent: {
     flex: 1,
