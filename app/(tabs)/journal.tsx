@@ -16,6 +16,7 @@ type JournalTemplate = {
 
 const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
 const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
+const CHURCH_DAY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-church-day.png');
 const JOURNAL_HEADER_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function JournalScreen() {
@@ -46,6 +47,7 @@ export default function JournalScreen() {
     {
       key: 'church-day',
       emoji: '⛪',
+      iconImage: CHURCH_DAY_JOURNAL_ICON,
       title: t('churchDay'),
       subtitle: 'Save sermon notes, key verses, and reflections.',
       icon: 'sparkles-outline',
