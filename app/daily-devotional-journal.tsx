@@ -27,11 +27,11 @@ const JOURNAL_TOOLBAR_ICONS = {
   more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
 const defaultSections: DailyDevotionalSection[] = [
-  { id: '1', label: '💭 Reflections', text: '' },
-  { id: '2', label: '➡️ Application to my life', text: '' },
-  { id: '3', label: '❓ Questions', text: '' },
-  { id: '4', label: '📖 Key verses', text: '' },
-  { id: '5', label: '🙏 Prayer of the day', text: '' },
+  { id: '1', label: 'Reflections', text: '' },
+  { id: '2', label: 'Application to my life', text: '' },
+  { id: '3', label: 'Questions', text: '' },
+  { id: '4', label: 'Key verses', text: '' },
+  { id: '5', label: 'Prayer of the day', text: '' },
 ];
 
 const Field = memo(function Field({ label, value, onChangeText, cardBackground, accentColor }: { label: string; value: string; onChangeText: (text: string) => void; cardBackground: string; accentColor: string; }) {
@@ -122,12 +122,12 @@ export default function DailyDevotionalJournalScreen() {
     setIsFavorite(nextValue);
     const id = currentId || generateId();
     const entry: DailyDevotionalEntry = { id, type: 'daily-devotional', date: entryDate, book, chapter, verse, sections, stickers, background, highlightColor, preview: buildPreview(book, chapter, verse, sections), isFavorite: nextValue, updatedAt: Date.now() };
-    await AsyncStorage.setItem(`journal_daily_devotional_`, JSON.stringify(entry));
+    await AsyncStorage.setItem(`journal_daily_devotional_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
   };
 
   const addNoteSection = () => {
-    const next = [...sections, { id: generateId(), label: '📝 Note', text: '' }];
+    const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
@@ -158,7 +158,7 @@ export default function DailyDevotionalJournalScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{`🌅 ${t('dailyDevotional')}`}</Text>
+        <Text style={styles.title}>{t('dailyDevotional')}</Text>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
 

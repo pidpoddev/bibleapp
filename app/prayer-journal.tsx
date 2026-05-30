@@ -126,11 +126,11 @@ const MAX_STICKER_SCALE = 2.2;
 const MIN_INPUT_HEIGHT = 72;
 
 const defaultSections: PrayerSection[] = [
-  { id: '1', label: '🙏 What I’m praying for:', text: '' },
-  { id: '2', label: '💖 What I’m thankful for:', text: '' },
-  { id: '3', label: '✨ What’s on my heart:', text: '' },
-  { id: '4', label: '🕊 Give me peace about:', text: '' },
-  { id: '5', label: '🙌 Answered prayers:', text: '' },
+  { id: '1', label: 'What I’m praying for:', text: '' },
+  { id: '2', label: 'What I’m thankful for:', text: '' },
+  { id: '3', label: 'What’s on my heart:', text: '' },
+  { id: '4', label: 'Give me peace about:', text: '' },
+  { id: '5', label: 'Answered prayers:', text: '' },
 ];
 
 type PrayerSectionFieldProps = {
@@ -569,7 +569,7 @@ export default function PrayerJournalScreen() {
   const addNoteSection = () => {
     const updatedSections = [
       ...sections,
-      { id: generateId(), label: '📝 Note', text: '' },
+      { id: generateId(), label: 'Note', text: '' },
     ];
     setSections(updatedSections);
     saveEntry(updatedSections, stickers, background);

@@ -27,9 +27,9 @@ const JOURNAL_TOOLBAR_ICONS = {
   more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
 const defaultSections: ChurchDaySection[] = [
-  { id: '1', label: '🧠 Key message(s)', text: '' },
-  { id: '2', label: '💗 How this spoke to me', text: '' },
-  { id: '3', label: '🙏 Prayer for this week', text: '' },
+  { id: '1', label: 'Key message(s)', text: '' },
+  { id: '2', label: 'How this spoke to me', text: '' },
+  { id: '3', label: 'Prayer for this week', text: '' },
 ];
 
 const Field = memo(function Field({ label, value, onChangeText, cardBackground, accentColor }: { label: string; value: string; onChangeText: (text: string) => void; cardBackground: string; accentColor: string; }) {
@@ -120,12 +120,12 @@ export default function ChurchDayJournalScreen() {
     setIsFavorite(nextValue);
     const id = currentId || generateId();
     const entry: ChurchDayEntry = { id, type: 'church-day', date: entryDate, book, chapter, verse, sections, stickers, background, highlightColor, preview: buildPreview(book, chapter, verse, sections), isFavorite: nextValue, updatedAt: Date.now() };
-    await AsyncStorage.setItem(`journal_church_day_`, JSON.stringify(entry));
+    await AsyncStorage.setItem(`journal_church_day_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
   };
 
   const addNoteSection = () => {
-    const next = [...sections, { id: generateId(), label: '📝 Note', text: '' }];
+    const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
@@ -156,7 +156,7 @@ export default function ChurchDayJournalScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{`⛪ ${t('churchDay')}`}</Text>
+        <Text style={styles.title}>{t('churchDay')}</Text>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
 

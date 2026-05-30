@@ -42,11 +42,11 @@ const JOURNAL_TOOLBAR_ICONS = {
 } as const;
 
 const defaultSections: BibleStudySection[] = [
-  { id: '1', label: '💡 What stands out:', text: '' },
-  { id: '2', label: '✨ What it means:', text: '' },
-  { id: '3', label: '➡️ How I can apply it:', text: '' },
-  { id: '4', label: '🙏 Prayer response:', text: '' },
-  { id: '5', label: '🗒️ Notes:', text: '' },
+  { id: '1', label: 'What stands out:', text: '' },
+  { id: '2', label: 'What it means:', text: '' },
+  { id: '3', label: 'How I can apply it:', text: '' },
+  { id: '4', label: 'Prayer response:', text: '' },
+  { id: '5', label: 'Notes:', text: '' },
 ];
 
 const BibleStudySectionField = memo(function BibleStudySectionField({
@@ -230,7 +230,7 @@ export default function BibleStudyJournalScreen() {
   };
 
   const addNoteSection = () => {
-    const next = [...sections, { id: generateId(), label: '📝 Note', text: '' }];
+    const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
@@ -263,7 +263,7 @@ export default function BibleStudyJournalScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>📖 Bible Study</Text>
+        <Text style={styles.title}>Bible Study</Text>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}>
           <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
