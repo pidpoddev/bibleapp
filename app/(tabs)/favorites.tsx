@@ -12,6 +12,7 @@ const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-p
 const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
 const CHURCH_DAY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-church-day.png');
 const DAILY_DEVOTIONAL_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-daily-devotional.png');
+const STUDIO_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-studio.png');
 
 type JournalFavorite = {
   id: string;
@@ -70,7 +71,7 @@ function getTypeBadge(type: UnifiedFavorite['type']) {
     case 'daily-devotional':
       return { emoji: '🌅', iconImage: DAILY_DEVOTIONAL_JOURNAL_ICON, icon: 'sunny-outline' as const, tint: '#9B7A59', soft: '#FFF4E8' };
     case 'journal-studio':
-      return { emoji: '🎨', icon: 'color-wand-outline' as const, tint: '#8A669C', soft: '#F6EEFB' };
+      return { emoji: '🎨', iconImage: STUDIO_JOURNAL_ICON, icon: 'color-wand-outline' as const, tint: '#8A669C', soft: '#F6EEFB' };
     default:
       return { emoji: '⭐️', icon: 'bookmark-outline' as const, tint: '#7A6F66', soft: '#F8F5F2' };
   }

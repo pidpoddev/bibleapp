@@ -18,6 +18,7 @@ const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-p
 const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
 const CHURCH_DAY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-church-day.png');
 const DAILY_DEVOTIONAL_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-daily-devotional.png');
+const STUDIO_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-studio.png');
 const JOURNAL_HEADER_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function JournalScreen() {
@@ -68,6 +69,7 @@ export default function JournalScreen() {
     {
       key: 'journal-studio',
       emoji: '🎨',
+      iconImage: STUDIO_JOURNAL_ICON,
       title: t('tabStudio'),
       subtitle: 'Open creative page with verse cards and stickers.',
       icon: 'color-wand-outline',
