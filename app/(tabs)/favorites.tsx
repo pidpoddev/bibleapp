@@ -220,7 +220,11 @@ export default function FavoritesScreen() {
                 onPress={() => openFavorite(item)}
                 style={[styles.card, { backgroundColor: badge.soft, borderColor: colorTheme.border }]}>
                 <View style={styles.cardTopRow}>
-                  <View style={styles.cardBadgeShell}>
+                  <View
+                    style={[
+                      styles.cardBadgeShell,
+                      badge.iconImage ? styles.cardBadgeShellTransparent : null,
+                    ]}>
                     {badge.iconImage ? (
                       <Image source={badge.iconImage} resizeMode="contain" style={styles.cardImageIcon} />
                     ) : (
@@ -337,6 +341,9 @@ const styles = StyleSheet.create({
   },
   cardEmoji: {
     fontSize: 20,
+  },
+  cardBadgeShellTransparent: {
+    backgroundColor: 'transparent',
   },
   cardImageIcon: {
     width: 30,
