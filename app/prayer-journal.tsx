@@ -121,6 +121,7 @@ const JOURNAL_TOOLBAR_ICONS = {
   note: require('../assets/images/toolbar-icons/notes-tight.png'),
   more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
+const HEADER_ICON = require('../assets/images/toolbar-icons/journal-prayer.png');
 const MIN_STICKER_SCALE = 0.35;
 const MAX_STICKER_SCALE = 2.2;
 const MIN_INPUT_HEIGHT = 72;
@@ -746,14 +747,17 @@ export default function PrayerJournalScreen() {
             setSelectedStickerId(null);
           }}
           showsVerticalScrollIndicator={false}>
-          <Text
-            adjustsFontSizeToFit
-            maxFontSizeMultiplier={1.1}
-            minimumFontScale={0.7}
-            numberOfLines={1}
-            style={styles.title}>
-            {t('prayerJournalTitle')}
-          </Text>
+          <View style={styles.titleRow}>
+            <Image source={HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
+            <Text
+              adjustsFontSizeToFit
+              maxFontSizeMultiplier={1.1}
+              minimumFontScale={0.7}
+              numberOfLines={1}
+              style={styles.title}>
+              {t('prayerJournalTitle')}
+            </Text>
+          </View>
           <Text style={styles.date}>{entryDate}</Text>
 
           <View ref={canvasRef} collapsable={false} style={styles.captureFrame}>
@@ -1170,6 +1174,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'web' ? 28 : 52,
     paddingBottom: Platform.OS === 'web' ? 80 : 170,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  titleIcon: {
+    width: 30,
+    height: 30,
   },
   title: {
     fontSize: 18,

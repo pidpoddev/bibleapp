@@ -40,6 +40,7 @@ const JOURNAL_TOOLBAR_ICONS = {
   note: require('../assets/images/toolbar-icons/notes-tight.png'),
   more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
+const HEADER_ICON = require('../assets/images/toolbar-icons/journal-bible-study.png');
 
 const defaultSections: BibleStudySection[] = [
   { id: '1', label: 'What stands out:', text: '' },
@@ -263,7 +264,10 @@ export default function BibleStudyJournalScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Bible Study</Text>
+        <View style={styles.titleRow}>
+          <Image source={HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
+          <Text style={styles.title}>Bible Study</Text>
+        </View>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}>
           <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
@@ -428,6 +432,8 @@ export default function BibleStudyJournalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F4F2' },
   content: { paddingHorizontal: 16, paddingTop: Platform.OS === 'web' ? 20 : 28, paddingBottom: Platform.OS === 'web' ? 48 : 120 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  titleIcon: { width: 32, height: 32 },
   title: { fontSize: 22, fontWeight: '600', color: '#1F1F1F' },
   date: { fontSize: 14, color: '#888888', marginTop: 8, marginBottom: 12 },
   favoriteButton: {

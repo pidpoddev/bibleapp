@@ -26,6 +26,7 @@ const JOURNAL_TOOLBAR_ICONS = {
   note: require('../assets/images/toolbar-icons/notes-tight.png'),
   more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
+const HEADER_ICON = require('../assets/images/toolbar-icons/journal-daily-devotional.png');
 const defaultSections: DailyDevotionalSection[] = [
   { id: '1', label: 'Reflections', text: '' },
   { id: '2', label: 'Application to my life', text: '' },
@@ -158,7 +159,10 @@ export default function DailyDevotionalJournalScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{t('dailyDevotional')}</Text>
+        <View style={styles.titleRow}>
+          <Image source={HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
+          <Text style={styles.title}>{t('dailyDevotional')}</Text>
+        </View>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
 
@@ -204,6 +208,8 @@ export default function DailyDevotionalJournalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F4F2' },
   content: { paddingHorizontal: 16, paddingTop: Platform.OS === 'web' ? 20 : 28, paddingBottom: Platform.OS === 'web' ? 48 : 120 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  titleIcon: { width: 32, height: 32 },
   title: { fontSize: 22, fontWeight: '600', color: '#1F1F1F' },
   date: { fontSize: 14, color: '#888888', marginTop: 8, marginBottom: 12 },
   decorToolbar: { flexDirection: 'row', gap: 8, marginBottom: 10 }, decorButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3EDE8', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 9 }, decorButtonActive: { backgroundColor: '#E8DCD4', borderWidth: 1, borderColor: '#D4C2B8' }, decorButtonIcon: { width: 20, height: 20 }, decorButtonText: { fontSize: 12, fontWeight: '600', color: '#4A403C' }, decorPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }, panelSection: { width: '100%' }, panelSectionTitle: { width: '100%', fontSize: 12, fontWeight: '700', color: '#6B5F57', marginTop: 2, marginBottom: 6 }, panelItemRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }, simpleChip: { borderRadius: 12, backgroundColor: '#F8F5F2', paddingHorizontal: 10, paddingVertical: 8 }, emojiChip: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8F5F2', alignItems: 'center', justifyContent: 'center' }, emojiText: { fontSize: 21 }, colorChip: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#D7CCC5' }, colorChipSelected: { borderWidth: 2, borderColor: '#1F1F1F' }, stickerChip: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8DCD4', alignItems: 'center', justifyContent: 'center' }, stickerPreview: { width: 40, height: 40 }, bgChip: { width: 58, height: 42, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E8DCD4' }, bgPreview: { width: '100%', height: '100%' },
