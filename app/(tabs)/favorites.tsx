@@ -8,6 +8,10 @@ import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 
 const FAVORITES_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
+const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
+const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
+const CHURCH_DAY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-church-day.png');
+const DAILY_DEVOTIONAL_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-daily-devotional.png');
 
 type JournalFavorite = {
   id: string;
@@ -58,13 +62,13 @@ function formatSavedAt(value: string | number) {
 function getTypeBadge(type: UnifiedFavorite['type']) {
   switch (type) {
     case 'prayer':
-      return { emoji: '🙏', icon: 'heart-outline' as const, tint: '#B66D7A', soft: '#FCEEF3' };
+      return { emoji: '🙏', iconImage: PRAYER_JOURNAL_ICON, icon: 'heart-outline' as const, tint: '#B66D7A', soft: '#FCEEF3' };
     case 'bible-study':
-      return { emoji: '📖', icon: 'book-outline' as const, tint: '#6C7FA8', soft: '#EEF3FF' };
+      return { emoji: '📖', iconImage: BIBLE_STUDY_JOURNAL_ICON, icon: 'book-outline' as const, tint: '#6C7FA8', soft: '#EEF3FF' };
     case 'church-day':
-      return { emoji: '⛪', icon: 'sparkles-outline' as const, tint: '#8C7A66', soft: '#F7F0E8' };
+      return { emoji: '⛪', iconImage: CHURCH_DAY_JOURNAL_ICON, icon: 'sparkles-outline' as const, tint: '#8C7A66', soft: '#F7F0E8' };
     case 'daily-devotional':
-      return { emoji: '🌅', icon: 'sunny-outline' as const, tint: '#9B7A59', soft: '#FFF4E8' };
+      return { emoji: '🌅', iconImage: DAILY_DEVOTIONAL_JOURNAL_ICON, icon: 'sunny-outline' as const, tint: '#9B7A59', soft: '#FFF4E8' };
     case 'journal-studio':
       return { emoji: '🎨', icon: 'color-wand-outline' as const, tint: '#8A669C', soft: '#F6EEFB' };
     default:
@@ -216,7 +220,11 @@ export default function FavoritesScreen() {
                 style={[styles.card, { backgroundColor: badge.soft, borderColor: colorTheme.border }]}>
                 <View style={styles.cardTopRow}>
                   <View style={styles.cardBadgeShell}>
-                    <Text style={styles.cardEmoji}>{badge.emoji}</Text>
+                    {badge.iconImage ? (
+                      <Image source={badge.iconImage} resizeMode="contain" style={styles.cardImageIcon} />
+                    ) : (
+                      <Text style={styles.cardEmoji}>{badge.emoji}</Text>
+                    )}
                   </View>
                   <View style={styles.cardMeta}>
                     <View style={styles.cardMetaTitleRow}>
@@ -328,6 +336,10 @@ const styles = StyleSheet.create({
   },
   cardEmoji: {
     fontSize: 20,
+  },
+  cardImageIcon: {
+    width: 30,
+    height: 30,
   },
   cardMeta: {
     flex: 1,
