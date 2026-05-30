@@ -15,6 +15,7 @@ type JournalTemplate = {
 };
 
 const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
+const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
 const JOURNAL_HEADER_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function JournalScreen() {
@@ -35,6 +36,7 @@ export default function JournalScreen() {
     {
       key: 'bible-study',
       emoji: '📖',
+      iconImage: BIBLE_STUDY_JOURNAL_ICON,
       title: t('bibleStudy'),
       subtitle: 'Dig into a verse and capture what you learn.',
       icon: 'book-outline',
