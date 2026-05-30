@@ -6,12 +6,15 @@ import { useAppSettings } from '@/utils/app-settings';
 type JournalTemplate = {
   key: 'prayer' | 'bible-study' | 'church-day' | 'daily-devotional' | 'journal-studio';
   emoji: string;
+  iconImage?: any;
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
   soft: string;
 };
+
+const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
 const JOURNAL_HEADER_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function JournalScreen() {
@@ -22,6 +25,7 @@ export default function JournalScreen() {
     {
       key: 'prayer',
       emoji: '🙏',
+      iconImage: PRAYER_JOURNAL_ICON,
       title: t('prayerJournal'),
       subtitle: 'Talk to God and write what is on your heart.',
       icon: 'heart-outline',
@@ -106,7 +110,11 @@ export default function JournalScreen() {
                 { backgroundColor: template.soft, borderColor: colorTheme.border },
               ]}>
               <View style={[styles.iconShell, { backgroundColor: '#FFFFFF' }]}>
-                <Text style={styles.templateEmoji}>{template.emoji}</Text>
+                {template.iconImage ? (
+                  <Image source={template.iconImage} resizeMode="contain" style={styles.templateImageIcon} />
+                ) : (
+                  <Text style={styles.templateEmoji}>{template.emoji}</Text>
+                )}
               </View>
 
               <View style={styles.templateContent}>
@@ -191,6 +199,10 @@ const styles = StyleSheet.create({
   },
   templateEmoji: {
     fontSize: 24,
+  },
+  templateImageIcon: {
+    width: 30,
+    height: 30,
   },
   templateContent: {
     flex: 1,
