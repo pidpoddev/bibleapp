@@ -19,7 +19,6 @@ const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/jour
 const CHURCH_DAY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-church-day.png');
 const DAILY_DEVOTIONAL_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-daily-devotional.png');
 const STUDIO_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-studio.png');
-const JOURNAL_HEADER_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 
 export default function JournalScreen() {
   const router = useRouter();
@@ -97,16 +96,6 @@ export default function JournalScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
-          <View style={styles.heroTitleRow}>
-            <Image source={JOURNAL_HEADER_ICON} style={styles.heroIcon} resizeMode="contain" />
-            <Text style={styles.title}>{t('tabJournal')}</Text>
-          </View>
-          <Text style={styles.subtitle}>
-            Choose your page style and start writing.
-          </Text>
-        </View>
-
         <View style={styles.cardStack}>
           {templates.map((template) => (
             <TouchableOpacity
@@ -155,35 +144,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'web' ? 22 : 72,
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
-  },
-  heroCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    marginBottom: 12,
-  },
-  heroTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroIcon: {
-    width: 28,
-    height: 28,
-  },
-  title: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '700',
-    color: '#1F1F1F',
-  },
-  subtitle: {
-    marginTop: 2,
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#6E645E',
-    marginBottom: 4,
   },
   cardStack: {
     gap: 10,
