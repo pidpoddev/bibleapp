@@ -147,12 +147,6 @@ export default function TabLayout() {
           href: null,
         }}
       />
-      <Tabs.Screen
-        name="verse-designs"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }
