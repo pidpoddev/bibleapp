@@ -1,13 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useAppSettings } from '@/utils/app-settings';
 
@@ -21,84 +14,78 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
 
+  const openTodayVerse = () => {
+    router.push({
+      pathname: '/studio',
+      params: {
+        selectedBook: TODAY_VERSE.book,
+        selectedChapter: String(TODAY_VERSE.chapter),
+        selectedVerse: String(TODAY_VERSE.verse),
+      },
+    });
+  };
+
   return (
     <ScrollView
       style={[styles.screen, { backgroundColor: colorTheme.screenBackground }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.kicker}>{t('homeGreeting')}</Text>
+      <View style={[styles.welcome, { borderColor: colorTheme.border }]}>
+        <View style={styles.welcomeTopRow}>
+          <View style={[styles.sunBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
+            <Ionicons name="sunny-outline" size={20} color="#9B7A59" />
+          </View>
+          <Text style={styles.kicker}>{t('homeGreeting')}</Text>
+        </View>
         <Text style={styles.title}>{t('homeTitle')}</Text>
         <Text style={styles.subtitle}>{t('homeSubtitle')}</Text>
+        <View style={styles.softPrompts}>
+          <View style={styles.softPrompt}>
+            <Ionicons name="leaf-outline" size={15} color="#6F8C7A" />
+            <Text style={styles.softPromptText}>{t('homePromptBreathe')}</Text>
+          </View>
+          <View style={styles.softPrompt}>
+            <Ionicons name="heart-outline" size={15} color="#B66D7A" />
+            <Text style={styles.softPromptText}>{t('homePromptPray')}</Text>
+          </View>
+          <View style={styles.softPrompt}>
+            <Ionicons name="sparkles-outline" size={15} color="#7C73A6" />
+            <Text style={styles.softPromptText}>{t('homePromptCreate')}</Text>
+          </View>
+        </View>
       </View>
 
-      <View
-        style={[
-          styles.verseCard,
-          {
-            backgroundColor: colorTheme.cardBackground,
-            borderColor: colorTheme.border,
-          },
-        ]}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={openTodayVerse}
+        style={[styles.verseCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
         <View style={styles.cardHeaderRow}>
-          <View
-            style={[
-              styles.iconBadge,
-              { backgroundColor: colorTheme.toolbarBackground },
-            ]}>
+          <View style={[styles.iconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
             <Ionicons name="book-outline" size={18} color="#7A6F66" />
           </View>
           <Text style={styles.cardLabel}>{t('homeVerseLabel')}</Text>
         </View>
-
         <Text style={styles.verseText}>{t('homeVerseText')}</Text>
-        <Text style={styles.reference}>{t('homeVerseReference')}</Text>
-      </View>
-
-      <View style={styles.twoColumnRow}>
-        <View
-          style={[
-            styles.smallCard,
-            {
-              backgroundColor: colorTheme.toolbarBackground,
-              borderColor: colorTheme.border,
-            },
-          ]}>
-          <Ionicons name="heart-outline" size={20} color="#7A6F66" />
-          <Text style={styles.smallCardTitle}>{t('homePrayerTitle')}</Text>
-          <Text style={styles.smallCardText}>{t('homePrayerText')}</Text>
+        <View style={styles.referenceRow}>
+          <Text style={styles.reference}>{t('homeVerseReference')}</Text>
+          <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
         </View>
+      </TouchableOpacity>
 
-        <View
-          style={[
-            styles.smallCard,
-            {
-              backgroundColor: colorTheme.toolbarBackground,
-              borderColor: colorTheme.border,
-            },
-          ]}>
-          <Ionicons name="chatbubble-ellipses-outline" size={20} color="#7A6F66" />
-          <Text style={styles.smallCardTitle}>{t('homeQuestionTitle')}</Text>
-          <Text style={styles.smallCardText}>{t('homeQuestionText')}</Text>
+      <View style={styles.comfortStack}>
+        <View style={[styles.comfortCard, styles.prayerCard, { borderColor: colorTheme.border }]}>
+          <Ionicons name="heart-outline" size={21} color="#A56778" />
+          <Text style={styles.comfortTitle}>{t('homePrayerTitle')}</Text>
+          <Text style={styles.comfortText}>{t('homePrayerText')}</Text>
+        </View>
+        <View style={[styles.comfortCard, styles.questionCard, { borderColor: colorTheme.border }]}>
+          <Ionicons name="chatbubble-ellipses-outline" size={21} color="#6F8C7A" />
+          <Text style={styles.comfortTitle}>{t('homeQuestionTitle')}</Text>
+          <Text style={styles.comfortText}>{t('homeQuestionText')}</Text>
         </View>
       </View>
 
-      <View
-        style={[
-          styles.churchNote,
-          {
-            backgroundColor: colorTheme.cardBackground,
-            borderColor: colorTheme.border,
-          },
-        ]}>
-        <Ionicons name="sparkles-outline" size={20} color="#8D7C70" />
-        <View style={styles.churchNoteText}>
-          <Text style={styles.churchNoteTitle}>{t('homeChurchNote')}</Text>
-          <Text style={styles.churchNoteBody}>{t('homeChurchText')}</Text>
-        </View>
-      </View>
-
-      <View style={styles.actionRow}>
+      <View style={styles.actionSection}>
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={() => router.push('/bible')}
@@ -110,42 +97,30 @@ export default function HomeScreen() {
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={() => router.push('/prayer-journal-list')}
-          style={[
-            styles.actionButton,
-            styles.secondaryActionButton,
-            {
-              backgroundColor: colorTheme.toolbarBackground,
-              borderColor: colorTheme.border,
-            },
-          ]}>
+          style={[styles.actionButton, styles.secondaryActionButton, { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border }]}>
           <Ionicons name="create-outline" size={18} color="#5B514D" />
           <Text style={styles.secondaryActionText}>{t('homePrayerAction')}</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={openTodayVerse}
+          style={[styles.fullWidthAction, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+          <Ionicons name="color-wand-outline" size={18} color="#5B514D" />
+          <Text style={styles.fullWidthActionText}>{t('homeCreateAction')}</Text>
+          <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.88}
-        onPress={() =>
-          router.push({
-            pathname: '/studio',
-            params: {
-              selectedBook: TODAY_VERSE.book,
-              selectedChapter: String(TODAY_VERSE.chapter),
-              selectedVerse: String(TODAY_VERSE.verse),
-            },
-          })
-        }
-        style={[
-          styles.fullWidthAction,
-          {
-            backgroundColor: colorTheme.cardBackground,
-            borderColor: colorTheme.border,
-          },
-        ]}>
-        <Ionicons name="color-wand-outline" size={18} color="#5B514D" />
-        <Text style={styles.fullWidthActionText}>{t('homeCreateAction')}</Text>
-        <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
-      </TouchableOpacity>
+      <View style={[styles.churchNote, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+        <View style={[styles.churchIcon, { backgroundColor: '#EEF3FF' }]}>
+          <Ionicons name="sparkles-outline" size={19} color="#6C7FA8" />
+        </View>
+        <View style={styles.churchNoteText}>
+          <Text style={styles.churchNoteTitle}>{t('homeChurchNote')}</Text>
+          <Text style={styles.churchNoteBody}>{t('homeChurchText')}</Text>
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -153,142 +128,156 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFDF9',
   },
   content: {
-    paddingTop: Platform.OS === 'web' ? 28 : 62,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'web' ? 32 : 112,
+    paddingTop: Platform.OS === 'web' ? 26 : 58,
+    paddingHorizontal: 18,
+    paddingBottom: Platform.OS === 'web' ? 34 : 112,
   },
-  header: {
-    marginBottom: 18,
+  welcome: {
+    backgroundColor: '#FFF3F2',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 12,
+  },
+  welcomeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 10,
+  },
+  sunBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   kicker: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#8D7C70',
+    color: '#9C7988',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    letterSpacing: 0.7,
   },
   title: {
-    fontSize: 30,
+    fontSize: 29,
     lineHeight: 36,
     fontWeight: '700',
     color: '#1F1F1F',
-    marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#6E645E',
+    color: '#665C57',
+    marginTop: 8,
+  },
+  softPrompts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 15,
+  },
+  softPrompt: {
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFDF9',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  softPromptText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5E5550',
   },
   verseCard: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E8DCD4',
-    backgroundColor: '#FFFFFF',
-    padding: 20,
+    padding: 18,
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 18,
+    marginBottom: 14,
   },
   iconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3EDE8',
   },
   cardLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#8D7C70',
     textTransform: 'uppercase',
     letterSpacing: 0.7,
   },
   verseText: {
-    fontSize: 23,
-    lineHeight: 32,
+    fontSize: 22,
+    lineHeight: 31,
     fontWeight: '700',
     color: '#1F1F1F',
-    marginBottom: 14,
+  },
+  referenceRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   reference: {
     fontSize: 14,
     fontWeight: '700',
     color: '#8D7C70',
   },
-  twoColumnRow: {
-    flexDirection: 'row',
-    gap: 12,
+  comfortStack: {
+    gap: 10,
     marginBottom: 12,
   },
-  smallCard: {
-    flex: 1,
-    minHeight: 174,
+  comfortCard: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E8DCD4',
-    backgroundColor: '#F3EDE8',
     padding: 16,
   },
-  smallCardTitle: {
+  prayerCard: {
+    backgroundColor: '#FCEEF3',
+  },
+  questionCard: {
+    backgroundColor: '#EEF9F3',
+  },
+  comfortTitle: {
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700',
     color: '#1F1F1F',
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 10,
+    marginBottom: 6,
   },
-  smallCardText: {
+  comfortText: {
     fontSize: 13,
-    lineHeight: 19,
-    color: '#6E645E',
+    lineHeight: 20,
+    color: '#625853',
   },
-  churchNote: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E8DCD4',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+  actionSection: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 14,
-  },
-  churchNoteText: {
-    flex: 1,
-  },
-  churchNoteTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '700',
-    color: '#1F1F1F',
-    marginBottom: 4,
-  },
-  churchNoteBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#6E645E',
-  },
-  actionRow: {
-    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   actionButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 148,
     minHeight: 48,
     borderRadius: 24,
     flexDirection: 'row',
@@ -299,7 +288,6 @@ const styles = StyleSheet.create({
   },
   secondaryActionButton: {
     borderWidth: 1,
-    borderColor: '#E8DCD4',
   },
   primaryActionText: {
     color: '#FFFDF9',
@@ -312,14 +300,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   fullWidthAction: {
+    flexBasis: '100%',
     minHeight: 50,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: '#E8DCD4',
-    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 18,
   },
   fullWidthActionText: {
@@ -328,5 +314,35 @@ const styles = StyleSheet.create({
     color: '#5B514D',
     fontSize: 14,
     fontWeight: '700',
+  },
+  churchNote: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  churchIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  churchNoteText: {
+    flex: 1,
+  },
+  churchNoteTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#1F1F1F',
+    marginBottom: 3,
+  },
+  churchNoteBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#6E645E',
   },
 });
