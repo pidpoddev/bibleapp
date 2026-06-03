@@ -1,6 +1,5 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { Image, Platform } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -12,6 +11,7 @@ const FAVORITES_TAB_ICON = require('../../assets/images/toolbar-icons/favorites-
 const JOURNAL_TAB_ICON = require('../../assets/images/toolbar-icons/journal-tab.png');
 const BIBLE_TAB_ICON = require('../../assets/images/toolbar-icons/bible-tab.png');
 const HOME_TAB_ICON = require('../../assets/images/toolbar-icons/home-tab.png');
+const SHOP_TAB_ICON = require('../../assets/images/toolbar-icons/shop-tab.png');
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -130,13 +130,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="studio"
+        name="shop"
         options={{
-          href: null,
+          title: t('tabShop'),
+          tabBarIcon: ({ focused }) => (
+            <Image
+              source={SHOP_TAB_ICON}
+              style={{
+                width: 25,
+                height: 25,
+                opacity: focused ? 1 : 0.72,
+              }}
+              resizeMode="contain"
+            />
+          ),
         }}
       />
       <Tabs.Screen
-        name="shop"
+        name="studio"
         options={{
           href: null,
         }}

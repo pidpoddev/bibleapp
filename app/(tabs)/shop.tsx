@@ -28,6 +28,7 @@ type ShopPack = {
   id: string;
   title: string;
   subtitle: string;
+  categoryKey: string;
   category: string;
   colors: string[];
   icon: keyof typeof Ionicons.glyphMap;
@@ -40,73 +41,150 @@ type ShopPack = {
 };
 
 const CATEGORIES: ShopCategory[] = [
-  { key: 'backgrounds', title: 'Backgrounds', icon: 'image-outline' },
-  { key: 'stickers', title: 'Stickers', icon: 'sparkles-outline' },
-  { key: 'highlighters', title: 'Highlighters', icon: 'color-filter-outline' },
-  { key: 'pens', title: 'Pens', icon: 'brush-outline' },
+  { key: 'all', title: 'All', icon: 'storefront-outline' },
+  { key: 'backgrounds', title: 'Canvas', icon: 'image-outline' },
+  { key: 'themes', title: 'Themes', icon: 'color-palette-outline' },
+  { key: 'decor', title: 'Decor', icon: 'sparkles-outline' },
+  { key: 'stickers', title: 'Stickers', icon: 'pricetags-outline' },
+  { key: 'tools', title: 'Tools', icon: 'brush-outline' },
 ];
 
 const PACKS: ShopPack[] = [
   {
     ...SHOP_BACKGROUND_PACKS[0],
+    categoryKey: 'backgrounds',
     colors: ['#F7F4EE', '#F2CFCB', '#CDB5EF'],
     icon: 'image-outline',
     previewImage: SHOP_BACKGROUND_PACKS[0].backgrounds[0].image,
   },
   {
     ...SHOP_STICKER_PACKS[0],
+    categoryKey: 'stickers',
     colors: ['#F4D6CE', '#DDE5CF', '#F9F7EC'],
     icon: 'flower-outline',
     previewImage: SHOP_STICKER_PACKS[0].stickers[0].image,
   },
   {
     ...SHOP_STICKER_PACKS[1],
+    categoryKey: 'stickers',
     colors: ['#E8D4A8', '#F7EBC8', '#2F2C28'],
     icon: 'pricetag-outline',
     previewImage: SHOP_STICKER_PACKS[1].stickers[0].image,
   },
   {
+    id: 'cozy-canvas-kit',
+    title: 'Cozy Canvas Kit',
+    subtitle: 'Lined paper, soft wash canvas pages, and warm desk textures',
+    categoryKey: 'backgrounds',
+    category: 'Canvas backgrounds',
+    colors: ['#FFFDF9', '#F7D8D5', '#EADBC8'],
+    icon: 'albums-outline',
+    tag: 'Best Value',
+    price: '$2.99',
+    productId: 'cozy_canvas_kit',
+  },
+  {
     id: 'quiet-mornings',
     title: 'Quiet Mornings',
     subtitle: 'Soft paper, sunrise washes, and peaceful note pages',
-    category: 'Backgrounds',
+    categoryKey: 'themes',
+    category: 'Themes',
     colors: ['#FFF6D9', '#F9D7E5', '#DDEBFF'],
     icon: 'sunny-outline',
     tag: 'Starter',
+    price: '$1.99',
+    productId: 'quiet_mornings_theme',
+  },
+  {
+    id: 'sunday-table',
+    title: 'Sunday Table',
+    subtitle: 'A coordinated theme with cream paper, sage tabs, and blush accents',
+    categoryKey: 'themes',
+    category: 'Themes',
+    colors: ['#FFF8EA', '#BFD5C7', '#E9A9B5'],
+    icon: 'color-palette-outline',
+    tag: 'New',
+    price: '$2.49',
+    productId: 'sunday_table_theme',
   },
   {
     id: 'faith-notes',
     title: 'Faith Notes',
     subtitle: 'Tiny crosses, hearts, stars, tabs, and page markers',
-    category: 'Stickers',
+    categoryKey: 'decor',
+    category: 'Decor',
     colors: ['#F7C9D4', '#D9F4E6', '#F6E8A9'],
     icon: 'sparkles-outline',
     tag: 'New',
+    price: '$1.99',
+    productId: 'faith_notes_decor',
+  },
+  {
+    id: 'soft-ribbons',
+    title: 'Soft Ribbons',
+    subtitle: 'Decor strips, washi corners, divider bows, and sweet page labels',
+    categoryKey: 'decor',
+    category: 'Decor',
+    colors: ['#E7B7C7', '#DDD6F8', '#F8D7C5'],
+    icon: 'ribbon-outline',
+    tag: 'Decor',
+    price: '$1.49',
+    productId: 'soft_ribbons_decor',
   },
   {
     id: 'gentle-highlighters',
     title: 'Gentle Highlighters',
     subtitle: 'Pastel highlight strips for marking favorite words',
-    category: 'Highlighters',
+    categoryKey: 'tools',
+    category: 'Tools',
     colors: ['#FFF3A3', '#FFD2E1', '#CFE7FF'],
     icon: 'color-filter-outline',
     tag: 'Studio',
+    price: '$0.99',
+    productId: 'gentle_highlighters',
   },
   {
     id: 'journal-pens',
     title: 'Journal Pens',
     subtitle: 'Pretty pen styles for prayers, notes, and verse art',
-    category: 'Pens',
+    categoryKey: 'tools',
+    category: 'Tools',
     colors: ['#5B514D', '#9A4C56', '#6D8B74'],
     icon: 'brush-outline',
     tag: 'Soon',
+    price: '$1.99',
+    productId: 'journal_pens',
+  },
+  {
+    id: 'marketplace-starter-bundle',
+    title: 'Starter Bundle',
+    subtitle: 'A little bit of everything: canvas pages, decor, labels, and tools',
+    categoryKey: 'all',
+    category: 'Bundle',
+    colors: ['#FCEEF3', '#EEF9F3', '#F4F1FF'],
+    icon: 'bag-handle-outline',
+    tag: 'Bundle',
+    price: '$4.99',
+    productId: 'marketplace_starter_bundle',
   },
 ];
 
 export default function ShopScreen() {
   const { colorTheme, t } = useAppSettings();
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedPackId, setSelectedPackId] = useState(PACKS[0].id);
+  const [cartCount, setCartCount] = useState(0);
   const selectedPack = PACKS.find((pack) => pack.id === selectedPackId) ?? PACKS[0];
+  const visiblePacks = PACKS.filter(
+    (pack) => selectedCategory === 'all' || pack.categoryKey === selectedCategory
+  );
+
+  const selectCategory = (categoryKey: string) => {
+    setSelectedCategory(categoryKey);
+    const nextPack =
+      PACKS.find((pack) => categoryKey === 'all' || pack.categoryKey === categoryKey) ?? PACKS[0];
+    setSelectedPackId(nextPack.id);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
@@ -116,10 +194,15 @@ export default function ShopScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.title}>{t('tabShop')}</Text>
-            <Text style={styles.subtitle}>Creative supplies for Studio and journals</Text>
+            <Text style={styles.subtitle}>{t('shopSubtitle')}</Text>
           </View>
           <View style={[styles.cartBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
             <Ionicons name="cart-outline" size={22} color="#5B514D" />
+            {cartCount > 0 ? (
+              <View style={styles.cartCountBadge}>
+                <Text style={styles.cartCountText}>{cartCount}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -130,12 +213,14 @@ export default function ShopScreen() {
           {CATEGORIES.map((category) => (
             <Pressable
               key={category.key}
+              onPress={() => selectCategory(category.key)}
               style={[
                 styles.categoryChip,
                 {
                   backgroundColor: colorTheme.toolbarBackground,
                   borderColor: colorTheme.border,
                 },
+                selectedCategory === category.key ? styles.categoryChipActive : null,
               ]}>
               <Ionicons name={category.icon} size={17} color="#5B514D" />
               <Text style={styles.categoryText}>{category.title}</Text>
@@ -145,8 +230,10 @@ export default function ShopScreen() {
 
         <View style={styles.featureBand}>
           <View style={styles.featureTextBlock}>
-            <Text style={styles.featureTitle}>This week’s shelf</Text>
-            <Text style={styles.featureText}>Warm backgrounds, sweet stickers, and soft colors</Text>
+            <Text style={styles.featureTitle}>Canvas marketplace</Text>
+            <Text style={styles.featureText}>
+              Shop backgrounds, themes, decor, stickers, and creative tools for your journal pages.
+            </Text>
           </View>
           <View style={styles.featurePreview}>
             <View style={[styles.previewPage, { backgroundColor: '#FFF6D9' }]}>
@@ -185,10 +272,18 @@ export default function ShopScreen() {
             </View>
             <View style={styles.testPill}>
               <Text maxFontSizeMultiplier={1.1} style={styles.testPillText}>
-                {selectedPack.price ?? 'Preview'}
+                {selectedPack.price ?? t('shopPreview')}
               </Text>
             </View>
           </View>
+          <Pressable
+            onPress={() => setCartCount((count) => count + 1)}
+            style={[styles.addButton, { backgroundColor: colorTheme.tint }]}>
+            <Ionicons name="bag-add-outline" size={17} color="#FFFDF9" />
+            <Text style={styles.addButtonText}>
+              {selectedPack.price === 'Free test' ? 'Unlock pack' : 'Add to cart'}
+            </Text>
+          </Pressable>
 
           {selectedPack.stickers ? (
             <View style={styles.stickerPreviewGrid}>
@@ -228,7 +323,7 @@ export default function ShopScreen() {
           ) : (
             <View style={styles.placeholderDetail}>
               <Ionicons name={selectedPack.icon} size={26} color="#5B514D" />
-              <Text style={styles.placeholderDetailText}>Pack preview coming soon</Text>
+              <Text style={styles.placeholderDetailText}>{t('shopPackPreviewSoon')}</Text>
             </View>
           )}
 
@@ -251,12 +346,12 @@ export default function ShopScreen() {
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Packs</Text>
-          <Text style={styles.sectionMeta}>{PACKS.length} supplies</Text>
+          <Text style={styles.sectionTitle}>Marketplace</Text>
+          <Text style={styles.sectionMeta}>{visiblePacks.length} supplies</Text>
         </View>
 
         <View style={styles.packGrid}>
-          {PACKS.map((pack) => (
+          {visiblePacks.map((pack) => (
             <Pressable
               key={pack.id}
               onPress={() => setSelectedPackId(pack.id)}
@@ -302,11 +397,11 @@ export default function ShopScreen() {
                 <Text style={styles.previewAction}>
                   {(pack.stickers || pack.backgrounds) && pack.price === 'Free test'
                     ? pack.backgrounds
-                      ? 'View backgrounds'
-                      : 'View stickers'
+                      ? t('shopViewBackgrounds')
+                      : t('shopViewStickers')
                     : pack.price
-                      ? `Buy ${pack.price}`
-                      : 'Preview'}
+                      ? t('shopBuyLabel', { price: pack.price })
+                      : t('shopPreview')}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color="#8A7F76" />
               </View>
@@ -354,6 +449,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F3EDE8',
   },
+  cartCountBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#C88C93',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  cartCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFDF9',
+  },
   categoryRow: {
     paddingBottom: 18,
     gap: 10,
@@ -366,6 +478,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
+  },
+  categoryChipActive: {
+    borderColor: '#C88C93',
+    backgroundColor: '#FFF6FA',
   },
   categoryText: {
     fontSize: 13,
@@ -481,6 +597,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#9A4C56',
+  },
+  addButton: {
+    minHeight: 44,
+    borderRadius: 22,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addButtonText: {
+    color: '#FFFDF9',
+    fontSize: 14,
+    fontWeight: '700',
   },
   stickerPreviewGrid: {
     flexDirection: 'row',
