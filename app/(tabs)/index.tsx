@@ -5,7 +5,7 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '
 import { useAppSettings } from '@/utils/app-settings';
 
 const TODAY_VERSE = {
-  book: 'Psalm',
+  book: 'Psalms',
   chapter: 46,
   verse: 10,
 };
