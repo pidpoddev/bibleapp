@@ -14,15 +14,23 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
 
-  const openTodayVerse = () => {
+  const openRoute = (pathname: string) => {
+    router.push(pathname as never);
+  };
+
+  const openBibleVerse = (book: string, chapter: number, verse: number) => {
     router.push({
       pathname: '/studio',
       params: {
-        selectedBook: TODAY_VERSE.book,
-        selectedChapter: String(TODAY_VERSE.chapter),
-        selectedVerse: String(TODAY_VERSE.verse),
+        selectedBook: book,
+        selectedChapter: String(chapter),
+        selectedVerse: String(verse),
       },
     });
+  };
+
+  const openTodayVerse = () => {
+    openBibleVerse(TODAY_VERSE.book, TODAY_VERSE.chapter, TODAY_VERSE.verse);
   };
 
   return (
@@ -40,18 +48,27 @@ export default function HomeScreen() {
         <Text style={styles.title}>{t('homeTitle')}</Text>
         <Text style={styles.subtitle}>{t('homeSubtitle')}</Text>
         <View style={styles.softPrompts}>
-          <View style={styles.softPrompt}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => openBibleVerse('Psalm', 46, 10)}
+            style={styles.softPrompt}>
             <Ionicons name="leaf-outline" size={15} color="#6F8C7A" />
             <Text style={styles.softPromptText}>{t('homePromptBreathe')}</Text>
-          </View>
-          <View style={styles.softPrompt}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push('/prayer-journal-list')}
+            style={styles.softPrompt}>
             <Ionicons name="heart-outline" size={15} color="#B66D7A" />
             <Text style={styles.softPromptText}>{t('homePromptPray')}</Text>
-          </View>
-          <View style={styles.softPrompt}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={openTodayVerse}
+            style={styles.softPrompt}>
             <Ionicons name="sparkles-outline" size={15} color="#7C73A6" />
             <Text style={styles.softPromptText}>{t('homePromptCreate')}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -73,16 +90,30 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       <View style={styles.comfortStack}>
-        <View style={[styles.comfortCard, styles.prayerCard, { borderColor: colorTheme.border }]}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => router.push('/prayer-journal-list')}
+          style={[styles.comfortCard, styles.prayerCard, { borderColor: colorTheme.border }]}>
           <Ionicons name="heart-outline" size={21} color="#A56778" />
           <Text style={styles.comfortTitle}>{t('homePrayerTitle')}</Text>
           <Text style={styles.comfortText}>{t('homePrayerText')}</Text>
-        </View>
-        <View style={[styles.comfortCard, styles.questionCard, { borderColor: colorTheme.border }]}>
+          <View style={styles.cardLinkRow}>
+            <Text style={styles.cardLinkText}>{t('homePrayerAction')}</Text>
+            <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => openRoute('/daily-devotional-journal')}
+          style={[styles.comfortCard, styles.questionCard, { borderColor: colorTheme.border }]}>
           <Ionicons name="chatbubble-ellipses-outline" size={21} color="#6F8C7A" />
           <Text style={styles.comfortTitle}>{t('homeQuestionTitle')}</Text>
           <Text style={styles.comfortText}>{t('homeQuestionText')}</Text>
-        </View>
+          <View style={styles.cardLinkRow}>
+            <Text style={styles.cardLinkText}>{t('dailyDevotional')}</Text>
+            <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
+          </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.actionSection}>
@@ -112,7 +143,10 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.churchNote, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={() => openRoute('/church-day-journal')}
+        style={[styles.churchNote, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
         <View style={[styles.churchIcon, { backgroundColor: '#EEF3FF' }]}>
           <Ionicons name="sparkles-outline" size={19} color="#6C7FA8" />
         </View>
@@ -120,7 +154,8 @@ export default function HomeScreen() {
           <Text style={styles.churchNoteTitle}>{t('homeChurchNote')}</Text>
           <Text style={styles.churchNoteBody}>{t('homeChurchText')}</Text>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -268,6 +303,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: '#625853',
+  },
+  cardLinkRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5B514D',
   },
   actionSection: {
     flexDirection: 'row',
