@@ -27,6 +27,7 @@ import {
   type PanGestureHandlerGestureEvent,
   type PanGestureHandlerStateChangeEvent,
 } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -995,6 +996,7 @@ const TOOLBAR_ICON_OFFSET_Y = {
 
 export default function StudioScreen() {
   const { colorTheme, language, t } = useAppSettings();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
   const draftFavoriteKeyRef = useRef<string | null>(null);
@@ -2856,7 +2858,14 @@ export default function StudioScreen() {
           { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 32 : 32 },
         ]}
         keyboardShouldPersistTaps="handled">
-        <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
+        <View
+          style={[
+            styles.container,
+            {
+              backgroundColor: colorTheme.screenBackground,
+              paddingTop: Platform.OS === 'web' ? 4 : insets.top + 8,
+            },
+          ]}>
         <View
           style={[
             styles.headerSection,
