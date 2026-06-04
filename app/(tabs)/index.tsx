@@ -4,12 +4,6 @@ import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '
 
 import { useAppSettings } from '@/utils/app-settings';
 
-const TODAY_VERSE = {
-  book: 'Psalm',
-  chapter: 46,
-  verse: 10,
-};
-
 export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
@@ -18,19 +12,8 @@ export default function HomeScreen() {
     router.push(pathname as never);
   };
 
-  const openBibleVerse = (book: string, chapter: number, verse: number) => {
-    router.push({
-      pathname: '/studio',
-      params: {
-        selectedBook: book,
-        selectedChapter: String(chapter),
-        selectedVerse: String(verse),
-      },
-    });
-  };
-
-  const openTodayVerse = () => {
-    openBibleVerse(TODAY_VERSE.book, TODAY_VERSE.chapter, TODAY_VERSE.verse);
+  const openStudio = () => {
+    router.push('/studio');
   };
 
   return (
@@ -50,7 +33,7 @@ export default function HomeScreen() {
         <View style={styles.softPrompts}>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => openBibleVerse('Psalm', 46, 10)}
+            onPress={openStudio}
             style={styles.softPrompt}>
             <Ionicons name="leaf-outline" size={15} color="#6F8C7A" />
             <Text style={styles.softPromptText}>{t('homePromptBreathe')}</Text>
@@ -64,7 +47,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={openTodayVerse}
+            onPress={openStudio}
             style={styles.softPrompt}>
             <Ionicons name="sparkles-outline" size={15} color="#7C73A6" />
             <Text style={styles.softPromptText}>{t('homePromptCreate')}</Text>
@@ -74,7 +57,7 @@ export default function HomeScreen() {
 
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={openTodayVerse}
+        onPress={openStudio}
         style={[styles.verseCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
         <View style={styles.cardHeaderRow}>
           <View style={[styles.iconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
@@ -135,7 +118,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={openTodayVerse}
+          onPress={openStudio}
           style={[styles.fullWidthAction, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
           <Ionicons name="color-wand-outline" size={18} color="#5B514D" />
           <Text style={styles.fullWidthActionText}>{t('homeCreateAction')}</Text>

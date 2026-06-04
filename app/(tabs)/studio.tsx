@@ -227,10 +227,6 @@ function getVerseOptions(book: string, chapter: number) {
   return getVerses(book, chapter).sort((left, right) => left - right);
 }
 
-function getDefaultVerseForChapter(book: string, chapter: number) {
-  return getVerseOptions(book, chapter)[0] ?? 1;
-}
-
 function normalizeSelectedVerses(verses: number[], fallbackVerse: number) {
   const normalized = Array.from(
     new Set(verses.filter((verseNumber) => Number.isFinite(verseNumber)))
@@ -1001,7 +997,6 @@ export default function StudioScreen() {
   const captureViewRef = useRef<View>(null);
   const draftFavoriteKeyRef = useRef<string | null>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
-  const lastAppliedSelectionParamsRef = useRef<string | null>(null);
   const saveToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const favoriteAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedSavedDesignsRef = useRef(false);
@@ -1015,20 +1010,6 @@ export default function StudioScreen() {
       : null;
   const routeRestoreToken =
     typeof route.params?.restoreToken === 'string' ? route.params.restoreToken : null;
-  const routeSelectedBookParam =
-    typeof route.params?.selectedBook === 'string' ? route.params.selectedBook : null;
-  const routeSelectedChapterParam =
-    typeof route.params?.selectedChapter === 'string'
-      ? Number(route.params.selectedChapter)
-      : typeof route.params?.selectedChapter === 'number'
-        ? route.params.selectedChapter
-        : null;
-  const routeSelectedVerseParam =
-    typeof route.params?.selectedVerse === 'string'
-      ? Number(route.params.selectedVerse)
-      : typeof route.params?.selectedVerse === 'number'
-        ? route.params.selectedVerse
-        : null;
   const routeSourceParam =
     typeof route.params?.source === 'string' ? route.params.source : null;
   const routeFavoriteKeyParam =
@@ -1514,11 +1495,7 @@ export default function StudioScreen() {
         }
 
         setVerseState(savedVerseState);
-        const shouldOpenSpecificVerse =
-          routeDesignParam?.book === selectedBook ||
-          (routeSelectedBookParam === selectedBook &&
-            routeSelectedChapterParam !== null &&
-            routeSelectedVerseParam !== null);
+        const shouldOpenSpecificVerse = routeDesignParam?.book === selectedBook;
         const bookChapters = getChapters(selectedBook);
 
         if (!shouldOpenSpecificVerse) {
@@ -1555,11 +1532,7 @@ export default function StudioScreen() {
         const initialChapter =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.chapter
-            : routeSelectedBookParam === selectedBook &&
-                routeSelectedChapterParam !== null &&
-                bookChapters.includes(routeSelectedChapterParam)
-              ? routeSelectedChapterParam
-              : fallbackChapter;
+            : fallbackChapter;
         const chapterVerses = getVerseOptions(selectedBook, initialChapter);
         const fallbackVerse =
           selectedBook === DEFAULT_BOOK &&
@@ -1570,11 +1543,7 @@ export default function StudioScreen() {
         const initialVerse =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.verse
-            : routeSelectedBookParam === selectedBook &&
-                routeSelectedVerseParam !== null &&
-                chapterVerses.includes(routeSelectedVerseParam)
-              ? routeSelectedVerseParam
-              : fallbackVerse;
+            : fallbackVerse;
         const initialSelectedVerses =
           routeSelectedVerses &&
           routeDesignParam?.chapter === initialChapter &&
@@ -1630,9 +1599,6 @@ export default function StudioScreen() {
     routeDesignParam,
     routeEntryIdParam,
     routeRestoreToken,
-    routeSelectedBookParam,
-    routeSelectedChapterParam,
-    routeSelectedVerseParam,
     selectedBook,
     selectedChapter,
   ]);
@@ -2171,80 +2137,6 @@ export default function StudioScreen() {
 
     void loadStudioEntryById();
   }, [language.key, routeDesignParam, routeEntryIdParam]);
-
-  useEffect(() => {
-    if (routeDesignParam) {
-      return;
-    }
-
-    const nextBook = routeSelectedBookParam;
-    const nextChapterParam = routeSelectedChapterParam;
-    const nextVerseParam = routeSelectedVerseParam;
-    const selectionParamsKey = `${nextBook ?? ''}:${nextChapterParam ?? ''}:${nextVerseParam ?? ''}`;
-
-    if (!nextBook) {
-      return;
-    }
-
-    if (lastAppliedSelectionParamsRef.current === selectionParamsKey) {
-      return;
-    }
-
-    const bookChapters = getChapters(nextBook);
-    const nextChapter =
-      nextChapterParam !== null && bookChapters.includes(nextChapterParam)
-        ? nextChapterParam
-        : bookChapters[0] ?? 1;
-    const chapterVerses = getVerseOptions(nextBook, nextChapter);
-    const nextVerse =
-      nextVerseParam !== null && chapterVerses.includes(nextVerseParam)
-        ? nextVerseParam
-        : getDefaultVerseForChapter(nextBook, nextChapter);
-    const nextSelectedVerses = [nextVerse];
-    const nextDesignKey = getDesignKey(nextBook, nextChapter, nextSelectedVerses);
-    const nextVerseState = verseState[nextDesignKey] ?? DEFAULT_VERSE_EDITOR_STATE;
-    const nextEditorState = cloneVerseEditorState(nextVerseState);
-
-    lastAppliedDesignKeyRef.current = null;
-    lastAppliedSelectionParamsRef.current = selectionParamsKey;
-
-    setSelectedBook(nextBook);
-    setSelectedChapter(nextChapter);
-    setSelectedVerse(nextVerse);
-    setSelectedVerses(nextSelectedVerses);
-    setVerseCards(
-      syncVerseCardsWithSelection(
-        nextEditorState.verseCards,
-        nextSelectedVerses,
-        nextBook,
-        nextChapter,
-        language.key
-      )
-    );
-    setStickers(nextEditorState.stickers);
-    setNotes(nextEditorState.notes);
-    setBackgroundKey(nextEditorState.backgroundKey ?? null);
-    setHighlightedWords(nextEditorState.highlightedWords);
-    setSelectedFont(nextEditorState.selectedFont);
-    setFontSize(nextEditorState.fontSize);
-    setSelectedStickerId(null);
-    setSelectedNoteId(null);
-    setAutoFocusNoteId(null);
-    setFocusedNoteId(null);
-    setFocusedNoteTarget(null);
-    setOpenToolbarMenu(null);
-    setIsBookDropdownOpen(false);
-    setIsChapterDropdownOpen(false);
-    setIsVerseDropdownOpen(false);
-    setUndoHistory([]);
-  }, [
-    language.key,
-    routeDesignParam,
-    routeSelectedBookParam,
-    routeSelectedChapterParam,
-    routeSelectedVerseParam,
-    verseState,
-  ]);
 
   const decreaseFontSize = () => {
     if (fontSize <= 14) {
