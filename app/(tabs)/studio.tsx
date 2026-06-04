@@ -1013,12 +1013,18 @@ export default function StudioScreen() {
   const routeRestoreToken =
     typeof route.params?.restoreToken === 'string' ? route.params.restoreToken : null;
   const routeBlankStudioToken =
-    typeof route.params?.blankStudioToken === 'string' ? route.params.blankStudioToken : null;
+    typeof route.params?.blankStudioToken === 'string' && route.params.blankStudioToken.length > 0
+      ? route.params.blankStudioToken
+      : null;
   const routeOpenSelectedVerseParam = route.params?.openSelectedVerse === 'true';
   const routeSelectionToken =
-    typeof route.params?.selectionToken === 'string' ? route.params.selectionToken : null;
+    typeof route.params?.selectionToken === 'string' && route.params.selectionToken.length > 0
+      ? route.params.selectionToken
+      : null;
   const routeSelectedBookParam =
-    typeof route.params?.selectedBook === 'string' ? route.params.selectedBook : null;
+    typeof route.params?.selectedBook === 'string' && route.params.selectedBook.length > 0
+      ? route.params.selectedBook
+      : null;
   const routeSelectedChapterParam =
     typeof route.params?.selectedChapter === 'string'
       ? Number(route.params.selectedChapter)

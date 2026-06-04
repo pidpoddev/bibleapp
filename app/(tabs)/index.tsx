@@ -23,6 +23,11 @@ export default function HomeScreen() {
       pathname: '/studio',
       params: {
         blankStudioToken: String(Date.now()),
+        openSelectedVerse: 'false',
+        selectedBook: '',
+        selectedChapter: '',
+        selectedVerse: '',
+        selectionToken: '',
       },
     });
   };
@@ -31,6 +36,7 @@ export default function HomeScreen() {
     router.push({
       pathname: '/studio',
       params: {
+        blankStudioToken: '',
         openSelectedVerse: 'true',
         selectedBook: TODAY_VERSE.book,
         selectedChapter: String(TODAY_VERSE.chapter),
