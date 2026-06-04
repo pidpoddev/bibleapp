@@ -997,6 +997,8 @@ export default function StudioScreen() {
   const captureViewRef = useRef<View>(null);
   const draftFavoriteKeyRef = useRef<string | null>(null);
   const lastAppliedDesignKeyRef = useRef<string | null>(null);
+  const lastAppliedBlankTokenRef = useRef<string | null>(null);
+  const lastAppliedSelectionTokenRef = useRef<string | null>(null);
   const saveToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const favoriteAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedSavedDesignsRef = useRef(false);
@@ -1010,6 +1012,25 @@ export default function StudioScreen() {
       : null;
   const routeRestoreToken =
     typeof route.params?.restoreToken === 'string' ? route.params.restoreToken : null;
+  const routeBlankStudioToken =
+    typeof route.params?.blankStudioToken === 'string' ? route.params.blankStudioToken : null;
+  const routeOpenSelectedVerseParam = route.params?.openSelectedVerse === 'true';
+  const routeSelectionToken =
+    typeof route.params?.selectionToken === 'string' ? route.params.selectionToken : null;
+  const routeSelectedBookParam =
+    typeof route.params?.selectedBook === 'string' ? route.params.selectedBook : null;
+  const routeSelectedChapterParam =
+    typeof route.params?.selectedChapter === 'string'
+      ? Number(route.params.selectedChapter)
+      : typeof route.params?.selectedChapter === 'number'
+        ? route.params.selectedChapter
+        : null;
+  const routeSelectedVerseParam =
+    typeof route.params?.selectedVerse === 'string'
+      ? Number(route.params.selectedVerse)
+      : typeof route.params?.selectedVerse === 'number'
+        ? route.params.selectedVerse
+        : null;
   const routeSourceParam =
     typeof route.params?.source === 'string' ? route.params.source : null;
   const routeFavoriteKeyParam =
@@ -1192,6 +1213,36 @@ export default function StudioScreen() {
     }, 1800);
   };
 
+  const resetStudioToBlank = useCallback(() => {
+    const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
+
+    lastAppliedDesignKeyRef.current = null;
+    setVerseState({});
+    setSelectedBook('');
+    setSelectedChapter(0);
+    setSelectedVerse(0);
+    setSelectedVerses([]);
+    setVerseCards(nextEditorState.verseCards);
+    setStickers(nextEditorState.stickers);
+    setNotes(nextEditorState.notes);
+    setBackgroundKey(nextEditorState.backgroundKey ?? null);
+    setSelectedFont(nextEditorState.selectedFont);
+    setFontSize(nextEditorState.fontSize);
+    setHighlightedWords(nextEditorState.highlightedWords);
+    setSelectedStickerId(null);
+    setSelectedNoteId(null);
+    setAutoFocusNoteId(null);
+    setFocusedNoteId(null);
+    setFocusedNoteTarget(null);
+    setOpenToolbarMenu(null);
+    setIsBookDropdownOpen(false);
+    setIsChapterDropdownOpen(false);
+    setIsVerseDropdownOpen(false);
+    setUndoHistory([]);
+    setIsFavoriteActive(false);
+    setHasLoadedState(true);
+  }, []);
+
   const ensureFavoriteKey = useCallback(() => {
     if (routeFavoriteKeyParam) {
       return routeFavoriteKeyParam;
@@ -1211,6 +1262,48 @@ export default function StudioScreen() {
 
     return draftFavoriteKeyRef.current;
   }, [designKey, hasVerseSelection, routeDesignParam, routeFavoriteKeyParam]);
+
+  useEffect(() => {
+    if (!routeBlankStudioToken) {
+      return;
+    }
+
+    if (lastAppliedBlankTokenRef.current === routeBlankStudioToken) {
+      return;
+    }
+
+    lastAppliedBlankTokenRef.current = routeBlankStudioToken;
+    resetStudioToBlank();
+  }, [resetStudioToBlank, routeBlankStudioToken]);
+
+  useEffect(() => {
+    if (
+      !routeOpenSelectedVerseParam ||
+      !routeSelectionToken ||
+      !routeSelectedBookParam
+    ) {
+      return;
+    }
+
+    const selectionParamsKey = `${routeSelectionToken}:${routeSelectedBookParam}:${routeSelectedChapterParam ?? ''}:${routeSelectedVerseParam ?? ''}`;
+
+    if (lastAppliedSelectionTokenRef.current === selectionParamsKey) {
+      return;
+    }
+
+    if (!getBooks().includes(routeSelectedBookParam)) {
+      return;
+    }
+
+    lastAppliedSelectionTokenRef.current = selectionParamsKey;
+    setSelectedBook(routeSelectedBookParam);
+  }, [
+    routeOpenSelectedVerseParam,
+    routeSelectedBookParam,
+    routeSelectedChapterParam,
+    routeSelectedVerseParam,
+    routeSelectionToken,
+  ]);
 
   const persistFavoriteToStorage = useCallback(async () => {
     if (!isFavoriteActive) {
@@ -1495,7 +1588,12 @@ export default function StudioScreen() {
         }
 
         setVerseState(savedVerseState);
-        const shouldOpenSpecificVerse = routeDesignParam?.book === selectedBook;
+        const shouldOpenSpecificVerse =
+          routeDesignParam?.book === selectedBook ||
+          (routeOpenSelectedVerseParam &&
+            routeSelectedBookParam === selectedBook &&
+            routeSelectedChapterParam !== null &&
+            routeSelectedVerseParam !== null);
         const bookChapters = getChapters(selectedBook);
 
         if (!shouldOpenSpecificVerse) {
@@ -1532,7 +1630,12 @@ export default function StudioScreen() {
         const initialChapter =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.chapter
-            : fallbackChapter;
+            : routeOpenSelectedVerseParam &&
+                routeSelectedBookParam === selectedBook &&
+                routeSelectedChapterParam !== null &&
+                bookChapters.includes(routeSelectedChapterParam)
+              ? routeSelectedChapterParam
+              : fallbackChapter;
         const chapterVerses = getVerseOptions(selectedBook, initialChapter);
         const fallbackVerse =
           selectedBook === DEFAULT_BOOK &&
@@ -1543,7 +1646,12 @@ export default function StudioScreen() {
         const initialVerse =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.verse
-            : fallbackVerse;
+            : routeOpenSelectedVerseParam &&
+                routeSelectedBookParam === selectedBook &&
+                routeSelectedVerseParam !== null &&
+                chapterVerses.includes(routeSelectedVerseParam)
+              ? routeSelectedVerseParam
+              : fallbackVerse;
         const initialSelectedVerses =
           routeSelectedVerses &&
           routeDesignParam?.chapter === initialChapter &&
@@ -1598,7 +1706,12 @@ export default function StudioScreen() {
     language.key,
     routeDesignParam,
     routeEntryIdParam,
+    routeOpenSelectedVerseParam,
     routeRestoreToken,
+    routeSelectedBookParam,
+    routeSelectedChapterParam,
+    routeSelectedVerseParam,
+    routeSelectionToken,
     selectedBook,
     selectedChapter,
   ]);
