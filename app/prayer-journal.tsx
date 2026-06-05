@@ -755,6 +755,102 @@ export default function PrayerJournalScreen() {
           </View>
           <Text style={styles.date}>{entryDate}</Text>
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolbar}
+            keyboardShouldPersistTaps="handled">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() =>
+                setOpenTray((currentTray) =>
+                  currentTray === 'text' ? null : 'text'
+                )
+              }
+              style={[
+                styles.toolbarButton,
+                { backgroundColor: colorTheme.toolbarBackground },
+                openTray === 'text'
+                  ? [
+                      styles.toolbarButtonActive,
+                      { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                    ]
+                  : null,
+              ]}>
+              <Image source={JOURNAL_TOOLBAR_ICONS.text} resizeMode="contain" style={styles.toolbarImageIcon} />
+              <Text style={styles.toolbarLabel}>Text</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() =>
+                setOpenTray((currentTray) =>
+                  currentTray === 'stickers' ? null : 'stickers'
+                )
+              }
+              style={[
+                styles.toolbarButton,
+                { backgroundColor: colorTheme.toolbarBackground },
+                openTray === 'stickers'
+                  ? [
+                      styles.toolbarButtonActive,
+                      { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                    ]
+                  : null,
+              ]}>
+              <Image source={JOURNAL_TOOLBAR_ICONS.decor} resizeMode="contain" style={styles.toolbarImageIcon} />
+              <Text style={styles.toolbarLabel}>Decor</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() =>
+                setOpenTray((currentTray) =>
+                  currentTray === 'background' ? null : 'background'
+                )
+              }
+              style={[
+                styles.toolbarButton,
+                { backgroundColor: colorTheme.toolbarBackground },
+                openTray === 'background'
+                  ? [
+                      styles.toolbarButtonActive,
+                      { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                    ]
+                  : null,
+              ]}>
+              <Image source={JOURNAL_TOOLBAR_ICONS.canvas} resizeMode="contain" style={styles.toolbarImageIcon} />
+              <Text style={styles.toolbarLabel}>Canvas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={addNoteSection}
+              style={[styles.toolbarButton, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Image source={JOURNAL_TOOLBAR_ICONS.note} resizeMode="contain" style={styles.toolbarImageIcon} />
+              <Text style={styles.toolbarLabel}>Note</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() =>
+                setOpenTray((currentTray) => (currentTray === 'more' ? null : 'more'))
+              }
+              style={[
+                styles.toolbarButton,
+                { backgroundColor: colorTheme.toolbarBackground },
+                openTray === 'more'
+                  ? [
+                      styles.toolbarButtonActive,
+                      { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                    ]
+                  : null,
+              ]}>
+              <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
+              <Text style={styles.toolbarLabel}>More</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
           <View ref={canvasRef} collapsable={false} style={styles.captureFrame}>
             {background === 'lined' || selectedPrayerBackground ? (
               <ImageBackground
@@ -1064,97 +1160,6 @@ export default function PrayerJournalScreen() {
           </View>
         ) : null}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.toolbar, { backgroundColor: colorTheme.toolbarBackground }]}
-          keyboardShouldPersistTaps="handled">
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() =>
-              setOpenTray((currentTray) =>
-                currentTray === 'text' ? null : 'text'
-              )
-            }
-            style={[
-              styles.toolbarButton,
-              openTray === 'text'
-                ? [
-                    styles.toolbarButtonActive,
-                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                  ]
-                : null,
-            ]}>
-            <Image source={JOURNAL_TOOLBAR_ICONS.text} resizeMode="contain" style={styles.toolbarImageIcon} />
-            <Text style={styles.toolbarLabel}>Text</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() =>
-              setOpenTray((currentTray) =>
-                currentTray === 'stickers' ? null : 'stickers'
-              )
-            }
-            style={[
-              styles.toolbarButton,
-              openTray === 'stickers'
-                ? [
-                    styles.toolbarButtonActive,
-                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                  ]
-                : null,
-            ]}>
-            <Image source={JOURNAL_TOOLBAR_ICONS.decor} resizeMode="contain" style={styles.toolbarImageIcon} />
-            <Text style={styles.toolbarLabel}>Decor</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() =>
-              setOpenTray((currentTray) =>
-                currentTray === 'background' ? null : 'background'
-              )
-            }
-            style={[
-              styles.toolbarButton,
-              openTray === 'background'
-                ? [
-                    styles.toolbarButtonActive,
-                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                  ]
-                : null,
-            ]}>
-            <Image source={JOURNAL_TOOLBAR_ICONS.canvas} resizeMode="contain" style={styles.toolbarImageIcon} />
-            <Text style={styles.toolbarLabel}>Canvas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={addNoteSection}
-            style={styles.toolbarButton}>
-            <Image source={JOURNAL_TOOLBAR_ICONS.note} resizeMode="contain" style={styles.toolbarImageIcon} />
-            <Text style={styles.toolbarLabel}>Note</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() =>
-              setOpenTray((currentTray) => (currentTray === 'more' ? null : 'more'))
-            }
-            style={[
-              styles.toolbarButton,
-              openTray === 'more'
-                ? [
-                    styles.toolbarButtonActive,
-                    { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                  ]
-                : null,
-            ]}>
-            <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
-            <Text style={styles.toolbarLabel}>More</Text>
-          </TouchableOpacity>
-        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   );
@@ -1167,8 +1172,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'web' ? 28 : 52,
-    paddingBottom: Platform.OS === 'web' ? 80 : 170,
+    paddingTop: Platform.OS === 'web' ? 20 : 28,
+    paddingBottom: Platform.OS === 'web' ? 80 : 120,
   },
   titleRow: {
     flexDirection: 'row',
@@ -1188,7 +1193,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888888',
     marginTop: 8,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   captureFrame: {
     width: '100%',
@@ -1335,7 +1340,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 20,
     right: 20,
-    bottom: 116,
+    bottom: 24,
     backgroundColor: '#FFFDF9',
     borderRadius: 24,
     paddingHorizontal: 16,
@@ -1455,30 +1460,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   toolbar: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 14,
-    borderRadius: 30,
-    backgroundColor: '#F6F1EB',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    marginBottom: 12,
   },
   toolbarButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 68,
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    minWidth: 78,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   toolbarButtonActive: {
     backgroundColor: '#ECE2D8',
