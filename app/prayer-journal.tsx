@@ -749,12 +749,7 @@ export default function PrayerJournalScreen() {
           showsVerticalScrollIndicator={false}>
           <View style={styles.titleRow}>
             <Image source={HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
-            <Text
-              adjustsFontSizeToFit
-              maxFontSizeMultiplier={1.1}
-              minimumFontScale={0.7}
-              numberOfLines={1}
-              style={styles.title}>
+            <Text style={styles.title}>
               {t('prayerJournal')}
             </Text>
           </View>
@@ -1181,13 +1176,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   titleIcon: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '700',
-    lineHeight: 32,
+    fontSize: 22,
+    fontWeight: '600',
     color: '#1F1F1F',
   },
   date: {
