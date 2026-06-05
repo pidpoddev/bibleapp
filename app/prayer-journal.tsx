@@ -1181,13 +1181,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   titleIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '600',
-    lineHeight: 28,
+    fontSize: 26,
+    fontWeight: '700',
+    lineHeight: 32,
     color: '#1F1F1F',
   },
   date: {
