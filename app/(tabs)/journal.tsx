@@ -80,7 +80,10 @@ export default function JournalScreen() {
   const openTemplate = (template: JournalTemplate) => {
     router.push(
       template.key === 'prayer'
-        ? '/prayer-journal-list'
+        ? {
+            pathname: '/prayer-journal',
+            params: { newEntryToken: Date.now().toString() },
+          }
         : template.key === 'bible-study'
           ? '/bible-study-journal'
           : template.key === 'church-day'

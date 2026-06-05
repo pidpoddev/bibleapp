@@ -32,6 +32,13 @@ export default function HomeScreen() {
     });
   };
 
+  const openPrayerJournal = () => {
+    router.push({
+      pathname: '/prayer-journal',
+      params: { newEntryToken: String(Date.now()) },
+    });
+  };
+
   const openTodayVerse = () => {
     router.push({
       pathname: '/studio',
@@ -70,7 +77,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => router.push('/prayer-journal-list')}
+            onPress={openPrayerJournal}
             style={styles.softPrompt}>
             <Ionicons name="heart-outline" size={15} color="#B66D7A" />
             <Text style={styles.softPromptText}>{t('homePromptPray')}</Text>
@@ -105,7 +112,7 @@ export default function HomeScreen() {
       <View style={styles.comfortStack}>
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => router.push('/prayer-journal-list')}
+          onPress={openPrayerJournal}
           style={[styles.comfortCard, styles.prayerCard, { borderColor: colorTheme.border }]}>
           <Ionicons name="heart-outline" size={21} color="#A56778" />
           <Text style={styles.comfortTitle}>{t('homePrayerTitle')}</Text>
@@ -140,7 +147,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => router.push('/prayer-journal-list')}
+          onPress={openPrayerJournal}
           style={[styles.actionButton, styles.secondaryActionButton, { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border }]}>
           <Ionicons name="create-outline" size={18} color="#5B514D" />
           <Text style={styles.secondaryActionText}>{t('homePrayerAction')}</Text>
