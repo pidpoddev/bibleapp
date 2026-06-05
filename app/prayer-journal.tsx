@@ -755,7 +755,7 @@ export default function PrayerJournalScreen() {
               minimumFontScale={0.7}
               numberOfLines={1}
               style={styles.title}>
-              {t('prayerJournalTitle')}
+              {t('prayerJournal')}
             </Text>
           </View>
           <Text style={styles.date}>{entryDate}</Text>
@@ -1181,13 +1181,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   titleIcon: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
   },
   title: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 28,
     color: '#1F1F1F',
   },
   date: {
