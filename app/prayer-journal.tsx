@@ -569,10 +569,11 @@ export default function PrayerJournalScreen() {
 
   const addNoteSection = () => {
     const updatedSections = [
-      ...sections,
       { id: generateId(), label: 'Note', text: '' },
+      ...sections,
     ];
     setSections(updatedSections);
+    setOpenTray(null);
     saveEntry(updatedSections, stickers, background);
   };
 
@@ -851,6 +852,212 @@ export default function PrayerJournalScreen() {
             </TouchableOpacity>
           </ScrollView>
 
+          {openTray === 'stickers' ? (
+            <View
+              style={[
+                styles.tray,
+                {
+                  backgroundColor: colorTheme.screenBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
+              <Text style={styles.trayTitle}>Decor</Text>
+              <Text style={styles.traySectionTitle}>Quick Stickers</Text>
+              <View style={styles.stickerTrayRow}>
+                {STICKER_CHOICES.map((choice) => (
+                  <TouchableOpacity
+                    key={choice}
+                    activeOpacity={0.85}
+                    onPress={() => addSticker(choice)}
+                    style={[
+                      styles.trayStickerButton,
+                      { backgroundColor: colorTheme.toolbarBackground },
+                    ]}>
+                    <Text style={styles.trayStickerEmoji}>{choice}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <ScrollView
+                style={styles.trayStickerScroll}
+                contentContainerStyle={styles.trayStickerPackList}
+                showsVerticalScrollIndicator={false}>
+                {TEST_UNLOCKED_STICKER_PACKS.map((pack) => (
+                  <View key={pack.id} style={styles.trayStickerPackSection}>
+                    <Text style={styles.trayPackTitle}>{pack.title}</Text>
+                    <View style={styles.stickerTrayRow}>
+                      {pack.stickers.map((shopSticker) => (
+                        <TouchableOpacity
+                          key={shopSticker.key}
+                          activeOpacity={0.85}
+                          onPress={() => addShopSticker(shopSticker.key)}
+                          style={[
+                            styles.trayStickerButton,
+                            styles.trayImageStickerButton,
+                            { backgroundColor: colorTheme.toolbarBackground },
+                          ]}>
+                          <Image
+                            source={shopSticker.image}
+                            resizeMode="contain"
+                            style={[
+                              styles.trayStickerImage,
+                              getShopStickerDisplaySize(shopSticker, 52),
+                            ]}
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {openTray === 'background' ? (
+            <View
+              style={[
+                styles.tray,
+                {
+                  backgroundColor: colorTheme.screenBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
+              <Text style={styles.trayTitle}>Canvas</Text>
+              <Text style={styles.traySectionTitle}>Basic</Text>
+              <View style={styles.backgroundOptionRow}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => updateBackground('lined')}
+                  style={[
+                    styles.backgroundChip,
+                    { backgroundColor: colorTheme.toolbarBackground },
+                    background === 'lined'
+                      ? [
+                          styles.activeChip,
+                          { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                        ]
+                      : null,
+                  ]}>
+                  <Text style={styles.backgroundChipText}>Lined</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => updateBackground('plain')}
+                  style={[
+                    styles.backgroundChip,
+                    { backgroundColor: colorTheme.toolbarBackground },
+                    background === 'plain'
+                      ? [
+                          styles.activeChip,
+                          { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
+                        ]
+                      : null,
+                  ]}>
+                  <Text style={styles.backgroundChipText}>Plain</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.backgroundPickerScroll}
+                contentContainerStyle={styles.backgroundPickerContent}
+                showsVerticalScrollIndicator={false}>
+                {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
+                  <View key={pack.id} style={styles.backgroundPackSection}>
+                    <Text style={styles.trayPackTitle}>{pack.title}</Text>
+                    <View style={styles.backgroundPreviewGrid}>
+                      {pack.backgrounds.map((backgroundOption) => {
+                        const backgroundValue = getPrayerBackgroundValue(backgroundOption.key);
+
+                        return (
+                          <TouchableOpacity
+                            key={backgroundOption.key}
+                            activeOpacity={0.85}
+                            onPress={() => updateBackground(backgroundValue)}
+                            style={[
+                              styles.backgroundPreviewButton,
+                              { backgroundColor: colorTheme.toolbarBackground },
+                              background === backgroundValue
+                                ? [
+                                    styles.activeChip,
+                                    {
+                                      backgroundColor: colorTheme.selectionBackground,
+                                      borderColor: colorTheme.border,
+                                    },
+                                  ]
+                                : null,
+                            ]}>
+                            <Image
+                              source={backgroundOption.image}
+                              resizeMode="cover"
+                              style={styles.backgroundPreviewImage}
+                            />
+                            <Text numberOfLines={2} style={styles.backgroundPreviewText}>
+                              {backgroundOption.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {openTray === 'text' ? (
+            <View
+              style={[
+                styles.tray,
+                {
+                  backgroundColor: colorTheme.screenBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
+              <Text style={styles.trayTitle}>Text style</Text>
+              <View style={styles.highlightDropdownRow}>
+                {['#FFF3A3', '#FFD2E1', '#CFE7FF'].map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    onPress={() => setSectionAccent(color)}
+                    style={[
+                      styles.highlightColorButton,
+                      { backgroundColor: color },
+                      sectionAccent === color ? styles.highlightColorButtonSelected : null,
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {openTray === 'more' ? (
+            <View
+              style={[
+                styles.tray,
+                {
+                  backgroundColor: colorTheme.screenBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
+              <Text style={styles.trayTitle}>More</Text>
+              <View style={styles.backgroundOptionRow}>
+                <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                  <Text style={styles.backgroundChipText}>Save image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.85} onPress={toggleFavorite} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                  <Text style={styles.backgroundChipText}>{isFavorite ? 'Unsave' : 'Save'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                  <Text style={styles.backgroundChipText}>Share</Text>
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
+                  <Text style={styles.backgroundChipText}>Start over</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           <View ref={canvasRef} collapsable={false} style={styles.captureFrame}>
             {background === 'lined' || selectedPrayerBackground ? (
               <ImageBackground
@@ -953,212 +1160,6 @@ export default function PrayerJournalScreen() {
             )}
           </View>
         </ScrollView>
-
-        {openTray === 'stickers' ? (
-          <View
-            style={[
-              styles.tray,
-              {
-                backgroundColor: colorTheme.screenBackground,
-                borderColor: colorTheme.border,
-              },
-            ]}>
-            <Text style={styles.trayTitle}>Decor</Text>
-            <Text style={styles.traySectionTitle}>Quick Stickers</Text>
-            <View style={styles.stickerTrayRow}>
-              {STICKER_CHOICES.map((choice) => (
-                <TouchableOpacity
-                  key={choice}
-                  activeOpacity={0.85}
-                  onPress={() => addSticker(choice)}
-                  style={[
-                    styles.trayStickerButton,
-                    { backgroundColor: colorTheme.toolbarBackground },
-                  ]}>
-                  <Text style={styles.trayStickerEmoji}>{choice}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView
-              style={styles.trayStickerScroll}
-              contentContainerStyle={styles.trayStickerPackList}
-              showsVerticalScrollIndicator={false}>
-              {TEST_UNLOCKED_STICKER_PACKS.map((pack) => (
-                <View key={pack.id} style={styles.trayStickerPackSection}>
-                  <Text style={styles.trayPackTitle}>{pack.title}</Text>
-                  <View style={styles.stickerTrayRow}>
-                    {pack.stickers.map((shopSticker) => (
-                      <TouchableOpacity
-                        key={shopSticker.key}
-                        activeOpacity={0.85}
-                        onPress={() => addShopSticker(shopSticker.key)}
-                        style={[
-                          styles.trayStickerButton,
-                          styles.trayImageStickerButton,
-                          { backgroundColor: colorTheme.toolbarBackground },
-                        ]}>
-                        <Image
-                          source={shopSticker.image}
-                          resizeMode="contain"
-                          style={[
-                            styles.trayStickerImage,
-                            getShopStickerDisplaySize(shopSticker, 52),
-                          ]}
-                        />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {openTray === 'background' ? (
-          <View
-            style={[
-              styles.tray,
-              {
-                backgroundColor: colorTheme.screenBackground,
-                borderColor: colorTheme.border,
-              },
-            ]}>
-            <Text style={styles.trayTitle}>Canvas</Text>
-            <Text style={styles.traySectionTitle}>Basic</Text>
-            <View style={styles.backgroundOptionRow}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => updateBackground('lined')}
-                style={[
-                  styles.backgroundChip,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                  background === 'lined'
-                    ? [
-                        styles.activeChip,
-                        { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                      ]
-                    : null,
-                ]}>
-                <Text style={styles.backgroundChipText}>Lined</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => updateBackground('plain')}
-                style={[
-                  styles.backgroundChip,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                  background === 'plain'
-                    ? [
-                        styles.activeChip,
-                        { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border },
-                      ]
-                    : null,
-                ]}>
-                <Text style={styles.backgroundChipText}>Plain</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              style={styles.backgroundPickerScroll}
-              contentContainerStyle={styles.backgroundPickerContent}
-              showsVerticalScrollIndicator={false}>
-              {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
-                <View key={pack.id} style={styles.backgroundPackSection}>
-                  <Text style={styles.trayPackTitle}>{pack.title}</Text>
-                  <View style={styles.backgroundPreviewGrid}>
-                    {pack.backgrounds.map((backgroundOption) => {
-                      const backgroundValue = getPrayerBackgroundValue(backgroundOption.key);
-
-                      return (
-                        <TouchableOpacity
-                          key={backgroundOption.key}
-                          activeOpacity={0.85}
-                          onPress={() => updateBackground(backgroundValue)}
-                          style={[
-                            styles.backgroundPreviewButton,
-                            { backgroundColor: colorTheme.toolbarBackground },
-                            background === backgroundValue
-                              ? [
-                                  styles.activeChip,
-                                  {
-                                    backgroundColor: colorTheme.selectionBackground,
-                                    borderColor: colorTheme.border,
-                                  },
-                                ]
-                              : null,
-                          ]}>
-                          <Image
-                            source={backgroundOption.image}
-                            resizeMode="cover"
-                            style={styles.backgroundPreviewImage}
-                          />
-                          <Text numberOfLines={2} style={styles.backgroundPreviewText}>
-                            {backgroundOption.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {openTray === 'text' ? (
-          <View
-            style={[
-              styles.tray,
-              {
-                backgroundColor: colorTheme.screenBackground,
-                borderColor: colorTheme.border,
-              },
-            ]}>
-            <Text style={styles.trayTitle}>Text style</Text>
-            <View style={styles.highlightDropdownRow}>
-              {['#FFF3A3', '#FFD2E1', '#CFE7FF'].map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  onPress={() => setSectionAccent(color)}
-                  style={[
-                    styles.highlightColorButton,
-                    { backgroundColor: color },
-                    sectionAccent === color ? styles.highlightColorButtonSelected : null,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {openTray === 'more' ? (
-          <View
-            style={[
-              styles.tray,
-              {
-                backgroundColor: colorTheme.screenBackground,
-                borderColor: colorTheme.border,
-              },
-            ]}>
-            <Text style={styles.trayTitle}>More</Text>
-            <View style={styles.backgroundOptionRow}>
-              <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Text style={styles.backgroundChipText}>Save image</Text>
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.85} onPress={toggleFavorite} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Text style={styles.backgroundChipText}>{isFavorite ? 'Unsave' : 'Save'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Text style={styles.backgroundChipText}>Share</Text>
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Text style={styles.backgroundChipText}>Start over</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
 
       </View>
     </KeyboardAvoidingView>
@@ -1337,19 +1338,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   tray: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 24,
     backgroundColor: '#FFFDF9',
-    borderRadius: 24,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginBottom: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   trayTitle: {
     fontSize: 15,
