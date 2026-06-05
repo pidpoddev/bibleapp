@@ -85,10 +85,7 @@ export default function JournalScreen() {
             params: { newEntryToken: Date.now().toString() },
           }
         : template.key === 'bible-study'
-          ? {
-              pathname: '/bible-study-journal',
-              params: { newEntryToken: Date.now().toString() },
-            }
+          ? `/bible-study-journal?newEntryToken=${Date.now()}`
           : template.key === 'church-day'
             ? '/church-day-journal'
             : template.key === 'daily-devotional'
