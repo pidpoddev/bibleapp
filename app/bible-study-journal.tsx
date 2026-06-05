@@ -104,7 +104,10 @@ function buildPreview(book: string, chapter: string, verse: string, sections: Bi
 
 export default function BibleStudyJournalScreen() {
   const { colorTheme, language } = useAppSettings();
-  const { entryId } = useLocalSearchParams<{ entryId?: string }>();
+  const { entryId, newEntryToken } = useLocalSearchParams<{
+    entryId?: string;
+    newEntryToken?: string;
+  }>();
   const today = useMemo(() => formatEntryDateTime(new Date()), []);
   const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
   const [entryDate, setEntryDate] = useState(today);
@@ -159,7 +162,38 @@ export default function BibleStudyJournalScreen() {
   useEffect(() => {
     const loadEntry = async () => {
       if (!entryId) {
-        await saveEntry('', '', '', defaultSections);
+        const nextId = generateId();
+        const nextDate = formatEntryDateTime(new Date());
+        const nextEntry: BibleStudyEntry = {
+          id: nextId,
+          type: 'bible-study',
+          date: nextDate,
+          book: '',
+          chapter: '',
+          verse: '',
+          sections: defaultSections,
+          stickers: [],
+          background: 'lined',
+          highlightColor: '#FFF3A3',
+          preview: '',
+          isFavorite: false,
+          updatedAt: Date.now(),
+        };
+
+        setCurrentId(nextId);
+        setEntryDate(nextDate);
+        setBook('');
+        setChapter('');
+        setVerse('');
+        setOpenDropdown(null);
+        setSections(defaultSections);
+        setStickers([]);
+        setBackground('lined');
+        setHighlightColor('#FFF3A3');
+        setOpenDecor(null);
+        setIsFavorite(false);
+        await AsyncStorage.setItem(`journal_bible_study_${nextId}`, JSON.stringify(nextEntry));
+        await updateIndex(nextEntry);
         return;
       }
       const storedEntry = await AsyncStorage.getItem(`journal_bible_study_${entryId}`);
@@ -177,7 +211,7 @@ export default function BibleStudyJournalScreen() {
       setIsFavorite(Boolean(parsedEntry.isFavorite));
     };
     void loadEntry();
-  }, [entryId, saveEntry, today]);
+  }, [entryId, newEntryToken, today, updateIndex]);
 
   const updateSection = useCallback((sectionId: string, text: string) => {
     setSections((currentSections) => {
