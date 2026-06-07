@@ -10,6 +10,18 @@ const TODAY_VERSE = {
   verse: 10,
 };
 
+const TYPE = {
+  eyebrow: 11,
+  caption: 12,
+  body: 14,
+  bodyLine: 21,
+  button: 13,
+  cardTitle: 17,
+  cardTitleLine: 23,
+  pageTitle: 25,
+  pageTitleLine: 31,
+} as const;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
@@ -140,17 +152,17 @@ export default function HomeScreen() {
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={() => router.push('/bible')}
-          style={[styles.actionButton, { backgroundColor: colorTheme.tint }]}>
-          <Ionicons name="book" size={18} color="#FFFDF9" />
-          <Text style={styles.primaryActionText}>{t('homeBibleAction')}</Text>
+          accessibilityLabel={t('homeBibleAction')}
+          style={[styles.actionIconButton, { backgroundColor: colorTheme.tint }]}>
+          <Ionicons name="book" size={28} color="#FFFDF9" />
         </TouchableOpacity>
 
         <TouchableOpacity
           activeOpacity={0.88}
           onPress={openPrayerJournal}
-          style={[styles.actionButton, styles.secondaryActionButton, { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border }]}>
-          <Ionicons name="create-outline" size={18} color="#5B514D" />
-          <Text style={styles.secondaryActionText}>{t('homePrayerAction')}</Text>
+          accessibilityLabel={t('homePrayerAction')}
+          style={[styles.actionIconButton, styles.secondaryActionButton, { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border }]}>
+          <Ionicons name="create-outline" size={28} color="#5B514D" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -210,21 +222,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   kicker: {
-    fontSize: 12,
+    fontSize: TYPE.eyebrow,
     fontWeight: '700',
     color: '#9C7988',
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
+    letterSpacing: 0.8,
   },
   title: {
-    fontSize: 29,
-    lineHeight: 36,
+    fontSize: TYPE.pageTitle,
+    lineHeight: TYPE.pageTitleLine,
     fontWeight: '700',
     color: '#1F1F1F',
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: TYPE.body,
+    lineHeight: TYPE.bodyLine,
     color: '#665C57',
     marginTop: 8,
   },
@@ -244,7 +256,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   softPromptText: {
-    fontSize: 12,
+    fontSize: TYPE.button,
     fontWeight: '700',
     color: '#5E5550',
   },
@@ -273,15 +285,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardLabel: {
-    fontSize: 12,
+    fontSize: TYPE.eyebrow,
     fontWeight: '700',
     color: '#8D7C70',
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
+    letterSpacing: 0.8,
   },
   verseText: {
-    fontSize: 22,
-    lineHeight: 31,
+    fontSize: TYPE.cardTitle,
+    lineHeight: TYPE.cardTitleLine,
     fontWeight: '700',
     color: '#1F1F1F',
   },
@@ -292,7 +304,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   reference: {
-    fontSize: 14,
+    fontSize: TYPE.caption,
     fontWeight: '700',
     color: '#8D7C70',
   },
@@ -312,16 +324,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF9F3',
   },
   comfortTitle: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: TYPE.cardTitle,
+    lineHeight: TYPE.cardTitleLine,
     fontWeight: '700',
     color: '#1F1F1F',
     marginTop: 10,
     marginBottom: 6,
   },
   comfortText: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: TYPE.body,
+    lineHeight: TYPE.bodyLine,
     color: '#625853',
   },
   cardLinkRow: {
@@ -331,7 +343,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardLinkText: {
-    fontSize: 13,
+    fontSize: TYPE.button,
     fontWeight: '700',
     color: '#5B514D',
   },
@@ -341,15 +353,14 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
-  actionButton: {
+  actionIconButton: {
     flexGrow: 1,
     flexBasis: 148,
-    minHeight: 48,
-    borderRadius: 24,
+    minHeight: 54,
+    borderRadius: 27,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingHorizontal: 14,
   },
   secondaryActionButton: {
@@ -357,12 +368,12 @@ const styles = StyleSheet.create({
   },
   primaryActionText: {
     color: '#FFFDF9',
-    fontSize: 14,
+    fontSize: TYPE.button,
     fontWeight: '700',
   },
   secondaryActionText: {
     color: '#5B514D',
-    fontSize: 14,
+    fontSize: TYPE.button,
     fontWeight: '700',
   },
   fullWidthAction: {
@@ -378,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     color: '#5B514D',
-    fontSize: 14,
+    fontSize: TYPE.button,
     fontWeight: '700',
   },
   churchNote: {
@@ -400,14 +411,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   churchNoteTitle: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: TYPE.body,
+    lineHeight: 19,
     fontWeight: '700',
     color: '#1F1F1F',
     marginBottom: 3,
   },
   churchNoteBody: {
-    fontSize: 13,
+    fontSize: TYPE.caption,
     lineHeight: 19,
     color: '#6E645E',
   },

@@ -28,9 +28,9 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
-          fontSize: isWeb ? 12 : 11,
+          fontSize: 11,
           fontWeight: '600',
-          lineHeight: 15,
+          lineHeight: 14,
           paddingBottom: isWeb ? 0 : 2,
         },
         tabBarItemStyle: {
@@ -70,7 +70,7 @@ export default function TabLayout() {
               source={HOME_TAB_ICON}
               style={{
                 width: 22,
-                height: 22,
+                height: 21,
                 opacity: focused ? 1 : 0.72,
               }}
               resizeMode="contain"
@@ -87,7 +87,7 @@ export default function TabLayout() {
               source={BIBLE_TAB_ICON}
               style={{
                 width: 22,
-                height: 22,
+                height: 21,
                 opacity: focused ? 1 : 0.72,
               }}
               resizeMode="contain"
@@ -104,7 +104,7 @@ export default function TabLayout() {
               source={JOURNAL_TAB_ICON}
               style={{
                 width: 22,
-                height: 22,
+                height: 21,
                 opacity: focused ? 1 : 0.72,
               }}
               resizeMode="contain"
@@ -121,7 +121,7 @@ export default function TabLayout() {
               source={FAVORITES_TAB_ICON}
               style={{
                 width: 22,
-                height: 22,
+                height: 21,
                 opacity: focused ? 1 : 0.72,
               }}
               resizeMode="contain"
@@ -137,8 +137,8 @@ export default function TabLayout() {
             <Image
               source={SHOP_TAB_ICON}
               style={{
-                width: 25,
-                height: 25,
+                width: 23,
+                height: 23,
                 opacity: focused ? 1 : 0.72,
               }}
               resizeMode="contain"

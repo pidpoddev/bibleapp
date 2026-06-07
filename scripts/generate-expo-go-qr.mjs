@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+import { createRequire } from 'node:module';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+
+const require = createRequire(import.meta.url);
+const QRCode = require('../node_modules/qrcode-terminal/vendor/QRCode');
+const QRErrorCorrectLevel = require('../node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
+
+const expoUrl = 'exp://rcdl.tplinkdns.com:8081';
+const qrSvgPath = resolve('assets/expo-go-rcdl-qr.svg');
+const qrMarkdownPath = resolve('EXPO_GO_QR.md');
+
+const qrcode = new QRCode(-1, QRErrorCorrectLevel.M);
+qrcode.addData(expoUrl);
+qrcode.make();
+
+const moduleCount = qrcode.getModuleCount();
+const quietZone = 4;
+const moduleSize = 10;
+const size = (moduleCount + quietZone * 2) * moduleSize;
+const rects = [];
+
+for (let row = 0; row < moduleCount; row += 1) {
+  for (let column = 0; column < moduleCount; column += 1) {
+    if (qrcode.isDark(row, column)) {
+      rects.push(
+        `<rect x="${(column + quietZone) * moduleSize}" y="${(row + quietZone) * moduleSize}" width="${moduleSize}" height="${moduleSize}"/>`
+      );
+    }
+  }
+}
+
+const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Expo Go QR code for ${expoUrl}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <g fill="#000000">
+    ${rects.join('\n    ')}
+  </g>
+</svg>
+`;
+
+const markdown = `# Expo Go QR Code
+
+Scan this QR code with Expo Go:
+
+![Expo Go QR code](assets/expo-go-rcdl-qr.svg)
+
+Expo Go URL:
+
+\`\`\`text
+${expoUrl}
+\`\`\`
+`;
+
+mkdirSync(dirname(qrSvgPath), { recursive: true });
+writeFileSync(qrSvgPath, svg);
+writeFileSync(qrMarkdownPath, markdown);
+
+console.log(`Wrote ${qrSvgPath}`);
+console.log(`Wrote ${qrMarkdownPath}`);

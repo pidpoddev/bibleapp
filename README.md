@@ -16,6 +16,16 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Remote Expo Go testing
+
+For the TP-Link route and Expo Go, start the server with:
+
+```bash
+npm run web:remote
+```
+
+This keeps Expo on port `8081`, advertises `rcdl.tplinkdns.com` to Expo Go, and uses anonymous offline manifests so the server does not stop on the `Log in` / `Proceed anonymously` prompt. See [EXPO_WEB_RUNBOOK.md](EXPO_WEB_RUNBOOK.md) for the full runbook.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
