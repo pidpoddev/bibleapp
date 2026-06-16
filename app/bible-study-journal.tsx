@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -27,6 +28,16 @@ type BibleStudyEntry = {
   preview: string;
   isFavorite: boolean;
   updatedAt: number;
+};
+
+type BibleStudyUndoSnapshot = {
+  book: string;
+  chapter: string;
+  verse: string;
+  sections: BibleStudySection[];
+  stickers: DecorSticker[];
+  background: string;
+  highlightColor: string;
 };
 
 const MIN_INPUT_HEIGHT = 72;
@@ -122,6 +133,7 @@ export default function BibleStudyJournalScreen() {
   const [highlightColor, setHighlightColor] = useState<string>('#FFF3A3');
   const [openDecor, setOpenDecor] = useState<'bg' | 'sticker' | 'highlight' | 'more' | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [undoHistory, setUndoHistory] = useState<BibleStudyUndoSnapshot[]>([]);
 
   const bookOptions = useMemo(() => getBooks(), []);
   const chapterOptions = useMemo(() => (book ? getChapters(book).map(String) : []), [book]);
@@ -159,6 +171,43 @@ export default function BibleStudyJournalScreen() {
     await updateIndex(entry);
   }, [background, currentId, entryDate, highlightColor, isFavorite, stickers, updateIndex]);
 
+  const recordUndoSnapshot = useCallback(() => {
+    setUndoHistory((currentHistory) => [
+      ...currentHistory.slice(-19),
+      { book, chapter, verse, sections, stickers, background, highlightColor },
+    ]);
+  }, [background, book, chapter, highlightColor, sections, stickers, verse]);
+
+  const undoLastEdit = useCallback(() => {
+    setUndoHistory((currentHistory) => {
+      const previous = currentHistory[currentHistory.length - 1];
+
+      if (!previous) {
+        return currentHistory;
+      }
+
+      setBook(previous.book);
+      setChapter(previous.chapter);
+      setVerse(previous.verse);
+      setSections(previous.sections);
+      setStickers(previous.stickers);
+      setBackground(previous.background);
+      setHighlightColor(previous.highlightColor);
+      setOpenDecor(null);
+      void saveEntry(
+        previous.book,
+        previous.chapter,
+        previous.verse,
+        previous.sections,
+        previous.stickers,
+        previous.background,
+        previous.highlightColor
+      );
+
+      return currentHistory.slice(0, -1);
+    });
+  }, [saveEntry]);
+
   useEffect(() => {
     const loadEntry = async () => {
       if (!entryId) {
@@ -192,6 +241,7 @@ export default function BibleStudyJournalScreen() {
         setHighlightColor('#FFF3A3');
         setOpenDecor(null);
         setIsFavorite(false);
+        setUndoHistory([]);
         await AsyncStorage.setItem(`journal_bible_study_${nextId}`, JSON.stringify(nextEntry));
         await updateIndex(nextEntry);
         return;
@@ -209,19 +259,22 @@ export default function BibleStudyJournalScreen() {
       setBackground(typeof parsedEntry.background === 'string' ? parsedEntry.background : 'lined');
       setHighlightColor(typeof parsedEntry.highlightColor === 'string' ? parsedEntry.highlightColor : '#FFF3A3');
       setIsFavorite(Boolean(parsedEntry.isFavorite));
+      setUndoHistory([]);
     };
     void loadEntry();
   }, [entryId, newEntryToken, today, updateIndex]);
 
   const updateSection = useCallback((sectionId: string, text: string) => {
+    recordUndoSnapshot();
     setSections((currentSections) => {
       const updatedSections = currentSections.map((section) => section.id === sectionId ? { ...section, text } : section);
       void saveEntry(book, chapter, verse, updatedSections);
       return updatedSections;
     });
-  }, [book, chapter, saveEntry, verse]);
+  }, [book, chapter, recordUndoSnapshot, saveEntry, verse]);
 
   const addEmojiSticker = (emoji: string) => {
+    recordUndoSnapshot();
     const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }];
     setStickers(next);
     setOpenDecor(null);
@@ -229,6 +282,7 @@ export default function BibleStudyJournalScreen() {
   };
 
   const addShopSticker = (imageKey: string) => {
+    recordUndoSnapshot();
     const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey }];
     setStickers(next);
     setOpenDecor(null);
@@ -236,6 +290,7 @@ export default function BibleStudyJournalScreen() {
   };
 
   const removeSticker = (id: string) => {
+    recordUndoSnapshot();
     const next = stickers.filter((sticker) => sticker.id !== id);
     setStickers(next);
     void saveEntry(book, chapter, verse, sections, next);
@@ -265,12 +320,14 @@ export default function BibleStudyJournalScreen() {
   };
 
   const addNoteSection = () => {
+    recordUndoSnapshot();
     const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
 
   const resetJournal = () => {
+    recordUndoSnapshot();
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -342,22 +399,29 @@ export default function BibleStudyJournalScreen() {
             <Image source={JOURNAL_TOOLBAR_ICONS.more} style={styles.decorButtonIcon} resizeMode="contain" />
             <Text style={styles.decorButtonText}>More</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            disabled={undoHistory.length === 0}
+            style={[styles.decorButton, undoHistory.length === 0 ? styles.decorButtonDisabled : null]}
+            onPress={undoLastEdit}>
+            <Ionicons name="arrow-undo-outline" size={20} color="#4A403C" />
+            <Text style={styles.decorButtonText}>Undo</Text>
+          </TouchableOpacity>
         </ScrollView>
 
         {openDecor === 'bg' ? (
           <View style={styles.decorPanel}>
             <Text style={styles.panelSectionTitle}>Basic</Text>
             <View style={styles.panelItemRow}>
-              <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
             </View>
             {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
               <View key={pack.id} style={styles.panelSection}>
                 <Text style={styles.panelSectionTitle}>{pack.title}</Text>
                 <View style={styles.panelItemRow}>
                   {pack.backgrounds.map((bg) => (
-                    <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}>
-                      <Image source={bg.image} style={styles.bgPreview} />
+                    <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { recordUndoSnapshot(); const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}>
+                      <Image source={bg.previewImage ?? bg.image} style={styles.bgPreview} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -378,7 +442,7 @@ export default function BibleStudyJournalScreen() {
                 <View style={styles.panelItemRow}>
                   {pack.stickers.map((sticker) => (
                     <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => addShopSticker(sticker.key)}>
-                      <Image source={sticker.image} style={styles.stickerPreview} />
+                      <Image source={sticker.previewImage ?? sticker.image} style={styles.stickerPreview} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -390,20 +454,23 @@ export default function BibleStudyJournalScreen() {
         {openDecor === 'highlight' ? (
           <View style={styles.decorPanel}>
             {HIGHLIGHTER_COLORS.map((color) => (
-              <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />
+              <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { recordUndoSnapshot(); setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />
             ))}
           </View>
         ) : null}
         {openDecor === 'more' ? (
           <View style={styles.decorPanel}>
-            <TouchableOpacity style={styles.simpleChip} onPress={() => void saveJournalImage()}>
-              <Text>Save image</Text>
+            <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void saveJournalImage()}>
+              <Ionicons name="download-outline" size={16} color="#5B514D" />
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.simpleChip} onPress={() => void shareJournalImage()}>
-              <Text>Share</Text>
+            <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}>
+              <Ionicons name="share-outline" size={16} color="#5B514D" />
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.simpleChip} onPress={resetJournal}>
-              <Text>Start over</Text>
+            <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={resetJournal}>
+              <Ionicons name="arrow-redo-outline" size={16} color="#5B514D" />
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -498,6 +565,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D4C2B8',
   },
+  decorButtonDisabled: {
+    opacity: 0.45,
+  },
   decorButtonIcon: { width: 20, height: 20 },
   decorButtonText: { fontSize: 12, fontWeight: '600', color: '#4A403C' },
   decorPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
@@ -505,6 +575,8 @@ const styles = StyleSheet.create({
   panelSectionTitle: { width: '100%', fontSize: 12, fontWeight: '700', color: '#6B5F57', marginTop: 2, marginBottom: 6 },
   panelItemRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   simpleChip: { borderRadius: 12, backgroundColor: '#F8F5F2', paddingHorizontal: 10, paddingVertical: 8 },
+  moreActionChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexBasis: '30%', flexGrow: 1, minHeight: 36, gap: 6 },
+  moreActionText: { flexShrink: 1, fontSize: 12, fontWeight: '600', color: '#4A403C' },
   emojiChip: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8F5F2', alignItems: 'center', justifyContent: 'center' },
   emojiText: { fontSize: 21 },
   colorChip: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#D7CCC5' },

@@ -7,31 +7,42 @@ const require = createRequire(import.meta.url);
 const QRCode = require('../node_modules/qrcode-terminal/vendor/QRCode');
 const QRErrorCorrectLevel = require('../node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
 
-const expoUrl = 'exp://rcdl.tplinkdns.com:8081';
-const qrSvgPath = resolve('assets/expo-go-rcdl-qr.svg');
+const expoUrls = [
+  {
+    label: 'Local network',
+    url: 'exp://192.168.70.70:8081',
+    svgPath: resolve('assets/expo-go-local-qr.svg'),
+  },
+  {
+    label: 'External DNS',
+    url: 'exp://rcdl.tplinkdns.com:8081',
+    svgPath: resolve('assets/expo-go-external-qr.svg'),
+  },
+];
 const qrMarkdownPath = resolve('EXPO_GO_QR.md');
 
-const qrcode = new QRCode(-1, QRErrorCorrectLevel.M);
-qrcode.addData(expoUrl);
-qrcode.make();
+function createQrSvg(expoUrl) {
+  const qrcode = new QRCode(-1, QRErrorCorrectLevel.M);
+  qrcode.addData(expoUrl);
+  qrcode.make();
 
-const moduleCount = qrcode.getModuleCount();
-const quietZone = 4;
-const moduleSize = 10;
-const size = (moduleCount + quietZone * 2) * moduleSize;
-const rects = [];
+  const moduleCount = qrcode.getModuleCount();
+  const quietZone = 4;
+  const moduleSize = 10;
+  const size = (moduleCount + quietZone * 2) * moduleSize;
+  const rects = [];
 
-for (let row = 0; row < moduleCount; row += 1) {
-  for (let column = 0; column < moduleCount; column += 1) {
-    if (qrcode.isDark(row, column)) {
-      rects.push(
-        `<rect x="${(column + quietZone) * moduleSize}" y="${(row + quietZone) * moduleSize}" width="${moduleSize}" height="${moduleSize}"/>`
-      );
+  for (let row = 0; row < moduleCount; row += 1) {
+    for (let column = 0; column < moduleCount; column += 1) {
+      if (qrcode.isDark(row, column)) {
+        rects.push(
+          `<rect x="${(column + quietZone) * moduleSize}" y="${(row + quietZone) * moduleSize}" width="${moduleSize}" height="${moduleSize}"/>`
+        );
+      }
     }
   }
-}
 
-const svg = `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Expo Go QR code for ${expoUrl}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <g fill="#000000">
@@ -39,23 +50,33 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
 </svg>
 `;
+}
 
-const markdown = `# Expo Go QR Code
+for (const expo of expoUrls) {
+  mkdirSync(dirname(expo.svgPath), { recursive: true });
+  writeFileSync(expo.svgPath, createQrSvg(expo.url));
+}
 
-Scan this QR code with Expo Go:
+const markdown = `# Expo Go QR Codes
 
-![Expo Go QR code](assets/expo-go-rcdl-qr.svg)
+Scan with Expo Go.
 
-Expo Go URL:
+## Local Network
 
-\`\`\`text
-${expoUrl}
-\`\`\`
+![Local Expo Go QR code](assets/expo-go-local-qr.svg)
+
+Expo Go URL: \`exp://192.168.70.70:8081\`
+
+## External DNS
+
+![External DNS Expo Go QR code](assets/expo-go-external-qr.svg)
+
+Expo Go URL: \`exp://rcdl.tplinkdns.com:8081\`
 `;
 
-mkdirSync(dirname(qrSvgPath), { recursive: true });
-writeFileSync(qrSvgPath, svg);
 writeFileSync(qrMarkdownPath, markdown);
 
-console.log(`Wrote ${qrSvgPath}`);
+for (const expo of expoUrls) {
+  console.log(`Wrote ${expo.svgPath}`);
+}
 console.log(`Wrote ${qrMarkdownPath}`);

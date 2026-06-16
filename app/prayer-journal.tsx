@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -71,6 +72,13 @@ type PrayerEntry = {
   preview: string;
   isFavorite: boolean;
   updatedAt: number;
+};
+
+type PrayerUndoSnapshot = {
+  sections: PrayerSection[];
+  stickers: PrayerSticker[];
+  background: PrayerBackground;
+  sectionAccent: string;
 };
 
 const SHOP_BACKGROUND_PREFIX = 'shop:';
@@ -409,6 +417,7 @@ export default function PrayerJournalScreen() {
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
   const [openTray, setOpenTray] = useState<'text' | 'stickers' | 'background' | 'more' | null>(null);
   const [sectionAccent, setSectionAccent] = useState('#E8BFCF');
+  const [undoHistory, setUndoHistory] = useState<PrayerUndoSnapshot[]>([]);
   const [sectionsHeight, setSectionsHeight] = useState(0);
   const [isSharing, setIsSharing] = useState(false);
   const canvasRef = useRef<View>(null);
@@ -486,6 +495,33 @@ export default function PrayerJournalScreen() {
     [currentId, entryDate, isFavorite, updateIndex]
   );
 
+  const recordUndoSnapshot = useCallback(() => {
+    setUndoHistory((currentHistory) => [
+      ...currentHistory.slice(-19),
+      { sections, stickers, background, sectionAccent },
+    ]);
+  }, [background, sectionAccent, sections, stickers]);
+
+  const undoLastEdit = useCallback(() => {
+    setUndoHistory((currentHistory) => {
+      const previous = currentHistory[currentHistory.length - 1];
+
+      if (!previous) {
+        return currentHistory;
+      }
+
+      setSections(previous.sections);
+      setStickers(previous.stickers);
+      setBackground(previous.background);
+      setSectionAccent(previous.sectionAccent);
+      setSelectedStickerId(null);
+      setOpenTray(null);
+      saveEntry(previous.sections, previous.stickers, previous.background);
+
+      return currentHistory.slice(0, -1);
+    });
+  }, [saveEntry]);
+
   useEffect(() => {
     const loadEntry = async () => {
       try {
@@ -501,6 +537,7 @@ export default function PrayerJournalScreen() {
           setIsFavorite(false);
           setSelectedStickerId(null);
           setOpenTray(null);
+          setUndoHistory([]);
 
           const entry: PrayerEntry = {
             id: nextId,
@@ -548,6 +585,8 @@ export default function PrayerJournalScreen() {
         if (typeof parsedEntry.background === 'string') {
           setBackground(parsedEntry.background);
         }
+
+        setUndoHistory([]);
       } catch (error) {
         console.log('Error loading journal:', error);
       }
@@ -557,6 +596,7 @@ export default function PrayerJournalScreen() {
   }, [entryId, newEntryToken, today, updateIndex]);
 
   const updateSection = (index: number, text: string) => {
+    recordUndoSnapshot();
     setSections((currentSections) => {
       const updatedSections = currentSections.map((section, sectionIndex) =>
         sectionIndex === index ? { ...section, text } : section
@@ -568,6 +608,7 @@ export default function PrayerJournalScreen() {
   };
 
   const addNoteSection = () => {
+    recordUndoSnapshot();
     const updatedSections = [
       { id: generateId(), label: 'Note', text: '' },
       ...sections,
@@ -578,6 +619,7 @@ export default function PrayerJournalScreen() {
   };
 
   const resetPrayerJournal = () => {
+    recordUndoSnapshot();
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -591,6 +633,7 @@ export default function PrayerJournalScreen() {
   };
 
   const bringToFront = (id: string) => {
+    recordUndoSnapshot();
     setStickers((currentStickers) => {
       const nextDepth = Math.max(
         0,
@@ -607,6 +650,7 @@ export default function PrayerJournalScreen() {
   };
 
   const addSticker = (stickerUri: string) => {
+    recordUndoSnapshot();
     const newSticker: PrayerSticker = {
       id: Date.now().toString(),
       uri: stickerUri,
@@ -625,6 +669,7 @@ export default function PrayerJournalScreen() {
   };
 
   const addShopSticker = (imageKey: string) => {
+    recordUndoSnapshot();
     const newSticker: PrayerSticker = {
       id: Date.now().toString(),
       uri: '',
@@ -647,6 +692,7 @@ export default function PrayerJournalScreen() {
     id: string,
     updates: Partial<Pick<PrayerSticker, 'x' | 'y' | 'scale'>>
   ) => {
+    recordUndoSnapshot();
     setStickers((currentStickers) => {
       const updatedStickers = currentStickers.map((sticker) =>
         sticker.id === id ? { ...sticker, ...updates } : sticker
@@ -658,6 +704,7 @@ export default function PrayerJournalScreen() {
   };
 
   const deleteSticker = (id: string) => {
+    recordUndoSnapshot();
     setStickers((currentStickers) => {
       const updatedStickers = currentStickers.filter((sticker) => sticker.id !== id);
       saveEntry(sections, updatedStickers, background);
@@ -669,6 +716,7 @@ export default function PrayerJournalScreen() {
   };
 
   const updateBackground = (nextBackground: PrayerBackground) => {
+    recordUndoSnapshot();
     setBackground(nextBackground);
     setOpenTray(null);
     saveEntry(sections, stickers, nextBackground);
@@ -755,6 +803,9 @@ export default function PrayerJournalScreen() {
             </Text>
           </View>
           <Text style={styles.date}>{entryDate}</Text>
+          <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}>
+            <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
+          </TouchableOpacity>
 
           <ScrollView
             horizontal
@@ -850,6 +901,19 @@ export default function PrayerJournalScreen() {
               <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
               <Text style={styles.toolbarLabel}>More</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={undoHistory.length === 0}
+              onPress={undoLastEdit}
+              style={[
+                styles.toolbarButton,
+                { backgroundColor: colorTheme.toolbarBackground },
+                undoHistory.length === 0 ? styles.toolbarButtonDisabled : null,
+              ]}>
+              <Ionicons name="arrow-undo-outline" size={22} color="#7A6F66" />
+              <Text style={styles.toolbarLabel}>Undo</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {openTray === 'stickers' ? (
@@ -897,7 +961,7 @@ export default function PrayerJournalScreen() {
                             { backgroundColor: colorTheme.toolbarBackground },
                           ]}>
                           <Image
-                            source={shopSticker.image}
+                            source={shopSticker.previewImage ?? shopSticker.image}
                             resizeMode="contain"
                             style={[
                               styles.trayStickerImage,
@@ -988,7 +1052,7 @@ export default function PrayerJournalScreen() {
                                 : null,
                             ]}>
                             <Image
-                              source={backgroundOption.image}
+                              source={backgroundOption.previewImage ?? backgroundOption.image}
                               resizeMode="cover"
                               style={styles.backgroundPreviewImage}
                             />
@@ -1019,7 +1083,10 @@ export default function PrayerJournalScreen() {
                 {['#FFF3A3', '#FFD2E1', '#CFE7FF'].map((color) => (
                   <TouchableOpacity
                     key={color}
-                    onPress={() => setSectionAccent(color)}
+                    onPress={() => {
+                      recordUndoSnapshot();
+                      setSectionAccent(color);
+                    }}
                     style={[
                       styles.highlightColorButton,
                       { backgroundColor: color },
@@ -1032,29 +1099,19 @@ export default function PrayerJournalScreen() {
           ) : null}
 
           {openTray === 'more' ? (
-            <View
-              style={[
-                styles.tray,
-                {
-                  backgroundColor: colorTheme.screenBackground,
-                  borderColor: colorTheme.border,
-                },
-              ]}>
-              <Text style={styles.trayTitle}>More</Text>
-              <View style={styles.backgroundOptionRow}>
-                <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                  <Text style={styles.backgroundChipText}>Save image</Text>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.85} onPress={toggleFavorite} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                  <Text style={styles.backgroundChipText}>{isFavorite ? 'Unsave' : 'Save'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                  <Text style={styles.backgroundChipText}>Share</Text>
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={[styles.backgroundChip, { backgroundColor: colorTheme.toolbarBackground }]}>
-                  <Text style={styles.backgroundChipText}>Start over</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.moreActionPanel}>
+              <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={styles.moreActionChip}>
+                <Ionicons name="download-outline" size={16} color="#5B514D" />
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={styles.moreActionChip}>
+                <Ionicons name="share-outline" size={16} color="#5B514D" />
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={styles.moreActionChip}>
+                <Ionicons name="arrow-redo-outline" size={16} color="#5B514D" />
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -1195,6 +1252,19 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginTop: 8,
     marginBottom: 12,
+  },
+  favoriteButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 16,
+    backgroundColor: '#F3EDE8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  favoriteButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
   },
   captureFrame: {
     width: '100%',
@@ -1405,6 +1475,7 @@ const styles = StyleSheet.create({
   },
   backgroundOptionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   backgroundChip: {
@@ -1475,6 +1546,9 @@ const styles = StyleSheet.create({
   toolbarButtonActive: {
     backgroundColor: '#ECE2D8',
   },
+  toolbarButtonDisabled: {
+    opacity: 0.45,
+  },
   toolbarIcon: {
     fontSize: 22,
   },
@@ -1504,5 +1578,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#7A6F66',
     fontWeight: '600',
+  },
+  moreActionPanel: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  moreActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexBasis: '30%',
+    flexGrow: 1,
+    minHeight: 36,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  moreActionText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4A403C',
   },
 });

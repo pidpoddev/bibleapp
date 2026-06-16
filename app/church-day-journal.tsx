@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -14,6 +15,7 @@ import { getShopSticker, TEST_UNLOCKED_STICKER_PACKS } from '@/utils/shop-sticke
 type ChurchDaySection = { id: string; label: string; text: string };
 type DecorSticker = { id: string; emoji?: string; imageKey?: string };
 type ChurchDayEntry = { id: string; type: 'church-day'; date: string; book: string; chapter: string; verse: string; sections: ChurchDaySection[]; stickers?: DecorSticker[]; background?: string; highlightColor?: string; preview: string; isFavorite: boolean; updatedAt: number; };
+type ChurchDayUndoSnapshot = { book: string; chapter: string; verse: string; sections: ChurchDaySection[]; stickers: DecorSticker[]; background: string; highlightColor: string };
 
 const MIN_INPUT_HEIGHT = 72;
 const generateId = () => Date.now().toString();
@@ -53,7 +55,7 @@ const buildPreview = (book: string, chapter: string, verse: string, sections: Ch
 export default function ChurchDayJournalScreen() {
   const { colorTheme, language, t } = useAppSettings();
   const router = useRouter();
-  const { entryId } = useLocalSearchParams<{ entryId?: string }>();
+  const { entryId, newEntryToken } = useLocalSearchParams<{ entryId?: string; newEntryToken?: string }>();
   const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
   const [entryDate, setEntryDate] = useState(() => formatEntryDateTime(new Date()));
   const [book, setBook] = useState('');
@@ -67,6 +69,7 @@ export default function ChurchDayJournalScreen() {
   const [highlightColor, setHighlightColor] = useState<string>('#FFF3A3');
   const [openDecor, setOpenDecor] = useState<'bg' | 'sticker' | 'highlight' | 'more' | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [undoHistory, setUndoHistory] = useState<ChurchDayUndoSnapshot[]>([]);
 
   const bookOptions = useMemo(() => getBooks(), []);
   const chapterOptions = useMemo(() => (book ? getChapters(book).map(String) : []), [book]);
@@ -90,6 +93,27 @@ export default function ChurchDayJournalScreen() {
     await updateIndex(entry);
   }, [background, currentId, entryDate, highlightColor, isFavorite, stickers, updateIndex]);
 
+  const recordUndoSnapshot = useCallback(() => {
+    setUndoHistory((currentHistory) => [...currentHistory.slice(-19), { book, chapter, verse, sections, stickers, background, highlightColor }]);
+  }, [background, book, chapter, highlightColor, sections, stickers, verse]);
+
+  const undoLastEdit = useCallback(() => {
+    setUndoHistory((currentHistory) => {
+      const previous = currentHistory[currentHistory.length - 1];
+      if (!previous) return currentHistory;
+      setBook(previous.book);
+      setChapter(previous.chapter);
+      setVerse(previous.verse);
+      setSections(previous.sections);
+      setStickers(previous.stickers);
+      setBackground(previous.background);
+      setHighlightColor(previous.highlightColor);
+      setOpenDecor(null);
+      void saveEntry(previous.book, previous.chapter, previous.verse, previous.sections, previous.stickers, previous.background, previous.highlightColor);
+      return currentHistory.slice(0, -1);
+    });
+  }, [saveEntry]);
+
   useEffect(() => {
     const load = async () => {
       if (!entryId) { await saveEntry('', '', '', defaultSections); return; }
@@ -104,11 +128,13 @@ export default function ChurchDayJournalScreen() {
       setBackground(typeof parsed.background === 'string' ? parsed.background : 'lined');
       setHighlightColor(typeof parsed.highlightColor === 'string' ? parsed.highlightColor : '#FFF3A3');
       setIsFavorite(Boolean(parsed.isFavorite));
+      setUndoHistory([]);
     };
     void load();
-  }, [entryId, saveEntry]);
+  }, [entryId, newEntryToken, saveEntry]);
 
   const updateSection = (id: string, text: string) => {
+    recordUndoSnapshot();
     setSections((current) => {
       const next = current.map((section) => (section.id === id ? { ...section, text } : section));
       void saveEntry(book, chapter, verse, next);
@@ -126,12 +152,14 @@ export default function ChurchDayJournalScreen() {
   };
 
   const addNoteSection = () => {
+    recordUndoSnapshot();
     const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
 
   const resetJournal = () => {
+    recordUndoSnapshot();
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -185,16 +213,20 @@ export default function ChurchDayJournalScreen() {
             <Image source={JOURNAL_TOOLBAR_ICONS.more} style={styles.decorButtonIcon} resizeMode="contain" />
             <Text style={styles.decorButtonText}>More</Text>
           </TouchableOpacity>
+          <TouchableOpacity disabled={undoHistory.length === 0} style={[styles.decorButton, undoHistory.length === 0 ? styles.decorButtonDisabled : null]} onPress={undoLastEdit}>
+            <Ionicons name="arrow-undo-outline" size={20} color="#4A403C" />
+            <Text style={styles.decorButtonText}>Undo</Text>
+          </TouchableOpacity>
         </ScrollView>
-        {openDecor === 'bg' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Basic</Text><View style={styles.panelItemRow}><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity></View>{TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.backgrounds.map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
-        {openDecor === 'sticker' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Quick Stickers</Text><View style={styles.panelItemRow}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}</View>{TEST_UNLOCKED_STICKER_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.stickers.map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
-        {openDecor === 'highlight' ? <View style={styles.decorPanel}>{HIGHLIGHTER_COLORS.map((color) => <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />)}</View> : null}
-        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={styles.simpleChip} onPress={() => void saveJournalImage()}><Text>Save image</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => void shareJournalImage()}><Text>Share</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={resetJournal}><Text>Start over</Text></TouchableOpacity></View> : null}
+        {openDecor === 'bg' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Basic</Text><View style={styles.panelItemRow}><TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity></View>{TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.backgrounds.map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { recordUndoSnapshot(); const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.previewImage ?? bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
+        {openDecor === 'sticker' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Quick Stickers</Text><View style={styles.panelItemRow}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { recordUndoSnapshot(); const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}</View>{TEST_UNLOCKED_STICKER_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.stickers.map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { recordUndoSnapshot(); const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.previewImage ?? sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
+        {openDecor === 'highlight' ? <View style={styles.decorPanel}>{HIGHLIGHTER_COLORS.map((color) => <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { recordUndoSnapshot(); setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />)}</View> : null}
+        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void saveJournalImage()}><Ionicons name="download-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text></TouchableOpacity><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}><Ionicons name="share-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text></TouchableOpacity><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={resetJournal}><Ionicons name="arrow-redo-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text></TouchableOpacity></View> : null}
 
         <View style={styles.dropdownRow}>{[{ key: 'book' as const, label: 'Book', value: book || 'Select', options: bookOptions, onPick: (value: string) => { setBook(value); setChapter(''); setVerse(''); void saveEntry(value, '', '', sections); } }, { key: 'chapter' as const, label: 'Chapter', value: chapter || 'Select', options: chapterOptions, onPick: (value: string) => { setChapter(value); setVerse(''); void saveEntry(book, value, '', sections); } }, { key: 'verse' as const, label: 'Verse', value: verse || 'Select', options: verseOptions, onPick: (value: string) => { setVerse(value); void saveEntry(book, chapter, value, sections); } }].map((dropdown) => (<View key={dropdown.key} style={styles.dropdownContainer}><Pressable onPress={() => setOpenDropdown((current) => current === dropdown.key ? null : dropdown.key)} style={[styles.dropdownButton, { backgroundColor: colorTheme.cardBackground }]}><Text style={styles.dropdownLabel}>{dropdown.label}</Text><Text numberOfLines={1} style={styles.dropdownValue}>{dropdown.value}</Text></Pressable>{openDropdown === dropdown.key ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{dropdown.options.map((option) => <Pressable key={option} onPress={() => { dropdown.onPick(option); setOpenDropdown(null); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{option}</Text></Pressable>)}</ScrollView></View> : null}</View>))}</View>
 
         <View ref={canvasRef} collapsable={false}><ImageBackground source={selectedBg ? selectedBg.image : require('../assets/images/lined-paper.png')} resizeMode={selectedBg ? 'cover' : 'stretch'} style={[styles.canvasWrap, background === 'plain' ? { backgroundColor: colorTheme.paperBackground } : null]}>
-          {stickers.length ? <View style={styles.stickerRow}>{stickers.map((sticker) => <Pressable key={sticker.id} onPress={() => { const next = stickers.filter((item) => item.id !== sticker.id); setStickers(next); void saveEntry(book, chapter, verse, sections, next); }} style={styles.stickerItem}>{sticker.imageKey && getShopSticker(sticker.imageKey) ? <Image source={getShopSticker(sticker.imageKey)!.image} style={styles.inlineStickerImage} resizeMode="contain" /> : <Text style={styles.inlineStickerEmoji}>{sticker.emoji}</Text>}</Pressable>)}</View> : null}
+          {stickers.length ? <View style={styles.stickerRow}>{stickers.map((sticker) => <Pressable key={sticker.id} onPress={() => { recordUndoSnapshot(); const next = stickers.filter((item) => item.id !== sticker.id); setStickers(next); void saveEntry(book, chapter, verse, sections, next); }} style={styles.stickerItem}>{sticker.imageKey && getShopSticker(sticker.imageKey) ? <Image source={getShopSticker(sticker.imageKey)!.image} style={styles.inlineStickerImage} resizeMode="contain" /> : <Text style={styles.inlineStickerEmoji}>{sticker.emoji}</Text>}</Pressable>)}</View> : null}
           {book && chapter && verse ? <TouchableOpacity activeOpacity={0.88} onPress={() => router.push({ pathname: '/studio', params: { selectedBook: book, selectedChapter: chapter, selectedVerse: verse } })} style={[styles.verseCard, { backgroundColor: colorTheme.paperBackground }]}><Text style={styles.verseRef}>{`${book} ${chapter}:${verse}`}</Text><Text style={styles.verseText}>{verseText}</Text><Text style={styles.decorateLink}>Decorate this verse in Studio</Text></TouchableOpacity> : null}
           {sections.map((section) => <Field key={section.id} label={section.label} value={section.text} onChangeText={(text) => updateSection(section.id, text)} cardBackground={colorTheme.cardBackground} accentColor={highlightColor} />)}
         </ImageBackground></View>
@@ -210,7 +242,20 @@ const styles = StyleSheet.create({
   titleIcon: { width: 36, height: 36 },
   title: { fontSize: 26, fontWeight: '700', color: '#1F1F1F' },
   date: { marginTop: 8, marginBottom: 16, color: '#7A6F66', fontSize: 13 },
-  decorToolbar: { flexDirection: 'row', gap: 8, marginBottom: 10 }, decorButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3EDE8', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 9 }, decorButtonActive: { backgroundColor: '#E8DCD4', borderWidth: 1, borderColor: '#D4C2B8' }, decorButtonIcon: { width: 20, height: 20 }, decorButtonText: { fontSize: 12, fontWeight: '600', color: '#4A403C' }, decorPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }, panelSection: { width: '100%' }, panelSectionTitle: { width: '100%', fontSize: 12, fontWeight: '700', color: '#6B5F57', marginTop: 2, marginBottom: 6 }, panelItemRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }, simpleChip: { borderRadius: 12, backgroundColor: '#F8F5F2', paddingHorizontal: 10, paddingVertical: 8 }, emojiChip: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8F5F2', alignItems: 'center', justifyContent: 'center' }, emojiText: { fontSize: 21 }, colorChip: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#D7CCC5' }, colorChipSelected: { borderWidth: 2, borderColor: '#1F1F1F' }, stickerChip: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8DCD4', alignItems: 'center', justifyContent: 'center' }, stickerPreview: { width: 40, height: 40 }, bgChip: { width: 58, height: 42, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E8DCD4' }, bgPreview: { width: '100%', height: '100%' },
+  favoriteButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 16,
+    backgroundColor: '#F3EDE8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  favoriteButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
+  },
+  decorToolbar: { flexDirection: 'row', gap: 8, marginBottom: 10 }, decorButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3EDE8', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 9 }, decorButtonActive: { backgroundColor: '#E8DCD4', borderWidth: 1, borderColor: '#D4C2B8' }, decorButtonDisabled: { opacity: 0.45 }, decorButtonIcon: { width: 20, height: 20 }, decorButtonText: { fontSize: 12, fontWeight: '600', color: '#4A403C' }, decorPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }, panelSection: { width: '100%' }, panelSectionTitle: { width: '100%', fontSize: 12, fontWeight: '700', color: '#6B5F57', marginTop: 2, marginBottom: 6 }, panelItemRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 }, simpleChip: { borderRadius: 12, backgroundColor: '#F8F5F2', paddingHorizontal: 10, paddingVertical: 8 }, moreActionChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexBasis: '30%', flexGrow: 1, minHeight: 36, gap: 6 }, moreActionText: { flexShrink: 1, fontSize: 12, fontWeight: '600', color: '#4A403C' }, emojiChip: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F8F5F2', alignItems: 'center', justifyContent: 'center' }, emojiText: { fontSize: 21 }, colorChip: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#D7CCC5' }, colorChipSelected: { borderWidth: 2, borderColor: '#1F1F1F' }, stickerChip: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8DCD4', alignItems: 'center', justifyContent: 'center' }, stickerPreview: { width: 40, height: 40 }, bgChip: { width: 58, height: 42, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E8DCD4' }, bgPreview: { width: '100%', height: '100%' },
   dropdownRow: { flexDirection: 'row', gap: 8, marginBottom: 14 }, dropdownContainer: { flex: 1, position: 'relative' }, dropdownButton: { borderRadius: 14, padding: 10, minHeight: 62 }, dropdownLabel: { fontSize: 10, color: '#8A7F76', fontWeight: '700', textTransform: 'uppercase' }, dropdownValue: { marginTop: 6, fontSize: 13, color: '#1F1F1F' }, dropdownMenu: { position: 'absolute', top: 68, left: 0, right: 0, maxHeight: 180, borderWidth: 1, borderRadius: 12, zIndex: 30 }, dropdownOption: { paddingHorizontal: 10, paddingVertical: 10 }, dropdownOptionText: { fontSize: 13, color: '#1F1F1F' },
   canvasWrap: { borderRadius: 14, padding: 12, overflow: 'hidden' }, stickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }, stickerItem: { width: 42, height: 42, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' }, inlineStickerEmoji: { fontSize: 24 }, inlineStickerImage: { width: 36, height: 36 },
   verseCard: { borderRadius: 16, padding: 14, marginBottom: 14 }, verseRef: { fontWeight: '700', color: '#8A7F76', marginBottom: 6, fontSize: 12 }, verseText: { color: '#333333', lineHeight: 22, fontSize: 15 }, decorateLink: { marginTop: 10, color: '#A0617B', fontWeight: '700', fontSize: 13 },

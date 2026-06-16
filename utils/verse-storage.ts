@@ -30,6 +30,7 @@ export type VerseCardData = {
   y: number;
   scale: number;
   rotation: number;
+  cardColorKey?: string;
 };
 
 export type VerseEditorState = {
@@ -181,6 +182,10 @@ function normalizeVerseEditorState(
             y: normalizedVerseCard.y,
             scale: normalizedVerseCard.scale,
             rotation: normalizedVerseCard.rotation,
+            cardColorKey:
+              typeof normalizedVerseCard.cardColorKey === 'string'
+                ? normalizedVerseCard.cardColorKey
+                : undefined,
           });
         }
 

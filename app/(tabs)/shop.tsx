@@ -18,6 +18,8 @@ import {
 } from '@/utils/shop-backgrounds';
 import { SHOP_STICKER_PACKS, type ShopSticker } from '@/utils/shop-stickers';
 
+const SHOP_TAB_ICON = require('../../assets/images/toolbar-icons/shop-tab.png');
+
 type ShopCategory = {
   key: string;
   title: string;
@@ -193,7 +195,16 @@ export default function ShopScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.title}>{t('tabShop')}</Text>
+            <View style={styles.titleRow}>
+              <View
+                style={[
+                  styles.headerIconBadge,
+                  { backgroundColor: colorTheme.toolbarBackground },
+                ]}>
+                <Image source={SHOP_TAB_ICON} style={styles.headerIconImage} resizeMode="contain" />
+              </View>
+              <Text style={styles.title}>{t('tabShop')}</Text>
+            </View>
             <Text style={styles.subtitle}>{t('shopSubtitle')}</Text>
           </View>
           <View style={[styles.cartBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
@@ -290,7 +301,7 @@ export default function ShopScreen() {
               {selectedPack.stickers.map((sticker) => (
                 <View key={sticker.key} style={styles.stickerPreviewCard}>
                   <Image
-                    source={sticker.image}
+                    source={sticker.previewImage ?? sticker.image}
                     resizeMode="contain"
                     style={styles.stickerPreviewImage}
                   />
@@ -307,7 +318,7 @@ export default function ShopScreen() {
               {selectedPack.backgrounds.map((background) => (
                 <View key={background.key} style={styles.backgroundPreviewCard}>
                   <Image
-                    source={background.image}
+                    source={background.previewImage ?? background.image}
                     resizeMode="cover"
                     style={styles.backgroundPreviewImage}
                   />
@@ -433,6 +444,22 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700',
     color: '#1F1F1F',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconImage: {
+    width: 26,
+    height: 26,
   },
   subtitle: {
     fontSize: 14,

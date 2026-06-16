@@ -1,11 +1,15 @@
-# Expo Go QR Code
+# Expo Go QR Codes
 
-Scan this QR code with Expo Go:
+Scan with Expo Go.
 
-![Expo Go QR code](assets/expo-go-rcdl-qr.svg)
+## Local Network
 
-Expo Go URL:
+![Local Expo Go QR code](assets/expo-go-local-qr.svg)
 
-```text
-exp://rcdl.tplinkdns.com:8081
-```
+Expo Go URL: `exp://192.168.70.70:8081`
+
+## External DNS
+
+![External DNS Expo Go QR code](assets/expo-go-external-qr.svg)
+
+Expo Go URL: `exp://rcdl.tplinkdns.com:8081`

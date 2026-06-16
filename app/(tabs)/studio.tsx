@@ -102,6 +102,7 @@ type VerseCardUpdate = {
   scale?: number;
   rotation?: number;
   text?: string;
+  cardColorKey?: string;
 };
 
 type DraggableStickerProps = {
@@ -162,6 +163,9 @@ type StudioJournalIndexEntry = {
   preview: string;
   updatedAt: number;
   isFavorite: boolean;
+  book?: string;
+  chapter?: number;
+  verse?: number;
 };
 
 const MIN_SCALE = 0.7;
@@ -180,6 +184,16 @@ const DEFAULT_CHAPTER = 3;
 const DEFAULT_VERSE = 16;
 const VERSE_DESIGN_AUTOSAVE_DELAY_MS = 700;
 const MAX_UNDO_HISTORY = 25;
+const DEFAULT_VERSE_CARD_COLOR_KEY = 'paper-cream';
+const VERSE_CARD_COLOR_OPTIONS = [
+  { key: 'paper-white', name: 'White', color: '#FFFFFF', borderColor: '#E7DDD5' },
+  { key: 'paper-cream', name: 'Cream', color: '#FFFDF8', borderColor: '#E8DCD4' },
+  { key: 'paper-blush', name: 'Blush', color: '#FFF1F5', borderColor: '#E7B7C7' },
+  { key: 'paper-lavender', name: 'Lavender', color: '#F5F0FF', borderColor: '#C8C0EF' },
+  { key: 'paper-sky', name: 'Sky', color: '#F0F7FF', borderColor: '#BDD5ED' },
+  { key: 'paper-mint', name: 'Mint', color: '#F1FBF6', borderColor: '#B8DAC7' },
+  { key: 'paper-clear', name: 'Clear', color: 'rgba(255, 255, 255, 0.68)', borderColor: '#D7CCC5' },
+] as const;
 const HIGHLIGHT_COLORS: { key: HighlightColor; color: string }[] = [
   { key: 'yellow', color: '#FFF3A3' },
   { key: 'pink', color: '#FFD2E1' },
@@ -190,6 +204,13 @@ const HIGHLIGHT_COLOR_MAP: Record<HighlightColor, string> = {
   pink: '#FFD2E1',
   blue: '#CFE7FF',
 };
+function getVerseCardColorOption(key?: string) {
+  return (
+    VERSE_CARD_COLOR_OPTIONS.find((option) => option.key === key) ??
+    VERSE_CARD_COLOR_OPTIONS.find((option) => option.key === DEFAULT_VERSE_CARD_COLOR_KEY) ??
+    VERSE_CARD_COLOR_OPTIONS[0]
+  );
+}
 function clamp(value: number, min: number, max: number) {
   'worklet';
   return Math.min(Math.max(value, min), max);
@@ -248,6 +269,7 @@ function buildDefaultVerseCard(verse: number, text: string, index: number): Vers
     y: 24 + index * 20,
     scale: 1,
     rotation: Math.random() * 4 - 2,
+    cardColorKey: DEFAULT_VERSE_CARD_COLOR_KEY,
   };
 }
 
@@ -789,6 +811,7 @@ function DraggableVerseCard({
   const startScale = useSharedValue(card.scale);
   const startRotation = useSharedValue(card.rotation);
   const words = card.text.split(' ').filter(Boolean);
+  const cardColor = getVerseCardColorOption(card.cardColorKey);
 
   useEffect(() => {
     translateX.value = card.x;
@@ -895,7 +918,15 @@ function DraggableVerseCard({
   return (
     <GestureDetector gesture={verseCardGesture}>
       <Animated.View
-        style={[styles.verseCard, animatedStyle, isActive && styles.selectedVerseCard]}>
+        style={[
+          styles.verseCard,
+          {
+            backgroundColor: cardColor.color,
+            borderColor: cardColor.borderColor,
+          },
+          animatedStyle,
+          isActive && styles.selectedVerseCard,
+        ]}>
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
@@ -1038,6 +1069,12 @@ export default function StudioScreen() {
       : typeof route.params?.selectedVerse === 'number'
         ? route.params.selectedVerse
         : null;
+  const hasRouteSelectedVerseParams =
+    routeSelectedBookParam !== null &&
+    routeSelectedChapterParam !== null &&
+    Number.isFinite(routeSelectedChapterParam) &&
+    routeSelectedVerseParam !== null &&
+    Number.isFinite(routeSelectedVerseParam);
   const routeSourceParam =
     typeof route.params?.source === 'string' ? route.params.source : null;
   const routeFavoriteKeyParam =
@@ -1045,7 +1082,11 @@ export default function StudioScreen() {
   const routeEntryIdParam =
     typeof route.params?.entryId === 'string' ? route.params.entryId : null;
   const [currentEntryId, setCurrentEntryId] = useState(() => routeEntryIdParam ?? generateId());
-  const [selectedBook, setSelectedBook] = useState('');
+  const [selectedBook, setSelectedBook] = useState(() =>
+    routeSelectedBookParam && getBooks().includes(routeSelectedBookParam)
+      ? routeSelectedBookParam
+      : ''
+  );
   const [selectedChapter, setSelectedChapter] = useState(0);
   const [selectedVerse, setSelectedVerse] = useState(0);
   const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
@@ -1155,7 +1196,6 @@ export default function StudioScreen() {
   });
   const isCurrentVerseSaved = savedDesigns.some(
     (design) =>
-      design.key === designKey ||
       design.key === routeFavoriteKeyParam ||
       design.key === routeDesignParam?.key ||
       (draftFavoriteKeyRef.current !== null && design.key === draftFavoriteKeyRef.current)
@@ -1174,7 +1214,20 @@ export default function StudioScreen() {
     }),
     [backgroundKey, fontSize, highlightedWords, notes, selectedFont, stickers, verseCards]
   );
-  const selectedStudioBackground = getShopBackground(backgroundKey);
+  const isLoadingRouteSelectedVerse =
+    hasRouteSelectedVerseParams &&
+    !routeDesignParam &&
+    (selectedBook !== routeSelectedBookParam ||
+      selectedChapter !== routeSelectedChapterParam ||
+      selectedVerse !== routeSelectedVerseParam);
+  const displayBackgroundKey = isLoadingRouteSelectedVerse
+    ? DEFAULT_VERSE_EDITOR_STATE.backgroundKey
+    : backgroundKey;
+  const canSaveCurrentVerse = hasVerseSelection && !isLoadingRouteSelectedVerse;
+  const selectedStudioBackground = getShopBackground(displayBackgroundKey);
+  const activeVerseCardColorKey =
+    verseCards.find((card) => card.verse === selectedVerse)?.cardColorKey ??
+    DEFAULT_VERSE_CARD_COLOR_KEY;
   const favoriteBaseBook = selectedBook || routeDesignParam?.book || DEFAULT_BOOK;
   const favoriteBaseChapter = selectedChapter || routeDesignParam?.chapter || DEFAULT_CHAPTER;
   const favoriteBaseVerse = selectedVerse || routeDesignParam?.verse || DEFAULT_VERSE;
@@ -1224,6 +1277,8 @@ export default function StudioScreen() {
     const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
 
     lastAppliedDesignKeyRef.current = null;
+    draftFavoriteKeyRef.current = null;
+    setCurrentEntryId(generateId());
     setVerseState({});
     setSelectedBook('');
     setSelectedChapter(0);
@@ -1259,16 +1314,14 @@ export default function StudioScreen() {
       return routeDesignParam.key;
     }
 
-    if (hasVerseSelection) {
-      return designKey;
-    }
-
     if (!draftFavoriteKeyRef.current) {
-      draftFavoriteKeyRef.current = `studio-${Date.now()}`;
+      draftFavoriteKeyRef.current = `studio-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
     }
 
     return draftFavoriteKeyRef.current;
-  }, [designKey, hasVerseSelection, routeDesignParam, routeFavoriteKeyParam]);
+  }, [routeDesignParam, routeFavoriteKeyParam]);
 
   const saveStudioJournalEntry = useCallback(
     async (isFavorite: boolean) => {
@@ -1355,14 +1408,13 @@ export default function StudioScreen() {
 
   useEffect(() => {
     if (
-      !routeOpenSelectedVerseParam ||
-      !routeSelectionToken ||
+      !hasRouteSelectedVerseParams ||
       !routeSelectedBookParam
     ) {
       return;
     }
 
-    const selectionParamsKey = `${routeSelectionToken}:${routeSelectedBookParam}:${routeSelectedChapterParam ?? ''}:${routeSelectedVerseParam ?? ''}`;
+    const selectionParamsKey = `${routeSelectionToken ?? 'direct'}:${routeSelectedBookParam}:${routeSelectedChapterParam ?? ''}:${routeSelectedVerseParam ?? ''}`;
 
     if (lastAppliedSelectionTokenRef.current === selectionParamsKey) {
       return;
@@ -1372,9 +1424,46 @@ export default function StudioScreen() {
       return;
     }
 
+    const nextChapter = routeSelectedChapterParam ?? 0;
+    const nextVerse = routeSelectedVerseParam ?? 0;
+    const bookChapters = getChapters(routeSelectedBookParam);
+
+    if (
+      !bookChapters.includes(nextChapter) ||
+      !getVerseOptions(routeSelectedBookParam, nextChapter).includes(nextVerse)
+    ) {
+      return;
+    }
+
+    const nextSelectedVerses = [nextVerse];
+
     lastAppliedSelectionTokenRef.current = selectionParamsKey;
+    draftFavoriteKeyRef.current = null;
+    setCurrentEntryId(generateId());
+    setIsFavoriteActive(false);
     setSelectedBook(routeSelectedBookParam);
+    setSelectedChapter(nextChapter);
+    setSelectedVerse(nextVerse);
+    setSelectedVerses(nextSelectedVerses);
+    setVerseCards(
+      syncVerseCardsWithSelection(
+        DEFAULT_VERSE_EDITOR_STATE.verseCards,
+        nextSelectedVerses,
+        routeSelectedBookParam,
+        nextChapter,
+        language.key
+      )
+    );
+    setStickers(DEFAULT_VERSE_EDITOR_STATE.stickers);
+    setNotes(DEFAULT_VERSE_EDITOR_STATE.notes);
+    setBackgroundKey(DEFAULT_VERSE_EDITOR_STATE.backgroundKey);
+    setSelectedFont(DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+    setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
+    setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
+    setUndoHistory([]);
   }, [
+    hasRouteSelectedVerseParams,
+    language.key,
     routeOpenSelectedVerseParam,
     routeSelectedBookParam,
     routeSelectedChapterParam,
@@ -1387,6 +1476,10 @@ export default function StudioScreen() {
       return;
     }
 
+    if (!canSaveCurrentVerse) {
+      return;
+    }
+
     if (!isVerseDesignDecorated(currentEditorState)) {
       return;
     }
@@ -1395,10 +1488,10 @@ export default function StudioScreen() {
 
     const nextFavorite: SavedVerseDesign = {
       key: favoriteKey,
-      book: favoriteBaseBook,
-      chapter: favoriteBaseChapter,
-      verse: favoriteBaseVerse,
-      selectedVerses: favoritePersistVerses,
+      book: selectedBook,
+      chapter: selectedChapter,
+      verse: selectedVerse,
+      selectedVerses: normalizedSelectedVerses,
       verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
       stickers: stickers.map((sticker) => ({ ...sticker })),
       notes: notes.map((note) => ({ ...note })),
@@ -1412,10 +1505,8 @@ export default function StudioScreen() {
     const favorites = await readAndSanitizeSavedDesigns();
     const nextFavorites = upsertFavoriteDesign(favorites, nextFavorite, [
       favoriteKey,
-      favoritePersistKey,
       routeFavoriteKeyParam,
       routeDesignParam?.key,
-      designKey,
     ]);
 
     await writeSavedDesigns(nextFavorites);
@@ -1425,7 +1516,7 @@ export default function StudioScreen() {
     if (!currentEntryId) {
       setCurrentEntryId(entryId);
     }
-    const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
+    const previewBase = `${selectedBook} ${selectedChapter}:${selectedVerse}`.trim();
     const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
     const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
     const studioJournalPayload = {
@@ -1445,17 +1536,15 @@ export default function StudioScreen() {
       preview,
       updatedAt: studioJournalPayload.updatedAt,
       isFavorite: true,
+      book: selectedBook,
+      chapter: selectedChapter,
+      verse: selectedVerse,
     });
   }, [
     backgroundKey,
-    designKey,
-    favoriteBaseBook,
-    favoriteBaseChapter,
-    favoriteBaseVerse,
-    favoritePersistKey,
-    favoritePersistVerses,
     ensureFavoriteKey,
     fontSize,
+    canSaveCurrentVerse,
     highlightedWords,
     isFavoriteActive,
     currentEditorState,
@@ -1463,7 +1552,11 @@ export default function StudioScreen() {
     notes,
     routeDesignParam,
     routeFavoriteKeyParam,
+    normalizedSelectedVerses,
+    selectedBook,
+    selectedChapter,
     selectedFont,
+    selectedVerse,
     stickers,
     verseCards,
   ]);
@@ -1667,7 +1760,7 @@ export default function StudioScreen() {
         setVerseState(savedVerseState);
         const shouldOpenSpecificVerse =
           routeDesignParam?.book === selectedBook ||
-          (routeOpenSelectedVerseParam &&
+          (hasRouteSelectedVerseParams &&
             routeSelectedBookParam === selectedBook &&
             routeSelectedChapterParam !== null &&
             routeSelectedVerseParam !== null);
@@ -1678,7 +1771,6 @@ export default function StudioScreen() {
             selectedChapter > 0 && bookChapters.includes(selectedChapter)
               ? selectedChapter
               : bookChapters[0] ?? 0;
-
           setSelectedChapter(nextChapter);
           setSelectedVerse(0);
           setSelectedVerses([]);
@@ -1707,7 +1799,7 @@ export default function StudioScreen() {
         const initialChapter =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.chapter
-            : routeOpenSelectedVerseParam &&
+            : hasRouteSelectedVerseParams &&
                 routeSelectedBookParam === selectedBook &&
                 routeSelectedChapterParam !== null &&
                 bookChapters.includes(routeSelectedChapterParam)
@@ -1723,7 +1815,7 @@ export default function StudioScreen() {
         const initialVerse =
           routeDesignParam?.book === selectedBook
             ? routeDesignParam.verse
-            : routeOpenSelectedVerseParam &&
+            : hasRouteSelectedVerseParams &&
                 routeSelectedBookParam === selectedBook &&
                 routeSelectedVerseParam !== null &&
                 chapterVerses.includes(routeSelectedVerseParam)
@@ -1780,6 +1872,7 @@ export default function StudioScreen() {
       isMounted = false;
     };
   }, [
+    hasRouteSelectedVerseParams,
     language.key,
     routeDesignParam,
     routeEntryIdParam,
@@ -1828,6 +1921,7 @@ export default function StudioScreen() {
       selectedFont,
       fontSize,
       highlightedWords,
+      backgroundKey,
     };
 
     setVerseState((current) => {
@@ -1842,6 +1936,7 @@ export default function StudioScreen() {
     });
   }, [
     designKey,
+    backgroundKey,
     fontSize,
     hasLoadedState,
     hasBookSelection,
@@ -2273,6 +2368,7 @@ export default function StudioScreen() {
     }
 
     lastAppliedDesignKeyRef.current = restoreToken;
+    draftFavoriteKeyRef.current = d.key;
 
     setSelectedBook(d.book);
     setSelectedChapter(d.chapter);
@@ -2337,6 +2433,7 @@ export default function StudioScreen() {
           return;
         }
         lastAppliedDesignKeyRef.current = restoreToken;
+        draftFavoriteKeyRef.current = d.key;
 
         setCurrentEntryId(routeEntryIdParam);
         setSelectedBook(d.book);
@@ -2493,6 +2590,24 @@ export default function StudioScreen() {
     setVerseCards((prev) =>
       prev.map((card) => (card.id === id ? { ...card, ...updates } : card))
     );
+  };
+
+  const selectVerseCardColor = (cardColorKey: string) => {
+    recordUndoSnapshot();
+
+    setVerseCards((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+
+      const hasActiveCard = current.some((card) => card.verse === selectedVerse);
+
+      return current.map((card) =>
+        hasActiveCard && card.verse !== selectedVerse
+          ? card
+          : { ...card, cardColorKey }
+      );
+    });
   };
 
   const selectVerseCard = (verseNumber: number) => {
@@ -2818,15 +2933,16 @@ export default function StudioScreen() {
         return;
       }
 
+      if (!canSaveCurrentVerse) {
+        return;
+      }
+
       const favoriteKey = ensureFavoriteKey();
       const newItem: SavedVerseDesign = {
-        book: favoriteBaseBook,
-        chapter: favoriteBaseChapter,
-        verse: favoriteBaseVerse,
-        selectedVerses:
-          normalizedSelectedVerses.length > 0
-            ? normalizedSelectedVerses
-            : favoritePersistVerses,
+        book: selectedBook,
+        chapter: selectedChapter,
+        verse: selectedVerse,
+        selectedVerses: normalizedSelectedVerses,
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
         notes: notes.map((note) => ({ ...note })),
@@ -2842,7 +2958,7 @@ export default function StudioScreen() {
       if (!currentEntryId) {
         setCurrentEntryId(entryId);
       }
-      const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
+      const previewBase = `${selectedBook} ${selectedChapter}:${selectedVerse}`.trim();
       const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
       const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
       const studioJournalPayload = {
@@ -2862,16 +2978,17 @@ export default function StudioScreen() {
         preview,
         updatedAt: studioJournalPayload.updatedAt,
         isFavorite: studioJournalPayload.isFavorite,
+        book: selectedBook,
+        chapter: selectedChapter,
+        verse: selectedVerse,
       });
 
       const favorites = await readAndSanitizeSavedDesigns();
       const nextFavorites = studioJournalPayload.isFavorite
         ? upsertFavoriteDesign(favorites, newItem, [
             favoriteKey,
-            favoritePersistKey,
             routeFavoriteKeyParam,
             routeDesignParam?.key,
-            designKey,
           ])
         : favorites.filter((favorite) => favorite.key !== favoriteKey);
       setSavedDesigns(nextFavorites);
@@ -3483,22 +3600,54 @@ export default function StudioScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  <View style={styles.highlightDropdownRow}>
-                    {HIGHLIGHT_COLORS.map(({ key, color }) => (
-                      <Pressable
-                        key={key}
-                        onPress={() => {
-                          setSelectedHighlightColor(key);
-                          setOpenToolbarMenu(null);
-                        }}
-                        style={[
-                          styles.highlightColorButton,
-                          { backgroundColor: color },
-                          selectedHighlightColor === key &&
-                            styles.highlightColorButtonSelected,
-                        ]}
-                      />
-                    ))}
+                  <View style={styles.cardColorSection}>
+                    <Text style={styles.cardColorLabel}>Card color</Text>
+                    <View style={styles.cardColorRow}>
+                      {VERSE_CARD_COLOR_OPTIONS.map((option) => (
+                        <Pressable
+                          key={option.key}
+                          onPress={() => {
+                            selectVerseCardColor(option.key);
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Set verse card color to ${option.name}`}
+                          style={[
+                            styles.cardColorButton,
+                            {
+                              backgroundColor: option.color,
+                              borderColor: option.borderColor,
+                            },
+                            activeVerseCardColorKey === option.key
+                              ? styles.cardColorButtonSelected
+                              : null,
+                          ]}>
+                          {activeVerseCardColorKey === option.key ? (
+                            <Ionicons name="checkmark" size={13} color="#5B514D" />
+                          ) : null}
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.highlightColorSection}>
+                    <Text style={styles.highlightColorLabel}>Highlight color</Text>
+                    <View style={styles.highlightDropdownRow}>
+                      {HIGHLIGHT_COLORS.map(({ key, color }) => (
+                        <Pressable
+                          key={key}
+                          onPress={() => {
+                            setSelectedHighlightColor(key);
+                            setOpenToolbarMenu(null);
+                          }}
+                          style={[
+                            styles.highlightColorButton,
+                            { backgroundColor: color },
+                            selectedHighlightColor === key &&
+                              styles.highlightColorButtonSelected,
+                          ]}
+                        />
+                      ))}
+                    </View>
                   </View>
                 </View>
               ) : null}
@@ -3536,7 +3685,7 @@ export default function StudioScreen() {
                             }}
                             style={styles.stickerImageButton}>
                             <Image
-                              source={shopSticker.image}
+                              source={shopSticker.previewImage ?? shopSticker.image}
                               resizeMode="contain"
                               style={[
                                 styles.stickerButtonImage,
@@ -3590,7 +3739,7 @@ export default function StudioScreen() {
                                 : null,
                             ]}>
                             <Image
-                              source={backgroundOption.image}
+                              source={backgroundOption.previewImage ?? backgroundOption.image}
                               resizeMode="cover"
                               style={styles.backgroundButtonImage}
                             />
@@ -3616,8 +3765,8 @@ export default function StudioScreen() {
                       ]}
                       accessibilityRole="button"
                       accessibilityLabel={t('studioStartOver')}>
-                      <Ionicons name="refresh-outline" size={17} color="#5B514D" />
-                      <Text style={styles.moreActionButtonText}>{t('studioStartOver')}</Text>
+                      <Ionicons name="arrow-redo-outline" size={17} color="#5B514D" />
+                      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionButtonText}>{t('studioStartOver')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -3632,7 +3781,7 @@ export default function StudioScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={isSharingImage ? 'Saving image' : 'Save image'}>
                       <Ionicons name="download-outline" size={17} color="#333" />
-                      <Text style={styles.moreActionButtonText}>Save image</Text>
+                      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionButtonText}>Save image</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -3647,7 +3796,7 @@ export default function StudioScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={isSharingImage ? 'Sharing image' : 'Share image'}>
                       <Ionicons name="share-outline" size={17} color="#333" />
-                      <Text style={styles.moreActionButtonText}>Share</Text>
+                      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionButtonText}>Share</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -3838,23 +3987,27 @@ const styles = StyleSheet.create({
   },
   moreActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 4,
   },
   moreActionButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '30%',
     minHeight: 40,
     borderRadius: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   moreActionButtonText: {
+    flexShrink: 1,
     color: '#1F1F1F',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   verse: {
@@ -4288,6 +4441,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 292,
     backgroundColor: '#FFFDF8',
+    borderWidth: 1,
     borderRadius: 20,
     padding: 22,
     shadowColor: '#000000',
@@ -4321,6 +4475,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
+  },
+  highlightColorSection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  highlightColorLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#5B514D',
+    textTransform: 'uppercase',
+  },
+  cardColorSection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardColorLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#5B514D',
+    textTransform: 'uppercase',
+  },
+  cardColorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 9,
+  },
+  cardColorButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardColorButtonSelected: {
+    borderWidth: 2,
+    borderColor: '#1F1F1F',
   },
   highlightColorButton: {
     width: 28,

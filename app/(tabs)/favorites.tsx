@@ -177,7 +177,7 @@ export default function FavoritesScreen() {
     }
 
     if (item.type === 'journal-studio') {
-      router.push({ pathname: '/journal-studio', params: { entryId: item.entryId } });
+      router.push({ pathname: '/studio', params: { entryId: item.entryId } });
     }
   };
 

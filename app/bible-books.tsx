@@ -130,9 +130,11 @@ export default function BibleBooksScreen() {
     router.replace({
       pathname: '/studio',
       params: {
+        openSelectedVerse: 'true',
         selectedBook: book,
         selectedChapter: String(chapter),
         selectedVerse: String(verse),
+        selectionToken: String(Date.now()),
       },
     });
   };
@@ -253,15 +255,6 @@ export default function BibleBooksScreen() {
           <Text style={styles.subtitle}>{t('bibleSubtitle')}</Text>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.88}
-          onPress={() => router.push('/settings')}
-          style={[
-            styles.settingsButton,
-            { backgroundColor: colorTheme.toolbarBackground },
-          ]}>
-          <Ionicons name="settings-outline" size={20} color="#5B514D" />
-        </TouchableOpacity>
       </View>
 
       <View
@@ -504,18 +497,6 @@ const styles = StyleSheet.create({
   headerTextBlock: {
     flex: 1,
     paddingRight: 12,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   searchBar: {
     marginHorizontal: 20,
