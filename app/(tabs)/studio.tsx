@@ -1003,6 +1003,7 @@ export default function StudioScreen() {
   const favoriteAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasBootstrappedSavedDesignsRef = useRef(false);
   const lastAutoSavedVerseDesignSignatureRef = useRef<string | null>(null);
+  const lastAutoSavedStudioJournalSignatureRef = useRef<string | null>(null);
   const route = useRoute<any>();
   const routeDesignParam =
     route.params?.design &&
@@ -1268,6 +1269,76 @@ export default function StudioScreen() {
 
     return draftFavoriteKeyRef.current;
   }, [designKey, hasVerseSelection, routeDesignParam, routeFavoriteKeyParam]);
+
+  const saveStudioJournalEntry = useCallback(
+    async (isFavorite: boolean) => {
+      if (!hasVerseSelection || !isVerseDesignDecorated(currentEditorState)) {
+        return;
+      }
+
+      const favoriteKey = ensureFavoriteKey();
+      const savedAt = new Date().toISOString();
+      const updatedAt = Date.now();
+      const nextDesign: SavedVerseDesign = {
+        key: favoriteKey,
+        book: favoriteBaseBook,
+        chapter: favoriteBaseChapter,
+        verse: favoriteBaseVerse,
+        selectedVerses:
+          normalizedSelectedVerses.length > 0
+            ? normalizedSelectedVerses
+            : favoritePersistVerses,
+        verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
+        stickers: stickers.map((sticker) => ({ ...sticker })),
+        notes: notes.map((note) => ({ ...note })),
+        backgroundKey,
+        highlights: { ...highlightedWords },
+        selectedFont,
+        fontSize,
+        savedAt,
+      };
+      const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
+      const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
+      const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
+      const studioJournalPayload = {
+        id: currentEntryId,
+        type: 'journal-studio' as const,
+        date: new Date().toLocaleString(),
+        preview,
+        updatedAt,
+        isFavorite,
+        design: nextDesign,
+      };
+
+      await AsyncStorage.setItem(`journal_studio_${currentEntryId}`, JSON.stringify(studioJournalPayload));
+      await upsertStudioJournalIndex({
+        id: currentEntryId,
+        type: 'journal-studio',
+        date: studioJournalPayload.date,
+        preview,
+        updatedAt,
+        isFavorite,
+      });
+    },
+    [
+      backgroundKey,
+      currentEditorState,
+      currentEntryId,
+      ensureFavoriteKey,
+      favoriteBaseBook,
+      favoriteBaseChapter,
+      favoriteBaseVerse,
+      favoritePersistVerses,
+      fontSize,
+      hasVerseSelection,
+      highlightedWords,
+      normalizedSelectedVerses,
+      notes,
+      selectedFont,
+      stickers,
+      verseCards,
+    ]
+  );
 
   useEffect(() => {
     if (!routeBlankStudioToken) {
@@ -1790,6 +1861,56 @@ export default function StudioScreen() {
       console.warn(`Failed to save state for ${selectedBook}`, error);
     });
   }, [hasBookSelection, hasLoadedState, selectedBook, verseState]);
+
+  useEffect(() => {
+    if (
+      !hasLoadedState ||
+      !hasVerseSelection ||
+      !isVerseDesignDecorated(currentEditorState)
+    ) {
+      return;
+    }
+
+    const journalSignature = JSON.stringify({
+      currentEntryId,
+      selectedBook,
+      designKey,
+      verseCards,
+      stickers,
+      notes,
+      selectedFont,
+      fontSize,
+      highlightedWords,
+      isFavoriteActive,
+    });
+
+    if (lastAutoSavedStudioJournalSignatureRef.current === journalSignature) {
+      return;
+    }
+
+    void saveStudioJournalEntry(isFavoriteActive)
+      .then(() => {
+        lastAutoSavedStudioJournalSignatureRef.current = journalSignature;
+      })
+      .catch((error) => {
+        console.warn('Failed to save studio daily log entry', error);
+      });
+  }, [
+    currentEditorState,
+    currentEntryId,
+    designKey,
+    fontSize,
+    hasLoadedState,
+    hasVerseSelection,
+    highlightedWords,
+    isFavoriteActive,
+    notes,
+    saveStudioJournalEntry,
+    selectedBook,
+    selectedFont,
+    stickers,
+    verseCards,
+  ]);
 
   useEffect(() => {
     if (
