@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings } from '@/utils/app-settings';
+import { formatEntryDateTime, getLocalDateKey } from '@/utils/date-time';
+import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 
 type PrayerJournalListItem = {
   id: string;
@@ -21,52 +23,7 @@ type PrayerJournalListItem = {
   updatedAt: number;
 };
 
-const JOURNAL_INDEX_KEY = 'journal_index';
 const PURGE_TODAY_FLAG_KEY = 'prayer_purge_today_v2_2026_04_29';
-
-const getLocalDateKey = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const getTodayLongDatePrefix = () =>
-  new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-const getTodayShortDatePrefix = () =>
-  new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-const formatEntryDate = (date: string) => {
-  const parsedDate = new Date(date);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return date;
-  }
-
-  const normalizedDate = parsedDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-  const normalizedTime = parsedDate.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-  return `${normalizedDate} • ${normalizedTime}`;
-};
 
 const purgeTodayPrayerEntriesOnce = async () => {
   const hasPurged = await AsyncStorage.getItem(PURGE_TODAY_FLAG_KEY);
@@ -84,23 +41,11 @@ const purgeTodayPrayerEntriesOnce = async () => {
       return false;
     }
 
-    if (typeof entry.date === 'string') {
-      const trimmedDate = entry.date.trim();
-
-      if (
-        trimmedDate.startsWith(getTodayLongDatePrefix()) ||
-        trimmedDate.startsWith(getTodayShortDatePrefix())
-      ) {
-        return true;
-      }
-    }
-
-    const parsedDate = new Date(entry.date);
-    if (Number.isNaN(parsedDate.getTime())) {
+    if (typeof entry.updatedAt !== 'number') {
       return false;
     }
 
-    return getLocalDateKey(parsedDate) === todayKey;
+    return getLocalDateKey(new Date(entry.updatedAt)) === todayKey;
   });
 
   if (entriesToDelete.length > 0) {
@@ -239,7 +184,7 @@ export default function PrayerJournalListScreen() {
                   })
                 }
                 style={[styles.card, { backgroundColor: colorTheme.cardBackground }]}>
-                <Text style={styles.date}>{formatEntryDate(entry.date)}</Text>
+                <Text style={styles.date}>{formatEntryDateTime(entry.date)}</Text>
                 <Text numberOfLines={3} style={styles.preview}>
                   {entry.preview || 'Open this entry to keep writing...'}
                 </Text>

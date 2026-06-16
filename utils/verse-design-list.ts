@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import bible from '@/assets/bible.json';
+import { SAVED_DESIGNS_STORAGE_KEY } from '@/utils/storage-keys';
 import {
   getVerseStorageKey,
   loadVerseStateMap,
@@ -12,9 +13,9 @@ import {
   type VerseEditorState,
 } from '@/utils/verse-storage';
 
-export const SAVED_DESIGNS_STORAGE_KEY = 'favorites';
 const VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY = 'verse_design_timestamps_v1';
 const VERSE_DESIGN_INDEX_STORAGE_KEY = 'verse_design_index_v1';
+export { SAVED_DESIGNS_STORAGE_KEY };
 
 type BibleBook = {
   book: string;

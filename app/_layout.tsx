@@ -53,6 +53,12 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bible-books" options={{ title: t('tabBible') }} />
         <Stack.Screen name="bible-study-journal" options={{ title: t('bibleStudy') }} />
+        <Stack.Screen name="church-day-journal" options={{ title: t('churchDay') }} />
+        <Stack.Screen
+          name="daily-devotional-journal"
+          options={{ title: t('dailyDevotional') }}
+        />
+        <Stack.Screen name="journal-studio" options={{ title: t('tabStudio') }} />
         <Stack.Screen name="journal-editor" options={{ title: t('tabJournal') }} />
         <Stack.Screen
           name="prayer-journal"
