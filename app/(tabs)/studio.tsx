@@ -2422,7 +2422,11 @@ export default function StudioScreen() {
           return;
         }
 
-        const parsed = JSON.parse(stored) as { design?: SavedVerseDesign; updatedAt?: number };
+        const parsed = JSON.parse(stored) as {
+          design?: SavedVerseDesign;
+          updatedAt?: number;
+          isFavorite?: boolean;
+        };
         if (!parsed?.design) {
           return;
         }
@@ -2466,7 +2470,7 @@ export default function StudioScreen() {
         setIsChapterDropdownOpen(false);
         setIsVerseDropdownOpen(false);
         setUndoHistory([]);
-        setIsFavoriteActive(true);
+        setIsFavoriteActive(Boolean(parsed.isFavorite));
       } catch (error) {
         console.warn('Failed to load studio journal entry', error);
       }
