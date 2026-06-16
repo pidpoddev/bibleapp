@@ -116,7 +116,42 @@ export default function ChurchDayJournalScreen() {
 
   useEffect(() => {
     const load = async () => {
-      if (!entryId) { await saveEntry('', '', '', defaultSections); return; }
+      if (!entryId) {
+        const nextId = generateId();
+        const nextDate = formatEntryDateTime(new Date());
+        const nextEntry: ChurchDayEntry = {
+          id: nextId,
+          type: 'church-day',
+          date: nextDate,
+          book: '',
+          chapter: '',
+          verse: '',
+          sections: defaultSections,
+          stickers: [],
+          background: 'lined',
+          highlightColor: '#FFF3A3',
+          preview: '',
+          isFavorite: false,
+          updatedAt: Date.now(),
+        };
+
+        setCurrentId(nextId);
+        setEntryDate(nextDate);
+        setBook('');
+        setChapter('');
+        setVerse('');
+        setOpenDropdown(null);
+        setSections(defaultSections);
+        setStickers([]);
+        setBackground('lined');
+        setHighlightColor('#FFF3A3');
+        setOpenDecor(null);
+        setIsFavorite(false);
+        setUndoHistory([]);
+        await AsyncStorage.setItem(`journal_church_day_${nextId}`, JSON.stringify(nextEntry));
+        await updateIndex(nextEntry);
+        return;
+      }
       const saved = await AsyncStorage.getItem(`journal_church_day_${entryId}`);
       if (!saved) return;
       const parsed = JSON.parse(saved) as ChurchDayEntry;
@@ -131,7 +166,7 @@ export default function ChurchDayJournalScreen() {
       setUndoHistory([]);
     };
     void load();
-  }, [entryId, newEntryToken, saveEntry]);
+  }, [entryId, newEntryToken, updateIndex]);
 
   const updateSection = (id: string, text: string) => {
     recordUndoSnapshot();
