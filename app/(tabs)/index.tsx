@@ -110,6 +110,13 @@ function parseEntryDate(entry: HomeJournalEntry) {
   return Number.isNaN(updatedDate.getTime()) ? new Date() : updatedDate;
 }
 
+function formatRecentEntryDate(date: Date) {
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function getLocalDayKey(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -298,6 +305,13 @@ export default function HomeScreen() {
   const latestTodayEntry = useMemo(
     () => sortedJournalEntries.find((entry) => getLocalDayKey(parseEntryDate(entry)) === todayKey) ?? null,
     [sortedJournalEntries, todayKey]
+  );
+  const recentContinueEntries = useMemo(
+    () =>
+      sortedJournalEntries
+        .filter((entry) => entry.id !== latestTodayEntry?.id)
+        .slice(0, latestTodayEntry ? 2 : 3),
+    [latestTodayEntry, sortedJournalEntries]
   );
   const todayEntryCount = useMemo(
     () => sortedJournalEntries.filter((entry) => getLocalDayKey(parseEntryDate(entry)) === todayKey).length,
@@ -536,6 +550,39 @@ export default function HomeScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
         </TouchableOpacity>
+      ) : null}
+
+      {recentContinueEntries.length > 0 ? (
+        <View style={[styles.recentCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+          <View style={styles.recentHeaderRow}>
+            <View style={[styles.iconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name="time-outline" size={18} color="#7A6F66" />
+            </View>
+            <View style={styles.recentHeaderText}>
+              <Text style={styles.recentLabel}>Recent work</Text>
+              <Text style={styles.recentHint}>Pick up where you left off.</Text>
+            </View>
+          </View>
+          {recentContinueEntries.map((entry) => (
+            <TouchableOpacity
+              key={`${entry.type}-${entry.id}`}
+              activeOpacity={0.88}
+              onPress={() => openJournalEntry(entry)}
+              style={styles.recentEntryRow}>
+              <Ionicons name={getEntryTypeIcon(entry.type)} size={17} color="#7A6F66" />
+              <View style={styles.recentEntryText}>
+                <Text numberOfLines={1} style={styles.recentEntryTitle}>
+                  {getEntryTypeLabel(entry.type)}
+                </Text>
+                <Text numberOfLines={1} style={styles.recentEntryPreview}>
+                  {entry.preview || 'Open to keep writing...'}
+                </Text>
+              </View>
+              <Text style={styles.recentEntryDate}>{formatRecentEntryDate(parseEntryDate(entry))}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
+            </TouchableOpacity>
+          ))}
+        </View>
       ) : null}
 
       <View style={[styles.moodCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
@@ -854,6 +901,60 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#665C57',
+  },
+  recentCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 13,
+    marginBottom: 12,
+  },
+  recentHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  recentHeaderText: {
+    flex: 1,
+  },
+  recentLabel: {
+    fontSize: TYPE.eyebrow,
+    fontWeight: '800',
+    color: '#8D7C70',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  recentHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#665C57',
+  },
+  recentEntryRow: {
+    minHeight: 46,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.07)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  recentEntryText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  recentEntryTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1F1F1F',
+  },
+  recentEntryPreview: {
+    marginTop: 1,
+    fontSize: 12,
+    color: '#665C57',
+  },
+  recentEntryDate: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8D7C70',
   },
   moodCard: {
     borderRadius: 8,

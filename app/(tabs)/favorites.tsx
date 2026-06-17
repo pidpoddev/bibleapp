@@ -1,11 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import {
+  getHydratedJournalEntries,
+  getJournalEntryStorageKey,
+} from '@/utils/journal-storage';
 
 const FAVORITES_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
 const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
@@ -31,6 +35,7 @@ type UnifiedFavorite = {
   preview: string;
   updatedAt: number;
   entryId: string;
+  searchableText: string;
 };
 
 function safeParseArray<T>(value: string | null): T[] {
@@ -81,6 +86,7 @@ export default function FavoritesScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
   const [favorites, setFavorites] = useState<UnifiedFavorite[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const journalTypeMap = useMemo(
     () => ({
@@ -95,8 +101,7 @@ export default function FavoritesScreen() {
 
   const loadFavorites = useCallback(async () => {
     try {
-      const journalData = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-      const journalEntries = safeParseArray<JournalFavorite>(journalData);
+      const journalEntries = await getHydratedJournalEntries();
 
       const unifiedJournal: UnifiedFavorite[] = (Array.isArray(journalEntries)
         ? journalEntries
@@ -112,6 +117,14 @@ export default function FavoritesScreen() {
           preview: entry.preview || 'Open to keep writing...',
           updatedAt: entry.updatedAt,
           entryId: entry.id,
+          searchableText: [
+            entry.searchableText,
+            journalTypeMap[entry.type].title,
+            journalTypeMap[entry.type].subtitle,
+            formatSavedAt(entry.updatedAt),
+          ]
+            .join(' ')
+            .toLowerCase(),
         }));
 
       const nextFavorites = [...unifiedJournal].sort(
@@ -124,6 +137,16 @@ export default function FavoritesScreen() {
       setFavorites([]);
     }
   }, [journalTypeMap]);
+
+  const visibleFavorites = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return favorites;
+    }
+
+    return favorites.filter((favorite) => favorite.searchableText.includes(normalizedQuery));
+  }, [favorites, searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -138,17 +161,7 @@ export default function FavoritesScreen() {
       const nextJournalEntries = journalEntries.filter((entry) => entry.id !== item.entryId);
       await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextJournalEntries));
 
-      if (item.type === 'prayer') {
-        await AsyncStorage.removeItem(`journal_prayer_${item.entryId}`);
-      } else if (item.type === 'bible-study') {
-        await AsyncStorage.removeItem(`journal_bible_study_${item.entryId}`);
-      } else if (item.type === 'church-day') {
-        await AsyncStorage.removeItem(`journal_church_day_${item.entryId}`);
-      } else if (item.type === 'daily-devotional') {
-        await AsyncStorage.removeItem(`journal_daily_devotional_${item.entryId}`);
-      } else if (item.type === 'journal-studio') {
-        await AsyncStorage.removeItem(`journal_studio_${item.entryId}`);
-      }
+      await AsyncStorage.removeItem(getJournalEntryStorageKey({ id: item.entryId, type: item.type }));
 
       setFavorites((current) => current.filter((favorite) => favorite.id !== item.id));
     },
@@ -191,8 +204,34 @@ export default function FavoritesScreen() {
         <Text style={styles.subtitle}>{t('favoritesSubtitle')}</Text>
       </View>
 
+      <View
+        style={[
+          styles.searchBox,
+          { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border },
+        ]}>
+        <Ionicons name="search-outline" size={18} color="#7A6F66" />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search saved entries"
+          placeholderTextColor="#A99D96"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.searchInput}
+        />
+        {searchQuery ? (
+          <Pressable
+            onPress={() => setSearchQuery('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear saved-entry search"
+            style={styles.clearSearchButton}>
+            <Ionicons name="close-circle" size={18} color="#8D7C70" />
+          </Pressable>
+        ) : null}
+      </View>
+
       <FlatList
-        data={favorites}
+        data={visibleFavorites}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
@@ -248,8 +287,12 @@ export default function FavoritesScreen() {
         }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>{t('favoritesEmptyTitle')}</Text>
-            <Text style={styles.emptyText}>{t('favoritesEmptyText')}</Text>
+            <Text style={styles.emptyTitle}>
+              {favorites.length > 0 ? 'No saved entries found' : t('favoritesEmptyTitle')}
+            </Text>
+            <Text style={styles.emptyText}>
+              {favorites.length > 0 ? 'Try a different word, phrase, reference, or journal type.' : t('favoritesEmptyText')}
+            </Text>
           </View>
         }
         showsVerticalScrollIndicator={false}
@@ -264,6 +307,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'web' ? 20 : 68,
+  },
+  searchBox: {
+    minHeight: 46,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 44,
+    fontSize: 15,
+    color: '#1F1F1F',
+  },
+  clearSearchButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroCard: {
     borderRadius: 22,

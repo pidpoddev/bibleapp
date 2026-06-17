@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useAppSettings } from '@/utils/app-settings';
+import { buildJournalExportSnapshot, resetJournalData } from '@/utils/journal-storage';
 
 const ACCOUNT_SESSION_STORAGE_KEY = 'account_session_v1';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,6 +43,9 @@ export default function SettingsScreen() {
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
   const [accountMessage, setAccountMessage] = useState('');
   const [accountError, setAccountError] = useState('');
+  const [dataMessage, setDataMessage] = useState('');
+  const [dataError, setDataError] = useState('');
+  const [exportText, setExportText] = useState('');
 
   useEffect(() => {
     const loadAccountSession = async () => {
@@ -157,6 +162,72 @@ export default function SettingsScreen() {
     } catch (error) {
       console.log('Error signing out:', error);
     }
+  };
+
+  const downloadExportText = (text: string) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return false;
+    }
+
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bible-app-journal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  };
+
+  const handleExportJournalData = async () => {
+    try {
+      const snapshot = await buildJournalExportSnapshot();
+      const nextExportText = JSON.stringify(snapshot, null, 2);
+      setExportText(nextExportText);
+      setDataError('');
+      setDataMessage(
+        downloadExportText(nextExportText)
+          ? 'Journal backup downloaded.'
+          : 'Journal backup is ready below.'
+      );
+    } catch (error) {
+      console.log('Error exporting journal data:', error);
+      setDataError('Could not prepare journal backup.');
+      setDataMessage('');
+    }
+  };
+
+  const performResetJournalData = async () => {
+    try {
+      await resetJournalData();
+      setExportText('');
+      setDataError('');
+      setDataMessage('Journal entries and saved designs were reset.');
+    } catch (error) {
+      console.log('Error resetting journal data:', error);
+      setDataError('Could not reset journal data.');
+      setDataMessage('');
+    }
+  };
+
+  const handleResetJournalData = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm('Reset all journal entries and saved designs? This cannot be undone.')) {
+        void performResetJournalData();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Reset journal data?',
+      'This removes journal entries and saved designs from this device. Account, theme, and language settings stay.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: () => void performResetJournalData() },
+      ]
+    );
   };
 
   return (
@@ -439,6 +510,66 @@ export default function SettingsScreen() {
           );
         })}
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Data safety</Text>
+
+        <View
+          style={[
+            styles.dataCard,
+            {
+              backgroundColor: colorTheme.cardBackground,
+              borderColor: colorTheme.border,
+            },
+          ]}>
+          <View style={styles.dataHeaderRow}>
+            <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name="shield-checkmark-outline" size={22} color="#5B514D" />
+            </View>
+            <View style={styles.accountHeaderText}>
+              <Text style={styles.accountTitle}>Journal backup</Text>
+              <Text style={styles.accountHint}>
+                Export entries before changing devices or clearing local data.
+              </Text>
+            </View>
+          </View>
+
+          {dataError ? <Text style={styles.errorText}>{dataError}</Text> : null}
+          {dataMessage ? <Text style={styles.successText}>{dataMessage}</Text> : null}
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={handleExportJournalData}
+            style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
+            <Ionicons name="download-outline" size={17} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Export journal data</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={handleResetJournalData}
+            style={[styles.dangerButton, { borderColor: colorTheme.border }]}>
+            <Ionicons name="trash-outline" size={17} color="#B85F62" />
+            <Text style={styles.dangerButtonText}>Reset journal data</Text>
+          </TouchableOpacity>
+
+          {exportText ? (
+            <TextInput
+              value={exportText}
+              editable={false}
+              multiline
+              selectTextOnFocus
+              style={[
+                styles.exportPreview,
+                {
+                  backgroundColor: colorTheme.paperBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}
+            />
+          ) : null}
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -509,6 +640,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  dataCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  dataHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
   },
   accountHeader: {
     flexDirection: 'row',
@@ -639,6 +785,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#5B514D',
+  },
+  dangerButton: {
+    minHeight: 44,
+    borderRadius: 15,
+    borderWidth: 1,
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  dangerButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#B85F62',
+  },
+  exportPreview: {
+    minHeight: 150,
+    maxHeight: 260,
+    borderWidth: 1,
+    borderRadius: 14,
+    marginTop: 12,
+    padding: 12,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#1F1F1F',
   },
   errorText: {
     marginBottom: 10,
