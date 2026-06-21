@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -36,6 +36,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { captureRef } from 'react-native-view-shot';
 import { useRoute } from '@react-navigation/native';
+import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
+import { SaveConfirmationToast } from '@/components/save-confirmation-toast';
 import {
   DEFAULT_VERSE_EDITOR_STATE,
   loadVerseStateMap,
@@ -104,6 +106,49 @@ type VerseCardUpdate = {
   text?: string;
   cardColorKey?: string;
 };
+
+function getLatestWebNotes(notes: Note[]) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return notes;
+  }
+
+  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write your thoughts..."]'))
+    .map((textarea) => (textarea as HTMLTextAreaElement).value);
+
+  if (values.length < notes.length) {
+    return notes;
+  }
+
+  const mappedNotes = notes.map((note, index) => {
+    const value = values[index];
+    return { ...note, text: value || note.text };
+  });
+
+  if (values.length <= notes.length) {
+    return mappedNotes;
+  }
+
+  const createdAt = Date.now();
+  const extraNotes = values.slice(notes.length).flatMap((value, index) => {
+    if (!value.trim()) {
+      return [];
+    }
+
+    return [
+      {
+        id: `web-note-${createdAt}-${index}`,
+        text: value,
+        x: 28 + (notes.length + index) * 18,
+        y: 210 + (notes.length + index) * 18,
+        width: 150,
+        height: 150,
+        zIndex: notes.length + index + 1,
+      },
+    ];
+  });
+
+  return [...mappedNotes, ...extraNotes];
+}
 
 type DraggableStickerProps = {
   sticker: Sticker;
@@ -780,10 +825,32 @@ function DraggableNote({
                 onAutoFocusHandled();
               }
             }}
-            onBlur={() => {
+            onBlur={(event) => {
+              const text = (event.target as unknown as { value?: string }).value;
+              if (typeof text === 'string') {
+                handleNoteTextChange(text);
+              }
               onBlur(note.id);
             }}
+            onChange={(event) => {
+              const text =
+                event.nativeEvent.text ??
+                (event.target as unknown as { value?: string }).value;
+              if (typeof text === 'string') {
+                handleNoteTextChange(text);
+              }
+            }}
             onChangeText={handleNoteTextChange}
+            {...(Platform.OS === 'web'
+              ? {
+                  onInput: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => {
+                    const text = event.currentTarget?.value ?? event.target?.value;
+                    if (typeof text === 'string') {
+                      handleNoteTextChange(text);
+                    }
+                  },
+                }
+              : null)}
             textAlignVertical="top"
           />
         </Pressable>
@@ -1006,11 +1073,11 @@ type ToolbarMenu =
   | null;
 
 const TOOLBAR_ICON_SOURCE = {
-  text: require('../../assets/images/toolbar-icons/text-tight.png'),
-  decor: require('../../assets/images/toolbar-icons/decor-tight.png'),
-  canvas: require('../../assets/images/toolbar-icons/canvas-tight.png'),
-  note: require('../../assets/images/toolbar-icons/notes-tight.png'),
-  more: require('../../assets/images/toolbar-icons/more-tight.png'),
+  text: require('../assets/images/toolbar-icons/text-tight.png'),
+  decor: require('../assets/images/toolbar-icons/decor-tight.png'),
+  canvas: require('../assets/images/toolbar-icons/canvas-tight.png'),
+  note: require('../assets/images/toolbar-icons/notes-tight.png'),
+  more: require('../assets/images/toolbar-icons/more-tight.png'),
 } as const;
 
 const TOOLBAR_ICON_OFFSET_Y = {
@@ -1023,6 +1090,7 @@ const TOOLBAR_ICON_OFFSET_Y = {
 
 export default function StudioScreen() {
   const { colorTheme, language, t } = useAppSettings();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const captureViewRef = useRef<View>(null);
@@ -1081,7 +1149,14 @@ export default function StudioScreen() {
     typeof route.params?.favoriteKey === 'string' ? route.params.favoriteKey : null;
   const routeEntryIdParam =
     typeof route.params?.entryId === 'string' ? route.params.entryId : null;
-  const [currentEntryId, setCurrentEntryId] = useState(() => routeEntryIdParam ?? generateId());
+  const routeDraftEntryIdParam =
+    routeEntryIdParam ??
+    (routeBlankStudioToken
+      ? `studio-draft-${routeBlankStudioToken}`
+      : routeSelectionToken
+        ? `studio-selection-${routeSelectionToken}`
+        : null);
+  const [currentEntryId, setCurrentEntryId] = useState(() => routeDraftEntryIdParam ?? generateId());
   const [selectedBook, setSelectedBook] = useState(() =>
     routeSelectedBookParam && getBooks().includes(routeSelectedBookParam)
       ? routeSelectedBookParam
@@ -1099,6 +1174,7 @@ export default function StudioScreen() {
   const [fontSize, setFontSize] = useState(DEFAULT_VERSE_EDITOR_STATE.fontSize);
   const [stickers, setStickers] = useState<Sticker[]>(DEFAULT_VERSE_EDITOR_STATE.stickers);
   const [notes, setNotes] = useState<Note[]>(DEFAULT_VERSE_EDITOR_STATE.notes);
+  const notesRef = useRef<Note[]>(DEFAULT_VERSE_EDITOR_STATE.notes);
   const [backgroundKey, setBackgroundKey] = useState<string | null>(
     DEFAULT_VERSE_EDITOR_STATE.backgroundKey
   );
@@ -1126,6 +1202,8 @@ export default function StudioScreen() {
   const [hasLoadedSavedDesigns, setHasLoadedSavedDesigns] = useState(false);
   const [hasLoadedState, setHasLoadedState] = useState(false);
   const [saveToastMessage, setSaveToastMessage] = useState('');
+  const [saveConfirmationMessage, setSaveConfirmationMessage] = useState('Saved!');
+  const [saveConfirmationKey, setSaveConfirmationKey] = useState(0);
   const [undoHistory, setUndoHistory] = useState<VerseEditorState[]>([]);
   const [isFavoriteActive, setIsFavoriteActive] = useState(false);
   const bookOptions = getBooks();
@@ -1192,7 +1270,7 @@ export default function StudioScreen() {
   ].sort((left, right) => left.zIndex - right.zIndex);
 
   const [fontsLoaded] = useFonts({
-    Playwrite: require('../../assets/fonts/PlaywriteDEGrund.ttf'),
+    Playwrite: require('../assets/fonts/PlaywriteDEGrund.ttf'),
   });
   const isCurrentVerseSaved = savedDesigns.some(
     (design) =>
@@ -1214,6 +1292,23 @@ export default function StudioScreen() {
     }),
     [backgroundKey, fontSize, highlightedWords, notes, selectedFont, stickers, verseCards]
   );
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const captureLatestNotes = () => {
+      notesRef.current = getLatestWebNotes(notesRef.current);
+    };
+
+    document.addEventListener('pointerdown', captureLatestNotes, true);
+    return () => document.removeEventListener('pointerdown', captureLatestNotes, true);
+  }, []);
   const isLoadingRouteSelectedVerse =
     hasRouteSelectedVerseParams &&
     !routeDesignParam &&
@@ -1245,6 +1340,8 @@ export default function StudioScreen() {
     favoriteBaseVerses,
     favoriteBaseVerse
   );
+  const canToggleFavoriteDesign =
+    canSaveCurrentVerse && isVerseDesignDecorated(currentEditorState);
 
   const getHighestZIndex = () =>
     Math.max(
@@ -1273,12 +1370,17 @@ export default function StudioScreen() {
     }, 1800);
   };
 
-  const resetStudioToBlank = useCallback(() => {
+  const showSaveConfirmation = (message = 'Saved!') => {
+    setSaveConfirmationMessage(message);
+    setSaveConfirmationKey((current) => current + 1);
+  };
+
+  const resetStudioToBlank = useCallback((nextEntryId?: string) => {
     const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
 
     lastAppliedDesignKeyRef.current = null;
     draftFavoriteKeyRef.current = null;
-    setCurrentEntryId(generateId());
+    setCurrentEntryId(nextEntryId ?? generateId());
     setVerseState({});
     setSelectedBook('');
     setSelectedChapter(0);
@@ -1286,6 +1388,7 @@ export default function StudioScreen() {
     setSelectedVerses([]);
     setVerseCards(nextEditorState.verseCards);
     setStickers(nextEditorState.stickers);
+    notesRef.current = nextEditorState.notes;
     setNotes(nextEditorState.notes);
     setBackgroundKey(nextEditorState.backgroundKey ?? null);
     setSelectedFont(nextEditorState.selectedFont);
@@ -1325,13 +1428,21 @@ export default function StudioScreen() {
 
   const saveStudioJournalEntry = useCallback(
     async (isFavorite: boolean) => {
-      if (!hasVerseSelection || !isVerseDesignDecorated(currentEditorState)) {
+      const latestNotes = getLatestWebNotes(notesRef.current);
+      notesRef.current = latestNotes;
+      const latestEditorState = {
+        ...currentEditorState,
+        notes: latestNotes,
+      };
+
+      if (!hasVerseSelection || !isVerseDesignDecorated(latestEditorState)) {
         return;
       }
 
       const favoriteKey = ensureFavoriteKey();
       const savedAt = new Date().toISOString();
       const updatedAt = Date.now();
+      const entryId = routeDraftEntryIdParam ?? currentEntryId ?? generateId();
       const nextDesign: SavedVerseDesign = {
         key: favoriteKey,
         book: favoriteBaseBook,
@@ -1343,7 +1454,7 @@ export default function StudioScreen() {
             : favoritePersistVerses,
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
-        notes: notes.map((note) => ({ ...note })),
+        notes: latestNotes.map((note) => ({ ...note })),
         backgroundKey,
         highlights: { ...highlightedWords },
         selectedFont,
@@ -1351,10 +1462,10 @@ export default function StudioScreen() {
         savedAt,
       };
       const previewBase = `${favoriteBaseBook} ${favoriteBaseChapter}:${favoriteBaseVerse}`.trim();
-      const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
+      const notePreview = latestNotes.map((note) => note.text.trim()).find(Boolean) ?? '';
       const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
       const studioJournalPayload = {
-        id: currentEntryId,
+        id: entryId,
         type: 'journal-studio' as const,
         date: new Date().toLocaleString(),
         preview,
@@ -1363,9 +1474,9 @@ export default function StudioScreen() {
         design: nextDesign,
       };
 
-      await AsyncStorage.setItem(`journal_studio_${currentEntryId}`, JSON.stringify(studioJournalPayload));
+      await AsyncStorage.setItem(`journal_studio_${entryId}`, JSON.stringify(studioJournalPayload));
       await upsertStudioJournalIndex({
-        id: currentEntryId,
+        id: entryId,
         type: 'journal-studio',
         date: studioJournalPayload.date,
         preview,
@@ -1386,7 +1497,7 @@ export default function StudioScreen() {
       hasVerseSelection,
       highlightedWords,
       normalizedSelectedVerses,
-      notes,
+      routeDraftEntryIdParam,
       selectedFont,
       stickers,
       verseCards,
@@ -1403,8 +1514,8 @@ export default function StudioScreen() {
     }
 
     lastAppliedBlankTokenRef.current = routeBlankStudioToken;
-    resetStudioToBlank();
-  }, [resetStudioToBlank, routeBlankStudioToken]);
+    resetStudioToBlank(routeDraftEntryIdParam ?? undefined);
+  }, [resetStudioToBlank, routeBlankStudioToken, routeDraftEntryIdParam]);
 
   useEffect(() => {
     if (
@@ -1435,35 +1546,96 @@ export default function StudioScreen() {
       return;
     }
 
-    const nextSelectedVerses = [nextVerse];
+    const applySelectedVerse = async () => {
+      if (routeDraftEntryIdParam) {
+        const stored = await AsyncStorage.getItem(`journal_studio_${routeDraftEntryIdParam}`);
 
-    lastAppliedSelectionTokenRef.current = selectionParamsKey;
-    draftFavoriteKeyRef.current = null;
-    setCurrentEntryId(generateId());
-    setIsFavoriteActive(false);
-    setSelectedBook(routeSelectedBookParam);
-    setSelectedChapter(nextChapter);
-    setSelectedVerse(nextVerse);
-    setSelectedVerses(nextSelectedVerses);
-    setVerseCards(
-      syncVerseCardsWithSelection(
-        DEFAULT_VERSE_EDITOR_STATE.verseCards,
-        nextSelectedVerses,
-        routeSelectedBookParam,
-        nextChapter,
-        language.key
-      )
-    );
+        if (stored) {
+          const parsed = JSON.parse(stored) as {
+            design?: SavedVerseDesign;
+            updatedAt?: number;
+            isFavorite?: boolean;
+          };
+
+          if (parsed?.design) {
+            const d = parsed.design;
+            lastAppliedSelectionTokenRef.current = selectionParamsKey;
+            lastAppliedDesignKeyRef.current = `draft-${routeDraftEntryIdParam}-${parsed.updatedAt ?? 0}`;
+            draftFavoriteKeyRef.current = d.key;
+            setCurrentEntryId(routeDraftEntryIdParam);
+            setSelectedBook(d.book);
+            setSelectedChapter(d.chapter);
+            setSelectedVerse(d.verse);
+            const restoredVerses = normalizeSelectedVerses(d.selectedVerses ?? [d.verse], d.verse);
+            setSelectedVerses(restoredVerses);
+            setVerseCards(
+              syncVerseCardsWithSelection(
+                d.verseCards || [],
+                restoredVerses,
+                d.book,
+                d.chapter,
+                language.key
+              )
+            );
+            setStickers(d.stickers || []);
+            notesRef.current = d.notes || [];
+            setNotes(d.notes || []);
+            setBackgroundKey(d.backgroundKey ?? null);
+            setHighlightedWords(d.highlights || {});
+            setSelectedFont(d.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+            setFontSize(d.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
+            setSelectedStickerId(null);
+            setSelectedNoteId(null);
+            setAutoFocusNoteId(null);
+            setFocusedNoteId(null);
+            setFocusedNoteTarget(null);
+            setOpenToolbarMenu(null);
+            setIsBookDropdownOpen(false);
+            setIsChapterDropdownOpen(false);
+            setIsVerseDropdownOpen(false);
+            setUndoHistory([]);
+            setIsFavoriteActive(Boolean(parsed.isFavorite));
+            return;
+          }
+        }
+      }
+
+      const nextSelectedVerses = [nextVerse];
+
+      lastAppliedSelectionTokenRef.current = selectionParamsKey;
+      draftFavoriteKeyRef.current = null;
+      setCurrentEntryId(routeDraftEntryIdParam ?? generateId());
+      setIsFavoriteActive(false);
+      setSelectedBook(routeSelectedBookParam);
+      setSelectedChapter(nextChapter);
+      setSelectedVerse(nextVerse);
+      setSelectedVerses(nextSelectedVerses);
+      setVerseCards(
+        syncVerseCardsWithSelection(
+          DEFAULT_VERSE_EDITOR_STATE.verseCards,
+          nextSelectedVerses,
+          routeSelectedBookParam,
+          nextChapter,
+          language.key
+        )
+      );
     setStickers(DEFAULT_VERSE_EDITOR_STATE.stickers);
+    notesRef.current = DEFAULT_VERSE_EDITOR_STATE.notes;
     setNotes(DEFAULT_VERSE_EDITOR_STATE.notes);
-    setBackgroundKey(DEFAULT_VERSE_EDITOR_STATE.backgroundKey);
-    setSelectedFont(DEFAULT_VERSE_EDITOR_STATE.selectedFont);
-    setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
-    setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
-    setUndoHistory([]);
+      setBackgroundKey(DEFAULT_VERSE_EDITOR_STATE.backgroundKey);
+      setSelectedFont(DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+      setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
+      setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
+      setUndoHistory([]);
+    };
+
+    void applySelectedVerse().catch((error) => {
+      console.warn('Failed to apply selected Studio verse', error);
+    });
   }, [
     hasRouteSelectedVerseParams,
     language.key,
+    routeDraftEntryIdParam,
     routeOpenSelectedVerseParam,
     routeSelectedBookParam,
     routeSelectedChapterParam,
@@ -1512,7 +1684,7 @@ export default function StudioScreen() {
     await writeSavedDesigns(nextFavorites);
     setSavedDesigns(nextFavorites);
 
-    const entryId = currentEntryId || generateId();
+    const entryId = routeDraftEntryIdParam ?? currentEntryId ?? generateId();
     if (!currentEntryId) {
       setCurrentEntryId(entryId);
     }
@@ -1549,6 +1721,7 @@ export default function StudioScreen() {
     isFavoriteActive,
     currentEditorState,
     currentEntryId,
+    routeDraftEntryIdParam,
     notes,
     routeDesignParam,
     routeFavoriteKeyParam,
@@ -1785,20 +1958,21 @@ export default function StudioScreen() {
           return;
         }
 
-        const routeSelectedVerses =
-          routeDesignParam?.book === selectedBook
-            ? normalizeSelectedVerses(
-                routeDesignParam.selectedVerses ?? [routeDesignParam.verse],
-                routeDesignParam.verse
-              )
-            : null;
+        const matchingRouteDesign =
+          routeDesignParam?.book === selectedBook ? routeDesignParam : null;
+        const routeSelectedVerses = matchingRouteDesign
+          ? normalizeSelectedVerses(
+              matchingRouteDesign.selectedVerses ?? [matchingRouteDesign.verse],
+              matchingRouteDesign.verse
+            )
+          : null;
         const fallbackChapter =
           selectedBook === DEFAULT_BOOK && bookChapters.includes(DEFAULT_CHAPTER)
             ? DEFAULT_CHAPTER
             : bookChapters[0] ?? 1;
         const initialChapter =
-          routeDesignParam?.book === selectedBook
-            ? routeDesignParam.chapter
+          matchingRouteDesign
+            ? matchingRouteDesign.chapter
             : hasRouteSelectedVerseParams &&
                 routeSelectedBookParam === selectedBook &&
                 routeSelectedChapterParam !== null &&
@@ -1813,8 +1987,8 @@ export default function StudioScreen() {
             ? DEFAULT_VERSE
             : chapterVerses[0] ?? 1;
         const initialVerse =
-          routeDesignParam?.book === selectedBook
-            ? routeDesignParam.verse
+          matchingRouteDesign
+            ? matchingRouteDesign.verse
             : hasRouteSelectedVerseParams &&
                 routeSelectedBookParam === selectedBook &&
                 routeSelectedVerseParam !== null &&
@@ -1823,7 +1997,7 @@ export default function StudioScreen() {
               : fallbackVerse;
         const initialSelectedVerses =
           routeSelectedVerses &&
-          routeDesignParam?.chapter === initialChapter &&
+          matchingRouteDesign?.chapter === initialChapter &&
           routeSelectedVerses.includes(initialVerse)
             ? routeSelectedVerses
             : [initialVerse];
@@ -1832,8 +2006,8 @@ export default function StudioScreen() {
           initialChapter,
           initialSelectedVerses
         );
-        const initialVerseState = routeDesignParam?.book === selectedBook
-          ? getVerseEditorStateFromDesign(routeDesignParam)
+        const initialVerseState = matchingRouteDesign
+          ? getVerseEditorStateFromDesign(matchingRouteDesign)
           : cloneVerseEditorState(
               savedVerseState[initialDesignKey] ?? DEFAULT_VERSE_EDITOR_STATE
             );
@@ -2581,11 +2755,13 @@ export default function StudioScreen() {
       recordUndoSnapshot();
     }
 
-    setNotes((prev) =>
-      prev.map((note) =>
+    setNotes((prev) => {
+      const nextNotes = prev.map((note) =>
         note.id === id ? { ...note, ...updates } : note
-      )
-    );
+      );
+      notesRef.current = nextNotes;
+      return nextNotes;
+    });
   };
 
   const updateVerseCard = (id: string, updates: VerseCardUpdate) => {
@@ -2933,7 +3109,14 @@ export default function StudioScreen() {
 
   const toggleFavorite = async () => {
     try {
-      if (!isVerseDesignDecorated(currentEditorState)) {
+      const latestNotes = getLatestWebNotes(notesRef.current);
+      notesRef.current = latestNotes;
+      const latestEditorState = {
+        ...currentEditorState,
+        notes: latestNotes,
+      };
+
+      if (!isVerseDesignDecorated(latestEditorState)) {
         return;
       }
 
@@ -2949,7 +3132,7 @@ export default function StudioScreen() {
         selectedVerses: normalizedSelectedVerses,
         verseCards: verseCards.map((verseCard) => ({ ...verseCard })),
         stickers: stickers.map((sticker) => ({ ...sticker })),
-        notes: notes.map((note) => ({ ...note })),
+        notes: latestNotes.map((note) => ({ ...note })),
         backgroundKey,
         highlights: { ...highlightedWords },
         selectedFont,
@@ -2958,12 +3141,12 @@ export default function StudioScreen() {
         key: favoriteKey,
       };
 
-      const entryId = currentEntryId || generateId();
+      const entryId = routeDraftEntryIdParam ?? currentEntryId ?? generateId();
       if (!currentEntryId) {
         setCurrentEntryId(entryId);
       }
       const previewBase = `${selectedBook} ${selectedChapter}:${selectedVerse}`.trim();
-      const notePreview = notes.map((note) => note.text.trim()).find(Boolean) ?? '';
+      const notePreview = latestNotes.map((note) => note.text.trim()).find(Boolean) ?? '';
       const preview = `${previewBase} ${notePreview}`.trim().slice(0, 80);
       const studioJournalPayload = {
         id: entryId,
@@ -2998,9 +3181,21 @@ export default function StudioScreen() {
       setSavedDesigns(nextFavorites);
       await writeSavedDesigns(nextFavorites);
       setIsFavoriteActive(studioJournalPayload.isFavorite);
+      if (!routeEntryIdParam) {
+        router.replace({ pathname: '/studio', params: { entryId } });
+      }
+      if (studioJournalPayload.isFavorite) {
+        showSaveConfirmation('Saved!');
+      }
     } catch (error) {
       console.log('Save error', error);
     }
+  };
+
+  const captureNotesBeforeAction = () => {
+    const latestNotes = getLatestWebNotes(notesRef.current);
+    notesRef.current = latestNotes;
+    setNotes(latestNotes);
   };
 
   useEffect(() => {
@@ -3088,10 +3283,14 @@ export default function StudioScreen() {
       }
 
       await MediaLibrary.saveToLibraryAsync(imageUri);
-      showSaveToast('Saved to camera roll 💖');
+      showSaveConfirmation('Saved image');
     } catch (error) {
       console.warn('Failed to save verse image', error);
     }
+  };
+
+  const handleCloudSaved = (result: { conflictCount: number }) => {
+    showSaveConfirmation(result.conflictCount > 0 ? 'Cloud saved, review sync' : 'Saved to cloud');
   };
 
   const shareViaSMS = async () => {
@@ -3136,13 +3335,19 @@ export default function StudioScreen() {
             </View>
 
             <Pressable
+              onPressIn={captureNotesBeforeAction}
+              {...(Platform.OS === 'web'
+                ? { onMouseDown: captureNotesBeforeAction, onPointerDown: captureNotesBeforeAction }
+                : null)}
               onPress={(event) => {
                 event.stopPropagation();
                 void toggleFavorite();
               }}
-                style={[
+              disabled={!canToggleFavoriteDesign}
+              style={[
                   styles.saveDesignButton,
                   { backgroundColor: colorTheme.toolbarBackground },
+                  !canToggleFavoriteDesign ? styles.saveDesignButtonDisabled : null,
                   isFavoriteActive
                     ? [
                         styles.saveDesignButtonActive,
@@ -3152,8 +3357,9 @@ export default function StudioScreen() {
                         },
                       ]
                     : null,
-                ]}
+              ]}
               accessibilityRole="button"
+              accessibilityState={{ disabled: !canToggleFavoriteDesign, selected: isFavoriteActive }}
               accessibilityLabel={isFavoriteActive ? 'Unsave verse design' : 'Save verse design'}>
               <Ionicons
                 name={isFavoriteActive ? 'heart' : 'heart-outline'}
@@ -3788,6 +3994,17 @@ export default function StudioScreen() {
                       <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionButtonText}>Save image</Text>
                     </TouchableOpacity>
 
+                    <EncryptedCloudSaveAction
+                      buttonStyle={[
+                        styles.moreActionButton,
+                        { backgroundColor: colorTheme.toolbarBackground },
+                      ]}
+                      textStyle={styles.moreActionButtonText}
+                      iconColor="#333"
+                      disabledStyle={styles.shareImageButtonDisabled}
+                      onSaved={handleCloudSaved}
+                    />
+
                     <TouchableOpacity
                       onPress={() => {
                         void shareViaSMS();
@@ -3926,6 +4143,15 @@ export default function StudioScreen() {
           <Text style={styles.keyboardDoneButtonText}>Done</Text>
         </Pressable>
       ) : null}
+
+      <SaveConfirmationToast
+        visibleKey={saveConfirmationKey}
+        message={saveConfirmationMessage}
+        tintColor={colorTheme.tint}
+        borderColor={colorTheme.border}
+        backgroundColor={colorTheme.paperBackground}
+        style={styles.saveConfirmationToast}
+      />
 
       <Animated.View
         pointerEvents="none"
@@ -4211,6 +4437,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7E6E8',
     borderWidth: 1,
     borderColor: '#E3B7BE',
+  },
+  saveDesignButtonDisabled: {
+    opacity: 0.45,
   },
   verseDropdownOption: {
     flexDirection: 'row',
@@ -4884,6 +5113,9 @@ const styles = StyleSheet.create({
     color: '#1F1F1F',
     fontSize: 15,
     fontWeight: '600',
+  },
+  saveConfirmationToast: {
+    top: Platform.OS === 'web' ? 78 : 112,
   },
   saveToast: {
     position: 'absolute',

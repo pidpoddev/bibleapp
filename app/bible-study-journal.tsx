@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
+import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
@@ -61,6 +62,24 @@ const defaultSections: BibleStudySection[] = [
   { id: '5', label: 'Notes:', text: '' },
 ];
 
+function getLatestWebSections(sections: BibleStudySection[]) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return sections;
+  }
+
+  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write here..."]'))
+    .map((textarea) => (textarea as HTMLTextAreaElement).value);
+
+  if (values.length < sections.length) {
+    return sections;
+  }
+
+  return sections.map((section, index) => {
+    const value = values[index];
+    return { ...section, text: value || section.text };
+  });
+}
+
 const BibleStudySectionField = memo(function BibleStudySectionField({
   label,
   value,
@@ -78,8 +97,15 @@ const BibleStudySectionField = memo(function BibleStudySectionField({
   const [isFocused, setIsFocused] = useState(false);
   useEffect(() => {
     if (isFocused) return;
-    setDraftText(value);
-  }, [isFocused, value]);
+    if (value.length > 0 || draftText.length === 0) {
+      setDraftText(value);
+    }
+  }, [draftText.length, isFocused, value]);
+
+  const handleTextChange = (text: string) => {
+    setDraftText(text);
+    onChangeText(text);
+  };
 
   return (
     <View style={[styles.section, { backgroundColor: cardBackground, borderLeftColor: accentColor }]}> 
@@ -96,11 +122,34 @@ const BibleStudySectionField = memo(function BibleStudySectionField({
           textAlignVertical="top"
           value={draftText}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          onChangeText={(text) => {
-            setDraftText(text);
-            onChangeText(text);
+          onBlur={(event) => {
+            const text = (event.target as unknown as { value?: string }).value;
+            if (typeof text === 'string') {
+              handleTextChange(text);
+            }
+            if (Platform.OS !== 'web') {
+              setIsFocused(false);
+            }
           }}
+          onChange={(event) => {
+            const text =
+              event.nativeEvent.text ??
+              (event.target as unknown as { value?: string }).value;
+            if (typeof text === 'string') {
+              handleTextChange(text);
+            }
+          }}
+          onChangeText={handleTextChange}
+          {...(Platform.OS === 'web'
+            ? {
+                onInput: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => {
+                  const text = event.currentTarget?.value ?? event.target?.value;
+                  if (typeof text === 'string') {
+                    handleTextChange(text);
+                  }
+                },
+              }
+            : null)}
         />
       </View>
     </View>
@@ -115,12 +164,14 @@ function buildPreview(book: string, chapter: string, verse: string, sections: Bi
 
 export default function BibleStudyJournalScreen() {
   const { colorTheme, language } = useAppSettings();
+  const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
     newEntryToken?: string;
   }>();
   const today = useMemo(() => formatEntryDateTime(new Date()), []);
-  const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
+  const draftEntryId = entryId ?? newEntryToken;
+  const [currentId, setCurrentId] = useState(() => draftEntryId ?? generateId());
   const [entryDate, setEntryDate] = useState(today);
   const [book, setBook] = useState('');
   const [chapter, setChapter] = useState('');
@@ -128,6 +179,7 @@ export default function BibleStudyJournalScreen() {
   const [openDropdown, setOpenDropdown] = useState<'book' | 'chapter' | 'verse' | null>(null);
   const canvasRef = useRef<View>(null);
   const [sections, setSections] = useState<BibleStudySection[]>(defaultSections);
+  const sectionsRef = useRef<BibleStudySection[]>(defaultSections);
   const [stickers, setStickers] = useState<DecorSticker[]>([]);
   const [background, setBackground] = useState<string>('lined');
   const [highlightColor, setHighlightColor] = useState<string>('#FFF3A3');
@@ -141,6 +193,19 @@ export default function BibleStudyJournalScreen() {
   const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key) : ''), [book, chapter, language.key, verse]);
   const selectedBg = getShopBackground(background.startsWith('shop:') ? background.replace('shop:', '') : null);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const captureLatestSections = () => {
+      sectionsRef.current = getLatestWebSections(sectionsRef.current);
+    };
+
+    document.addEventListener('pointerdown', captureLatestSections, true);
+    return () => document.removeEventListener('pointerdown', captureLatestSections, true);
+  }, []);
+
   const updateIndex = useCallback(async (entry: BibleStudyEntry) => {
     const existingIndex = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
     const parsedIndex = existingIndex ? (JSON.parse(existingIndex) as BibleStudyEntry[]) : [];
@@ -150,7 +215,7 @@ export default function BibleStudyJournalScreen() {
   }, []);
 
   const saveEntry = useCallback(async (nextBook: string, nextChapter: string, nextVerse: string, nextSections: BibleStudySection[], nextStickers = stickers, nextBackground = background, nextHighlightColor = highlightColor) => {
-    const id = currentId || generateId();
+    const id = entryId ?? newEntryToken ?? currentId ?? generateId();
     if (!currentId) setCurrentId(id);
     const entry: BibleStudyEntry = {
       id,
@@ -169,7 +234,7 @@ export default function BibleStudyJournalScreen() {
     };
     await AsyncStorage.setItem(`journal_bible_study_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
-  }, [background, currentId, entryDate, highlightColor, isFavorite, stickers, updateIndex]);
+  }, [background, currentId, entryDate, entryId, highlightColor, isFavorite, newEntryToken, stickers, updateIndex]);
 
   const recordUndoSnapshot = useCallback(() => {
     setUndoHistory((currentHistory) => [
@@ -210,31 +275,39 @@ export default function BibleStudyJournalScreen() {
 
   useEffect(() => {
     const loadEntry = async () => {
-      if (!entryId) {
-        const nextId = generateId();
-        const nextDate = formatEntryDateTime(new Date());
-        const nextEntry: BibleStudyEntry = {
-          id: nextId,
-          type: 'bible-study',
-          date: nextDate,
-          book: '',
-          chapter: '',
-          verse: '',
-          sections: defaultSections,
-          stickers: [],
-          background: 'lined',
-          highlightColor: '#FFF3A3',
-          preview: '',
-          isFavorite: false,
-          updatedAt: Date.now(),
-        };
+      const storageEntryId = entryId ?? newEntryToken;
 
+      if (storageEntryId) {
+        const storedEntry = await AsyncStorage.getItem(`journal_bible_study_${storageEntryId}`);
+        if (storedEntry) {
+          const parsedEntry = JSON.parse(storedEntry) as BibleStudyEntry;
+          setCurrentId(parsedEntry.id);
+          setEntryDate(parsedEntry.date || today);
+          setBook(parsedEntry.book || '');
+          setChapter(parsedEntry.chapter || '');
+          setVerse(parsedEntry.verse || '');
+          const loadedSections = Array.isArray(parsedEntry.sections) ? parsedEntry.sections : defaultSections;
+          sectionsRef.current = loadedSections;
+          setSections(loadedSections);
+          setStickers(Array.isArray(parsedEntry.stickers) ? parsedEntry.stickers : []);
+          setBackground(typeof parsedEntry.background === 'string' ? parsedEntry.background : 'lined');
+          setHighlightColor(typeof parsedEntry.highlightColor === 'string' ? parsedEntry.highlightColor : '#FFF3A3');
+          setIsFavorite(Boolean(parsedEntry.isFavorite));
+          setUndoHistory([]);
+          return;
+        }
+      }
+
+      if (!entryId) {
+        const nextId = newEntryToken ?? generateId();
+        const nextDate = formatEntryDateTime(new Date());
         setCurrentId(nextId);
         setEntryDate(nextDate);
         setBook('');
         setChapter('');
         setVerse('');
         setOpenDropdown(null);
+        sectionsRef.current = defaultSections;
         setSections(defaultSections);
         setStickers([]);
         setBackground('lined');
@@ -242,24 +315,8 @@ export default function BibleStudyJournalScreen() {
         setOpenDecor(null);
         setIsFavorite(false);
         setUndoHistory([]);
-        await AsyncStorage.setItem(`journal_bible_study_${nextId}`, JSON.stringify(nextEntry));
-        await updateIndex(nextEntry);
         return;
       }
-      const storedEntry = await AsyncStorage.getItem(`journal_bible_study_${entryId}`);
-      if (!storedEntry) return;
-      const parsedEntry = JSON.parse(storedEntry) as BibleStudyEntry;
-      setCurrentId(parsedEntry.id);
-      setEntryDate(parsedEntry.date || today);
-      setBook(parsedEntry.book || '');
-      setChapter(parsedEntry.chapter || '');
-      setVerse(parsedEntry.verse || '');
-      setSections(Array.isArray(parsedEntry.sections) ? parsedEntry.sections : defaultSections);
-      setStickers(Array.isArray(parsedEntry.stickers) ? parsedEntry.stickers : []);
-      setBackground(typeof parsedEntry.background === 'string' ? parsedEntry.background : 'lined');
-      setHighlightColor(typeof parsedEntry.highlightColor === 'string' ? parsedEntry.highlightColor : '#FFF3A3');
-      setIsFavorite(Boolean(parsedEntry.isFavorite));
-      setUndoHistory([]);
     };
     void loadEntry();
   }, [entryId, newEntryToken, today, updateIndex]);
@@ -268,6 +325,7 @@ export default function BibleStudyJournalScreen() {
     recordUndoSnapshot();
     setSections((currentSections) => {
       const updatedSections = currentSections.map((section) => section.id === sectionId ? { ...section, text } : section);
+      sectionsRef.current = updatedSections;
       void saveEntry(book, chapter, verse, updatedSections);
       return updatedSections;
     });
@@ -298,8 +356,10 @@ export default function BibleStudyJournalScreen() {
 
   const toggleFavorite = async () => {
     const nextValue = !isFavorite;
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
     setIsFavorite(nextValue);
-    const id = currentId || generateId();
+    const id = entryId ?? newEntryToken ?? currentId ?? generateId();
     const entry: BibleStudyEntry = {
       id,
       type: 'bible-study',
@@ -307,27 +367,38 @@ export default function BibleStudyJournalScreen() {
       book,
       chapter,
       verse,
-      sections,
+      sections: latestSections,
       stickers,
       background,
       highlightColor,
-      preview: buildPreview(book, chapter, verse, sections),
+      preview: buildPreview(book, chapter, verse, latestSections),
       isFavorite: nextValue,
       updatedAt: Date.now(),
     };
     await AsyncStorage.setItem(`journal_bible_study_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
+    if (!entryId) {
+      router.replace({ pathname: '/bible-study-journal', params: { entryId: id } });
+    }
+  };
+
+  const captureSectionsBeforeAction = () => {
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
+    setSections(latestSections);
   };
 
   const addNoteSection = () => {
     recordUndoSnapshot();
     const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
+    sectionsRef.current = next;
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
 
   const resetJournal = () => {
     recordUndoSnapshot();
+    sectionsRef.current = defaultSections;
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -360,7 +431,13 @@ export default function BibleStudyJournalScreen() {
           <Text style={styles.title}>Bible Study</Text>
         </View>
         <Text style={styles.date}>{entryDate}</Text>
-        <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}>
+        <TouchableOpacity
+          style={styles.favoriteButton}
+          onPressIn={captureSectionsBeforeAction}
+          onPress={() => void toggleFavorite()}
+          {...(Platform.OS === 'web'
+            ? { onMouseDown: captureSectionsBeforeAction, onPointerDown: captureSectionsBeforeAction }
+            : null)}>
           <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
         </TouchableOpacity>
 
@@ -464,6 +541,11 @@ export default function BibleStudyJournalScreen() {
               <Ionicons name="download-outline" size={16} color="#5B514D" />
               <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
             </TouchableOpacity>
+            <EncryptedCloudSaveAction
+              buttonStyle={[styles.simpleChip, styles.moreActionChip]}
+              textStyle={styles.moreActionText}
+              iconColor="#5B514D"
+            />
             <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}>
               <Ionicons name="share-outline" size={16} color="#5B514D" />
               <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>

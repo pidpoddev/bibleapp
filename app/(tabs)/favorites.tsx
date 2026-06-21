@@ -9,6 +9,7 @@ import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 import {
   getHydratedJournalEntries,
   getJournalEntryStorageKey,
+  type HydratedJournalEntry,
 } from '@/utils/journal-storage';
 
 const FAVORITES_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
@@ -82,6 +83,13 @@ function getTypeBadge(type: UnifiedFavorite['type']) {
   }
 }
 
+function hasVisibleFavoriteContent(entry: HydratedJournalEntry) {
+  return Boolean(
+    entry.preview?.trim() ||
+      (entry.book && entry.chapter && entry.verse)
+  );
+}
+
 export default function FavoritesScreen() {
   const router = useRouter();
   const { colorTheme, t } = useAppSettings();
@@ -109,12 +117,13 @@ export default function FavoritesScreen() {
       )
         .filter((entry) => Boolean(entry.isFavorite))
         .filter((entry) => entry.type in journalTypeMap)
+        .filter(hasVisibleFavoriteContent)
         .map((entry) => ({
           id: `${entry.type}:${entry.id}`,
           type: entry.type,
           title: journalTypeMap[entry.type].title,
           subtitle: journalTypeMap[entry.type].subtitle,
-          preview: entry.preview || 'Open to keep writing...',
+          preview: entry.preview ?? '',
           updatedAt: entry.updatedAt,
           entryId: entry.id,
           searchableText: [

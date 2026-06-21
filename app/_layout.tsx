@@ -59,6 +59,7 @@ function RootNavigator() {
           options={{ title: t('dailyDevotional') }}
         />
         <Stack.Screen name="journal-studio" options={{ title: t('tabStudio') }} />
+        <Stack.Screen name="studio" options={{ title: t('tabStudio') }} />
         <Stack.Screen name="journal-editor" options={{ title: t('tabJournal') }} />
         <Stack.Screen
           name="prayer-journal"

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
@@ -14,16 +13,50 @@ import {
 
 import { useAppSettings } from '@/utils/app-settings';
 import { buildJournalExportSnapshot, resetJournalData } from '@/utils/journal-storage';
-
-const ACCOUNT_SESSION_STORAGE_KEY = 'account_session_v1';
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  connectPrivateSyncPhrase,
+  disconnectPrivateSync,
+  getEncryptedSyncConflicts,
+  getEncryptedSyncLog,
+  getSyncSession,
+  keepEncryptedSyncConflictVersion,
+  pullEncryptedSync,
+  pushEncryptedSync,
+  saveBothEncryptedSyncConflictVersions,
+  type SyncConflict,
+  type SyncConflictVersion,
+  type SyncLogEvent,
+} from '@/utils/sync-client';
 
 type AccountSession = {
   email: string;
   signedInAt: number;
 };
 
-type AccountMode = 'sign-in' | 'create';
+function getFriendlySyncError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+
+  if (message.includes('did not match') || message.includes('does not match')) {
+    return 'That phrase does not match this device.';
+  }
+
+  if (message.includes('Unauthorized sync device')) {
+    return 'Cloud Save needs to reconnect. Enter your Secret Phrase again.';
+  }
+
+  if (message.includes('Private Sync Phrase') || message.includes('Create or enter')) {
+    return 'Enter your Secret Phrase first.';
+  }
+
+  if (message.includes('Unexpected API error') || message.includes('Sync request failed')) {
+    return fallback;
+  }
+
+  return message
+    .replaceAll('Private Sync', 'Cloud Save')
+    .replaceAll('sync', 'cloud save')
+    .replaceAll('Sync', 'Cloud Save');
+}
 
 export default function SettingsScreen() {
   const {
@@ -35,32 +68,29 @@ export default function SettingsScreen() {
     setLanguageKey,
     t,
   } = useAppSettings();
-  const [accountEmail, setAccountEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [accountMode, setAccountMode] = useState<AccountMode>('sign-in');
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
-  const [accountMessage, setAccountMessage] = useState('');
-  const [accountError, setAccountError] = useState('');
   const [dataMessage, setDataMessage] = useState('');
   const [dataError, setDataError] = useState('');
   const [exportText, setExportText] = useState('');
+  const [privateSyncPhrase, setPrivateSyncPhrase] = useState('');
+  const [syncMessage, setSyncMessage] = useState('');
+  const [syncError, setSyncError] = useState('');
+  const [isSyncBusy, setIsSyncBusy] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
+  const [syncLogEvents, setSyncLogEvents] = useState<SyncLogEvent[]>([]);
+  const [isSyncLogVisible, setIsSyncLogVisible] = useState(false);
 
   useEffect(() => {
     const loadAccountSession = async () => {
       try {
-        const storedSession = await AsyncStorage.getItem(ACCOUNT_SESSION_STORAGE_KEY);
+        const storedSyncSession = await getSyncSession();
 
-        if (!storedSession) {
-          return;
-        }
-
-        const parsedSession = JSON.parse(storedSession) as AccountSession;
-
-        if (parsedSession.email) {
-          setAccountSession(parsedSession);
-          setAccountEmail(parsedSession.email);
+        if (storedSyncSession) {
+          setAccountSession({
+            email: `Cloud Save ${storedSyncSession.phraseFingerprint}`,
+            signedInAt: storedSyncSession.createdAt,
+          });
         }
       } catch (error) {
         console.log('Error loading account session:', error);
@@ -70,97 +100,182 @@ export default function SettingsScreen() {
     void loadAccountSession();
   }, []);
 
-  const handleAccountSubmit = async () => {
-    const normalizedEmail = accountEmail.trim().toLowerCase();
+  const refreshPrivateSyncSession = async () => {
+    const storedSyncSession = await getSyncSession();
 
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setAccountError(t('settingsAccountEmailError'));
-      setAccountMessage('');
-      return;
-    }
-
-    if (password.length < 8) {
-      setAccountError(t('settingsAccountPasswordError'));
-      setAccountMessage('');
-      return;
-    }
-
-    const nextSession: AccountSession = {
-      email: normalizedEmail,
-      signedInAt: Date.now(),
-    };
-
-    try {
-      await AsyncStorage.setItem(
-        ACCOUNT_SESSION_STORAGE_KEY,
-        JSON.stringify(nextSession)
-      );
-      setAccountSession(nextSession);
-      setAccountEmail(normalizedEmail);
-      setPassword('');
-      setAccountError('');
-      setAccountMessage(t('settingsAccountSaved'));
-    } catch (error) {
-      console.log('Error saving account session:', error);
-      setAccountError(t('settingsAccountEmailError'));
-      setAccountMessage('');
-    }
-  };
-
-  const handleCreateAccount = async () => {
-    const normalizedEmail = accountEmail.trim().toLowerCase();
-
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setAccountError(t('settingsAccountEmailError'));
-      setAccountMessage('');
-      return;
-    }
-
-    if (password.length < 8) {
-      setAccountError(t('settingsAccountPasswordError'));
-      setAccountMessage('');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setAccountError(t('settingsAccountPasswordMatchError'));
-      setAccountMessage('');
-      return;
-    }
-
-    const nextSession: AccountSession = {
-      email: normalizedEmail,
-      signedInAt: Date.now(),
-    };
-
-    try {
-      await AsyncStorage.setItem(
-        ACCOUNT_SESSION_STORAGE_KEY,
-        JSON.stringify(nextSession)
-      );
-      setAccountSession(nextSession);
-      setAccountEmail(normalizedEmail);
-      setPassword('');
-      setConfirmPassword('');
-      setAccountError('');
-      setAccountMessage(t('settingsAccountCreated'));
-    } catch (error) {
-      console.log('Error creating account session:', error);
-      setAccountError(t('settingsAccountEmailError'));
-      setAccountMessage('');
-    }
-  };
-
-  const handleAccountSignOut = async () => {
-    try {
-      await AsyncStorage.removeItem(ACCOUNT_SESSION_STORAGE_KEY);
+    if (storedSyncSession) {
+      setAccountSession({
+        email: `Cloud Save ${storedSyncSession.phraseFingerprint}`,
+        signedInAt: storedSyncSession.createdAt,
+      });
+    } else {
       setAccountSession(null);
-      setPassword('');
-      setConfirmPassword('');
-      setAccountMessage('');
-      setAccountError('');
+    }
+  };
+
+  const handleConnectPrivateSyncPhrase = async () => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase first.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      const result = await connectPrivateSyncPhrase(privateSyncPhrase);
+      await refreshPrivateSyncSession();
+      setSyncConflicts([]);
+      setSyncError('');
+      setSyncMessage(result.message || 'Connected');
     } catch (error) {
-      console.log('Error signing out:', error);
+      setSyncError(getFriendlySyncError(error, 'Could not connect cloud save.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handlePushPrivateSync = async () => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase to save to cloud.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      const result = await pushEncryptedSync(privateSyncPhrase);
+      await refreshPrivateSyncSession();
+      setSyncError('');
+      setSyncMessage(
+        result.conflictCount > 0
+          ? `Saved ${result.pushedCount} things. ${result.conflictCount} need a quick check.`
+          : "Y'all N Sync"
+      );
+
+      if (result.conflictCount > 0) {
+        setSyncConflicts(await getEncryptedSyncConflicts(privateSyncPhrase));
+      }
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not save to cloud.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handlePullPrivateSync = async () => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase to get your cloud saves.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      const result = await pullEncryptedSync(privateSyncPhrase, { full: true });
+      await refreshPrivateSyncSession();
+      setSyncError('');
+      setSyncMessage(
+        result.pulledCount === 0 && result.deletedCount === 0
+          ? "Y'all N Sync"
+          : `Got ${result.pulledCount} saved thing${result.pulledCount === 1 ? '' : 's'}${
+              result.deletedCount ? ` and cleaned up ${result.deletedCount}` : ''
+            }.`
+      );
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not get cloud saves.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handleReviewSyncConflicts = async () => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase to check saved versions.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
+      setSyncConflicts(conflicts);
+      setSyncError('');
+      setSyncMessage(
+        conflicts.length === 0
+          ? 'No mix-ups to fix.'
+          : `${conflicts.length} saved thing${conflicts.length === 1 ? '' : 's'} need a quick check.`
+      );
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not check saved versions.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handleShowSyncLog = async () => {
+    setIsSyncBusy(true);
+    try {
+      const log = await getEncryptedSyncLog();
+      setSyncLogEvents(log.events);
+      setIsSyncLogVisible(true);
+      setSyncError('');
+      setSyncMessage(log.events.length === 0 ? 'Nothing saved or downloaded yet.' : "Y'all N Sync");
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not load Cloud Save Log.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handleKeepConflictVersion = async (
+    conflict: SyncConflict,
+    version: SyncConflictVersion
+  ) => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase to fix this.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      await keepEncryptedSyncConflictVersion(privateSyncPhrase, conflict, version);
+      const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
+      setSyncConflicts(conflicts);
+      setSyncError('');
+      setSyncMessage('Saved version picked.');
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not pick that version.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
+    }
+  };
+
+  const handleSaveBothConflictVersions = async (conflict: SyncConflict) => {
+    if (!privateSyncPhrase.trim()) {
+      setSyncError('Enter your Secret Phrase to fix this.');
+      setSyncMessage('');
+      return;
+    }
+
+    setIsSyncBusy(true);
+    try {
+      await saveBothEncryptedSyncConflictVersions(privateSyncPhrase, conflict);
+      const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
+      setSyncConflicts(conflicts);
+      setSyncError('');
+      setSyncMessage('Both versions were saved.');
+    } catch (error) {
+      setSyncError(getFriendlySyncError(error, 'Could not save both versions.'));
+      setSyncMessage('');
+    } finally {
+      setIsSyncBusy(false);
     }
   };
 
@@ -251,191 +366,209 @@ export default function SettingsScreen() {
           ]}>
           <View style={styles.accountHeader}>
             <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
-              <Ionicons name="person-circle-outline" size={22} color="#5B514D" />
+              <Ionicons name="key-outline" size={22} color="#5B514D" />
             </View>
 
             <View style={styles.accountHeaderText}>
               <Text style={styles.accountTitle}>
                 {accountSession
-                  ? t('settingsAccountSignedIn')
-                  : accountMode === 'create'
-                    ? t('settingsAccountCreateSubtitle')
-                    : t('settingsAccountSubtitle')}
+                  ? 'Cloud Save connected'
+                  : 'Secret Phrase'}
               </Text>
               <Text style={styles.accountHint}>
-                {accountSession?.email ?? t('settingsAccountSyncStatus')}
+                {accountSession
+                  ? 'Your journal can save to the cloud.'
+                  : 'Use one phrase to save and get your journal on your devices.'}
               </Text>
             </View>
           </View>
 
-          {accountSession ? (
-            <View style={styles.signedInRow}>
-              <View style={[styles.syncPill, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Ionicons name="cloud-outline" size={15} color="#5B514D" />
-                <Text style={styles.syncPillText}>{t('settingsAccountSyncStatus')}</Text>
-              </View>
+          <Text style={styles.accountHint}>
+            Your journal is locked before it saves to the cloud.
+          </Text>
+          <Text style={styles.phraseWarningText}>
+            {"Don't lose the phrase! It can't be recovered."}
+          </Text>
 
-              <TouchableOpacity
-                activeOpacity={0.86}
-                onPress={handleAccountSignOut}
-                style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
-                <Text style={styles.secondaryButtonText}>{t('settingsAccountSignOut')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <View
-                style={[
-                  styles.accountModeRow,
-                  { backgroundColor: colorTheme.toolbarBackground },
-                ]}>
-                <TouchableOpacity
-                  activeOpacity={0.86}
-                  onPress={() => {
-                    setAccountMode('sign-in');
-                    setAccountError('');
-                    setAccountMessage('');
-                  }}
-                  style={[
-                    styles.accountModeButton,
-                    accountMode === 'sign-in'
-                      ? { backgroundColor: colorTheme.cardBackground }
-                      : null,
-                  ]}>
-                  <Text style={styles.accountModeText}>{t('settingsAccountAction')}</Text>
-                </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Secret Phrase</Text>
+            <TextInput
+              value={privateSyncPhrase}
+              onChangeText={setPrivateSyncPhrase}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry={!isPasswordVisible}
+              placeholder="Enter Secret Phrase"
+              placeholderTextColor="#A99D96"
+              style={[
+                styles.textInput,
+                {
+                  backgroundColor: colorTheme.paperBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}
+            />
+          </View>
 
-                <TouchableOpacity
-                  activeOpacity={0.86}
-                  onPress={() => {
-                    setAccountMode('create');
-                    setAccountError('');
-                    setAccountMessage('');
-                  }}
-                  style={[
-                    styles.accountModeButton,
-                    accountMode === 'create'
-                      ? { backgroundColor: colorTheme.cardBackground }
-                      : null,
-                  ]}>
-                  <Text style={styles.accountModeText}>
-                    {t('settingsAccountCreateAction')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.signedInRow}>
+            <TouchableOpacity
+              activeOpacity={0.86}
+              onPress={() => setIsPasswordVisible((current) => !current)}
+              style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
+              <Ionicons
+                name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+                size={16}
+                color="#5B514D"
+              />
+              <Text style={styles.secondaryButtonText}>
+                {isPasswordVisible ? 'Hide' : 'Show'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('settingsAccountEmail')}</Text>
-                <TextInput
-                  value={accountEmail}
-                  onChangeText={setAccountEmail}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  keyboardType="email-address"
-                  placeholder="you@example.com"
-                  placeholderTextColor="#A99D96"
-                  style={[
-                    styles.textInput,
-                    {
-                      backgroundColor: colorTheme.paperBackground,
-                      borderColor: colorTheme.border,
-                    },
-                  ]}
-                />
-              </View>
+          {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
+          {syncMessage ? <Text style={styles.successText}>{syncMessage}</Text> : null}
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('settingsAccountPassword')}</Text>
-                <View
-                  style={[
-                    styles.passwordRow,
-                    {
-                      backgroundColor: colorTheme.paperBackground,
-                      borderColor: colorTheme.border,
-                    },
-                  ]}>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="password"
-                    textContentType="password"
-                    secureTextEntry={!isPasswordVisible}
-                    placeholder="Password"
-                    placeholderTextColor="#A99D96"
-                    style={styles.passwordInput}
-                  />
-                  <TouchableOpacity
-                    activeOpacity={0.82}
-                    onPress={() => setIsPasswordVisible((current) => !current)}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isPasswordVisible ? 'Hide password' : 'Show password'
-                    }
-                    style={styles.passwordToggle}>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={isSyncBusy}
+            onPress={handleConnectPrivateSyncPhrase}
+            style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
+            <Ionicons name="link-outline" size={17} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>
+              {accountSession ? 'Reconnect Cloud Save' : 'Connect Cloud Save'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={isSyncBusy || !accountSession}
+            onPress={handlePushPrivateSync}
+            style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
+            <Ionicons name="cloud-upload-outline" size={17} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Save to Cloud</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={isSyncBusy || !accountSession}
+            onPress={handlePullPrivateSync}
+            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
+            <Ionicons name="cloud-download-outline" size={17} color="#5B514D" />
+            <Text style={styles.secondaryButtonText}>Get Cloud Saves</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={isSyncBusy || !accountSession}
+            onPress={handleReviewSyncConflicts}
+            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
+            <Ionicons name="git-compare-outline" size={17} color="#5B514D" />
+            <Text style={styles.secondaryButtonText}>Fix Mix-Ups</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={isSyncBusy || !accountSession}
+            onPress={handleShowSyncLog}
+            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
+            <Ionicons name="list-outline" size={17} color="#5B514D" />
+            <Text style={styles.secondaryButtonText}>Log</Text>
+          </TouchableOpacity>
+
+          {isSyncLogVisible ? (
+            <View style={[styles.syncLogCard, { borderColor: colorTheme.border }]}>
+              <Text style={styles.syncLogTitle}>Cloud Save Log</Text>
+              {syncLogEvents.length === 0 ? (
+                <Text style={styles.syncLogEmpty}>No uploads or downloads yet.</Text>
+              ) : (
+                syncLogEvents.map((event) => (
+                  <View key={event.id} style={styles.syncLogRow}>
                     <Ionicons
-                      name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
-                      size={18}
+                      name={event.type === 'pull' ? 'cloud-download-outline' : 'cloud-upload-outline'}
+                      size={16}
                       color="#5B514D"
                     />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {accountMode === 'create' ? (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>
-                    {t('settingsAccountConfirmPassword')}
-                  </Text>
-                  <View
-                    style={[
-                      styles.passwordRow,
-                      {
-                        backgroundColor: colorTheme.paperBackground,
-                        borderColor: colorTheme.border,
-                      },
-                    ]}>
-                    <TextInput
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="password"
-                      textContentType="password"
-                      secureTextEntry={!isPasswordVisible}
-                      placeholder="Password"
-                      placeholderTextColor="#A99D96"
-                      style={styles.passwordInput}
-                    />
+                    <Text style={styles.syncLogText}>
+                      {event.type === 'pull' ? 'Download' : 'Upload'} • {event.itemCount}{' '}
+                      item{event.itemCount === 1 ? '' : 's'} •{' '}
+                      {new Date(event.createdAt).toLocaleString()}
+                    </Text>
                   </View>
-                </View>
-              ) : null}
+                ))
+              )}
+            </View>
+          ) : null}
 
-              {accountError ? <Text style={styles.errorText}>{accountError}</Text> : null}
-              {accountMessage ? <Text style={styles.successText}>{accountMessage}</Text> : null}
+          {syncConflicts.map((conflict) => {
+            const canSaveBoth =
+              conflict.versions.length > 1 &&
+              (conflict.itemType === 'journal_entry' ||
+                conflict.itemType === 'studio_journal_entry');
 
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={
-                  accountMode === 'create' ? handleCreateAccount : handleAccountSubmit
-                }
-                style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
-                <Ionicons
-                  name={accountMode === 'create' ? 'person-add-outline' : 'log-in-outline'}
-                  size={17}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.primaryButtonText}>
-                  {accountMode === 'create'
-                    ? t('settingsAccountCreateAction')
-                    : t('settingsAccountAction')}
+            return (
+              <View
+                key={conflict.itemId}
+                style={[
+                  styles.conflictCard,
+                  {
+                    backgroundColor: colorTheme.paperBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}>
+                <Text style={styles.conflictTitle}>Pick the version you want</Text>
+                <Text style={styles.conflictSubtitle}>
+                  This was saved on more than one device.
                 </Text>
-              </TouchableOpacity>
-            </>
-          )}
+
+                {conflict.versions.map((version) => (
+                  <View key={version.id} style={styles.conflictVersionRow}>
+                    <View style={styles.conflictVersionText}>
+                      <Text style={styles.conflictVersionTitle}>
+                        {version.deviceName} •{' '}
+                        {new Date(version.clientUpdatedAt).toLocaleString()}
+                      </Text>
+                      <Text style={styles.conflictPreview}>{version.preview}</Text>
+                    </View>
+                    <TouchableOpacity
+                      activeOpacity={0.86}
+                      disabled={isSyncBusy}
+                      onPress={() => void handleKeepConflictVersion(conflict, version)}
+                      style={[styles.smallChoiceButton, { borderColor: colorTheme.border }]}>
+                      <Text style={styles.smallChoiceButtonText}>Pick</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {canSaveBoth ? (
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    disabled={isSyncBusy}
+                    onPress={() => void handleSaveBothConflictVersions(conflict)}
+                    style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
+                    <Ionicons name="copy-outline" size={17} color="#5B514D" />
+                    <Text style={styles.secondaryButtonText}>Keep Both</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            );
+          })}
+
+          {accountSession ? (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => {
+                void disconnectPrivateSync().then(refreshPrivateSyncSession);
+                setPrivateSyncPhrase('');
+                setSyncConflicts([]);
+                setSyncMessage('');
+                setSyncError('');
+              }}
+              style={[styles.dangerButton, { borderColor: colorTheme.border }]}>
+              <Ionicons name="unlink-outline" size={17} color="#B85F62" />
+              <Text style={styles.dangerButtonText}>Disconnect this device</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -778,8 +911,11 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     borderWidth: 1,
     paddingHorizontal: 14,
+    marginTop: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 7,
   },
   secondaryButtonText: {
     fontSize: 13,
@@ -823,5 +959,91 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#5F8F73',
+  },
+  phraseWarningText: {
+    marginTop: 4,
+    marginBottom: 14,
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#B85F62',
+  },
+  syncLogCard: {
+    borderWidth: 1,
+    borderRadius: 15,
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#FFFDF9',
+  },
+  syncLogTitle: {
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F1F1F',
+  },
+  syncLogEmpty: {
+    fontSize: 13,
+    color: '#7A6F66',
+  },
+  syncLogRow: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncLogText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#5B514D',
+    fontWeight: '600',
+  },
+  conflictCard: {
+    borderWidth: 1,
+    borderRadius: 15,
+    marginTop: 12,
+    padding: 12,
+  },
+  conflictTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F1F1F',
+  },
+  conflictSubtitle: {
+    marginTop: 2,
+    marginBottom: 8,
+    fontSize: 12,
+    color: '#7A6F66',
+  },
+  conflictVersionRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  conflictVersionText: {
+    flex: 1,
+  },
+  conflictVersionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
+  },
+  conflictPreview: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#7A6F66',
+  },
+  smallChoiceButton: {
+    minWidth: 54,
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallChoiceButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
   },
 });

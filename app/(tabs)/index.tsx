@@ -254,6 +254,13 @@ function replaceStudioPreviewReference(entry: HomeJournalEntry, reference: strin
   };
 }
 
+function hasVisibleJournalContent(entry: HomeJournalEntry) {
+  return Boolean(
+    entry.preview?.trim() ||
+      (entry.book && entry.chapter && entry.verse)
+  );
+}
+
 async function hydrateStudioJournalEntries(entries: HomeJournalEntry[]) {
   const hydratedEntries = await Promise.all(
     entries.map(async (entry) => {
@@ -346,7 +353,10 @@ export default function HomeScreen() {
     ]);
     const weeklyMoods = await AsyncStorage.multiGet(moodKeys);
 
-    setJournalEntries(await hydrateStudioJournalEntries(safeParseJournalIndex(journalData)));
+    const visibleEntries = (await hydrateStudioJournalEntries(safeParseJournalIndex(journalData)))
+      .filter(hasVisibleJournalContent);
+
+    setJournalEntries(visibleEntries);
     setSelectedMoodKey(moodData);
     setWeeklyMoodSummary(getMostUsedMoodSummary(weeklyMoods.map(([, value]) => value)));
   }, []);

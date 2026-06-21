@@ -1,1 +1,1 @@
-export { default } from './(tabs)/studio';
+export { default } from './studio';

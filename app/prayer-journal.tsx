@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
@@ -30,6 +30,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { captureRef } from 'react-native-view-shot';
+import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
+import { SaveConfirmationToast } from '@/components/save-confirmation-toast';
 import { useAppSettings } from '@/utils/app-settings';
 import {
   getShopBackground,
@@ -142,6 +144,24 @@ const defaultSections: PrayerSection[] = [
   { id: '5', label: 'Answered prayers:', text: '' },
 ];
 
+function getLatestWebSections(sections: PrayerSection[]) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return sections;
+  }
+
+  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write here..."]'))
+    .map((textarea) => (textarea as HTMLTextAreaElement).value);
+
+  if (values.length < sections.length) {
+    return sections;
+  }
+
+  return sections.map((section, index) => {
+    const value = values[index];
+    return { ...section, text: value || section.text };
+  });
+}
+
 type PrayerSectionFieldProps = {
   label: string;
   value: string;
@@ -167,8 +187,15 @@ const PrayerSectionField = memo(function PrayerSectionField({
       return;
     }
 
-    setDraftText(value);
-  }, [isFocused, value]);
+    if (value.length > 0 || draftText.length === 0) {
+      setDraftText(value);
+    }
+  }, [draftText.length, isFocused, value]);
+
+  const handleTextChange = (text: string) => {
+    setDraftText(text);
+    onChangeText(text);
+  };
 
   return (
     <View
@@ -195,12 +222,35 @@ const PrayerSectionField = memo(function PrayerSectionField({
             setIsFocused(true);
             onFocusField();
           }}
-          onBlur={() => setIsFocused(false)}
-          onPressIn={onFocusField}
-          onChangeText={(text) => {
-            setDraftText(text);
-            onChangeText(text);
+          onBlur={(event) => {
+            const text = (event.target as unknown as { value?: string }).value;
+            if (typeof text === 'string') {
+              handleTextChange(text);
+            }
+            if (Platform.OS !== 'web') {
+              setIsFocused(false);
+            }
           }}
+          onPressIn={onFocusField}
+          onChange={(event) => {
+            const text =
+              event.nativeEvent.text ??
+              (event.target as unknown as { value?: string }).value;
+            if (typeof text === 'string') {
+              handleTextChange(text);
+            }
+          }}
+          onChangeText={handleTextChange}
+          {...(Platform.OS === 'web'
+            ? {
+                onInput: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => {
+                  const text = event.currentTarget?.value ?? event.target?.value;
+                  if (typeof text === 'string') {
+                    handleTextChange(text);
+                  }
+                },
+              }
+            : null)}
         />
       </View>
     </View>
@@ -403,14 +453,17 @@ function DraggablePrayerSticker({
 
 export default function PrayerJournalScreen() {
   const { colorTheme, t } = useAppSettings();
+  const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
     newEntryToken?: string;
   }>();
   const today = useMemo(() => getFormattedDateStamp(), []);
-  const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
+  const draftEntryId = entryId ?? newEntryToken;
+  const [currentId, setCurrentId] = useState(() => draftEntryId ?? generateId());
   const [entryDate, setEntryDate] = useState(today);
   const [sections, setSections] = useState<PrayerSection[]>(defaultSections);
+  const sectionsRef = useRef<PrayerSection[]>(defaultSections);
   const [stickers, setStickers] = useState<PrayerSticker[]>([]);
   const [background, setBackground] = useState<PrayerBackground>('lined');
   const [isFavorite, setIsFavorite] = useState(false);
@@ -420,7 +473,14 @@ export default function PrayerJournalScreen() {
   const [undoHistory, setUndoHistory] = useState<PrayerUndoSnapshot[]>([]);
   const [sectionsHeight, setSectionsHeight] = useState(0);
   const [isSharing, setIsSharing] = useState(false);
+  const [saveConfirmationMessage, setSaveConfirmationMessage] = useState('Saved!');
+  const [saveConfirmationKey, setSaveConfirmationKey] = useState(0);
   const canvasRef = useRef<View>(null);
+
+  const showSaveConfirmation = (message = 'Saved!') => {
+    setSaveConfirmationMessage(message);
+    setSaveConfirmationKey((current) => current + 1);
+  };
 
   const highestStickerDepth = useMemo(
     () => Math.max(0, ...stickers.map((sticker) => sticker.zIndex)),
@@ -437,6 +497,19 @@ export default function PrayerJournalScreen() {
     [sectionsHeight, stickers]
   );
   const selectedPrayerBackground = getShopBackground(getPrayerBackgroundKey(background));
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const captureLatestSections = () => {
+      sectionsRef.current = getLatestWebSections(sectionsRef.current);
+    };
+
+    document.addEventListener('pointerdown', captureLatestSections, true);
+    return () => document.removeEventListener('pointerdown', captureLatestSections, true);
+  }, []);
 
   const updateIndex = useCallback(async (entry: PrayerEntry) => {
     try {
@@ -463,7 +536,7 @@ export default function PrayerJournalScreen() {
       nextStickers: PrayerSticker[],
       nextBackground: PrayerBackground
     ) => {
-      const id = currentId || generateId();
+      const id = entryId ?? newEntryToken ?? currentId ?? generateId();
 
       if (!currentId) {
         setCurrentId(id);
@@ -492,7 +565,7 @@ export default function PrayerJournalScreen() {
         console.log('Error saving journal:', error);
       }
     },
-    [currentId, entryDate, isFavorite, updateIndex]
+    [currentId, entryDate, entryId, isFavorite, newEntryToken, updateIndex]
   );
 
   const recordUndoSnapshot = useCallback(() => {
@@ -525,12 +598,50 @@ export default function PrayerJournalScreen() {
   useEffect(() => {
     const loadEntry = async () => {
       try {
+        const storageEntryId = entryId ?? newEntryToken;
+
+        if (storageEntryId) {
+          const storedEntry = await AsyncStorage.getItem(`journal_prayer_${storageEntryId}`);
+
+          if (storedEntry) {
+            const parsedEntry = JSON.parse(storedEntry) as PrayerEntry;
+
+            if (typeof parsedEntry.id === 'string') {
+              setCurrentId(parsedEntry.id);
+            }
+
+            if (typeof parsedEntry.date === 'string') {
+              setEntryDate(normalizeEntryDate(parsedEntry.date));
+            }
+
+            if (Array.isArray(parsedEntry.sections)) {
+              const loadedSections = normalizeLoadedSections(parsedEntry.sections);
+              sectionsRef.current = loadedSections;
+              setSections(loadedSections);
+            }
+
+            if (Array.isArray(parsedEntry.stickers)) {
+              setStickers(parsedEntry.stickers);
+            }
+
+            setIsFavorite(Boolean(parsedEntry.isFavorite));
+
+            if (typeof parsedEntry.background === 'string') {
+              setBackground(parsedEntry.background);
+            }
+
+            setUndoHistory([]);
+            return;
+          }
+        }
+
         if (!entryId) {
-          const nextId = generateId();
+          const nextId = newEntryToken ?? generateId();
           const nextDate = getFormattedDateStamp();
 
           setCurrentId(nextId);
           setEntryDate(nextDate);
+          sectionsRef.current = defaultSections;
           setSections(defaultSections);
           setStickers([]);
           setBackground('lined');
@@ -539,54 +650,8 @@ export default function PrayerJournalScreen() {
           setOpenTray(null);
           setUndoHistory([]);
 
-          const entry: PrayerEntry = {
-            id: nextId,
-            type: 'prayer',
-            date: nextDate,
-            sections: defaultSections,
-            stickers: [],
-            background: 'lined',
-            preview: '',
-            isFavorite: false,
-            updatedAt: Date.now(),
-          };
-
-          await AsyncStorage.setItem(`journal_prayer_${entry.id}`, JSON.stringify(entry));
-          await updateIndex(entry);
           return;
         }
-
-        const storedEntry = await AsyncStorage.getItem(`journal_prayer_${entryId}`);
-
-        if (!storedEntry) {
-          return;
-        }
-
-        const parsedEntry = JSON.parse(storedEntry) as PrayerEntry;
-
-        if (typeof parsedEntry.id === 'string') {
-          setCurrentId(parsedEntry.id);
-        }
-
-        if (typeof parsedEntry.date === 'string') {
-          setEntryDate(normalizeEntryDate(parsedEntry.date));
-        }
-
-        if (Array.isArray(parsedEntry.sections)) {
-          setSections(normalizeLoadedSections(parsedEntry.sections));
-        }
-
-        if (Array.isArray(parsedEntry.stickers)) {
-          setStickers(parsedEntry.stickers);
-        }
-
-        setIsFavorite(Boolean(parsedEntry.isFavorite));
-
-        if (typeof parsedEntry.background === 'string') {
-          setBackground(parsedEntry.background);
-        }
-
-        setUndoHistory([]);
       } catch (error) {
         console.log('Error loading journal:', error);
       }
@@ -602,6 +667,7 @@ export default function PrayerJournalScreen() {
         sectionIndex === index ? { ...section, text } : section
       );
 
+      sectionsRef.current = updatedSections;
       saveEntry(updatedSections, stickers, background);
       return updatedSections;
     });
@@ -613,6 +679,7 @@ export default function PrayerJournalScreen() {
       { id: generateId(), label: 'Note', text: '' },
       ...sections,
     ];
+    sectionsRef.current = updatedSections;
     setSections(updatedSections);
     setOpenTray(null);
     saveEntry(updatedSections, stickers, background);
@@ -620,6 +687,7 @@ export default function PrayerJournalScreen() {
 
   const resetPrayerJournal = () => {
     recordUndoSnapshot();
+    sectionsRef.current = defaultSections;
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -724,16 +792,18 @@ export default function PrayerJournalScreen() {
 
   const toggleFavorite = async () => {
     const nextValue = !isFavorite;
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
     setIsFavorite(nextValue);
 
     const entry: PrayerEntry = {
-      id: currentId,
+      id: entryId ?? newEntryToken ?? currentId,
       type: 'prayer',
       date: entryDate,
-      sections,
+      sections: latestSections,
       stickers,
       background,
-      preview: buildPreview(sections),
+      preview: buildPreview(latestSections),
       isFavorite: nextValue,
       updatedAt: Date.now(),
     };
@@ -741,9 +811,21 @@ export default function PrayerJournalScreen() {
     try {
       await AsyncStorage.setItem(`journal_prayer_${entry.id}`, JSON.stringify(entry));
       await updateIndex(entry);
+      if (!entryId) {
+        router.replace({ pathname: '/prayer-journal', params: { entryId: entry.id } });
+      }
+      if (nextValue) {
+        showSaveConfirmation('Saved!');
+      }
     } catch (error) {
       console.log('Error toggling favorite:', error);
     }
+  };
+
+  const captureSectionsBeforeAction = () => {
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
+    setSections(latestSections);
   };
 
   const shareJournalImage = async () => {
@@ -782,6 +864,11 @@ export default function PrayerJournalScreen() {
       quality: 1,
     });
     await MediaLibrary.createAssetAsync(imageUri);
+    showSaveConfirmation('Saved image');
+  };
+
+  const handleCloudSaved = (result: { conflictCount: number }) => {
+    showSaveConfirmation(result.conflictCount > 0 ? 'Cloud saved, review sync' : 'Saved to cloud');
   };
 
   return (
@@ -803,7 +890,13 @@ export default function PrayerJournalScreen() {
             </Text>
           </View>
           <Text style={styles.date}>{entryDate}</Text>
-          <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPressIn={captureSectionsBeforeAction}
+            onPress={() => void toggleFavorite()}
+            {...(Platform.OS === 'web'
+              ? { onMouseDown: captureSectionsBeforeAction, onPointerDown: captureSectionsBeforeAction }
+              : null)}>
             <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
           </TouchableOpacity>
 
@@ -1104,6 +1197,12 @@ export default function PrayerJournalScreen() {
                 <Ionicons name="download-outline" size={16} color="#5B514D" />
                 <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
               </TouchableOpacity>
+              <EncryptedCloudSaveAction
+                buttonStyle={styles.moreActionChip}
+                textStyle={styles.moreActionText}
+                iconColor="#5B514D"
+                onSaved={handleCloudSaved}
+              />
               <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={styles.moreActionChip}>
                 <Ionicons name="share-outline" size={16} color="#5B514D" />
                 <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>
@@ -1218,6 +1317,14 @@ export default function PrayerJournalScreen() {
           </View>
         </ScrollView>
 
+        <SaveConfirmationToast
+          visibleKey={saveConfirmationKey}
+          message={saveConfirmationMessage}
+          tintColor={colorTheme.tint}
+          borderColor={colorTheme.border}
+          backgroundColor={colorTheme.paperBackground}
+          style={styles.saveConfirmationToast}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -1265,6 +1372,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#5B514D',
+  },
+  saveConfirmationToast: {
+    top: Platform.OS === 'web' ? 88 : 118,
   },
   captureFrame: {
     width: '100%',

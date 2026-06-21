@@ -180,6 +180,13 @@ function getEntryStorageKey(entry: Pick<JournalLogEntry, 'id' | 'type'>) {
   }
 }
 
+function hasVisibleJournalContent(entry: JournalLogEntry) {
+  return Boolean(
+    entry.preview?.trim() ||
+      (entry.book && entry.chapter && entry.verse)
+  );
+}
+
 function getStudioReferenceFromPayload(value: string | null) {
   if (!value) {
     return null;
@@ -330,6 +337,7 @@ export default function JournalScreen() {
     ]);
     const entries = (await hydrateStudioLogEntries(safeParseJournalIndex(data)))
       .filter((entry) => entry.type in templateMap)
+      .filter(hasVisibleJournalContent)
       .sort((left, right) => right.updatedAt - left.updatedAt);
 
     const groupsByDay = new Map<string, JournalLogGroup>();
@@ -487,6 +495,8 @@ export default function JournalScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={[styles.segmentedControl, { backgroundColor: colorTheme.toolbarBackground }]}>
           <TouchableOpacity
+            accessibilityRole="tab"
+            accessibilityState={{ selected: selectedView === 'new' }}
             activeOpacity={0.85}
             onPress={() => setSelectedView('new')}
             style={[
@@ -498,6 +508,8 @@ export default function JournalScreen() {
             <Text style={styles.segmentButtonText}>New Entry</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            accessibilityRole="tab"
+            accessibilityState={{ selected: selectedView === 'logs' }}
             activeOpacity={0.85}
             onPress={() => setSelectedView('logs')}
             style={[

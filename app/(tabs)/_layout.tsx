@@ -27,6 +27,9 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarShowLabel: true,
+        sceneStyle: {
+          backgroundColor: colorTheme.screenBackground,
+        },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -144,12 +147,6 @@ export default function TabLayout() {
               resizeMode="contain"
             />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="studio"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen

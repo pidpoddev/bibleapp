@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
+import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
@@ -35,16 +36,35 @@ const defaultSections: ChurchDaySection[] = [
   { id: '3', label: 'Prayer for this week', text: '' },
 ];
 
+function getLatestWebSections(sections: ChurchDaySection[]) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return sections;
+  }
+
+  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write here..."]'))
+    .map((textarea) => (textarea as HTMLTextAreaElement).value);
+
+  if (values.length < sections.length) {
+    return sections;
+  }
+
+  return sections.map((section, index) => {
+    const value = values[index];
+    return { ...section, text: value || section.text };
+  });
+}
+
 const Field = memo(function Field({ label, value, onChangeText, cardBackground, accentColor }: { label: string; value: string; onChangeText: (text: string) => void; cardBackground: string; accentColor: string; }) {
   const [draftText, setDraftText] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
-  useEffect(() => { if (!isFocused) setDraftText(value); }, [isFocused, value]);
+  useEffect(() => { if (!isFocused && (value.length > 0 || draftText.length === 0)) setDraftText(value); }, [draftText.length, isFocused, value]);
+  const handleTextChange = (text: string) => { setDraftText(text); onChangeText(text); };
   return (
     <View style={[styles.section, { backgroundColor: cardBackground, borderLeftColor: accentColor }]}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.inputWrapper}>
         <Text pointerEvents="none" style={styles.inputMeasure}>{draftText.length ? `${draftText}\n` : ' '}</Text>
-        <TextInput multiline scrollEnabled={false} blurOnSubmit={false} placeholder="Write here..." placeholderTextColor="#A79B92" style={styles.inputOverlay} textAlignVertical="top" value={draftText} onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} onChangeText={(text) => { setDraftText(text); onChangeText(text); }} />
+        <TextInput multiline scrollEnabled={false} blurOnSubmit={false} placeholder="Write here..." placeholderTextColor="#A79B92" style={styles.inputOverlay} textAlignVertical="top" value={draftText} onFocus={() => setIsFocused(true)} onBlur={(event) => { const text = (event.target as unknown as { value?: string }).value; if (typeof text === 'string') handleTextChange(text); if (Platform.OS !== 'web') setIsFocused(false); }} onChange={(event) => { const text = event.nativeEvent.text ?? (event.target as unknown as { value?: string }).value; if (typeof text === 'string') handleTextChange(text); }} onChangeText={handleTextChange} {...(Platform.OS === 'web' ? { onInput: (event: { currentTarget?: { value?: string }; target?: { value?: string } }) => { const text = event.currentTarget?.value ?? event.target?.value; if (typeof text === 'string') handleTextChange(text); } } : null)} />
       </View>
     </View>
   );
@@ -56,7 +76,8 @@ export default function ChurchDayJournalScreen() {
   const { colorTheme, language, t } = useAppSettings();
   const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{ entryId?: string; newEntryToken?: string }>();
-  const [currentId, setCurrentId] = useState(() => entryId ?? generateId());
+  const draftEntryId = entryId ?? newEntryToken;
+  const [currentId, setCurrentId] = useState(() => draftEntryId ?? generateId());
   const [entryDate, setEntryDate] = useState(() => formatEntryDateTime(new Date()));
   const [book, setBook] = useState('');
   const [chapter, setChapter] = useState('');
@@ -64,6 +85,7 @@ export default function ChurchDayJournalScreen() {
   const [openDropdown, setOpenDropdown] = useState<'book' | 'chapter' | 'verse' | null>(null);
   const canvasRef = useRef<View>(null);
   const [sections, setSections] = useState<ChurchDaySection[]>(defaultSections);
+  const sectionsRef = useRef<ChurchDaySection[]>(defaultSections);
   const [stickers, setStickers] = useState<DecorSticker[]>([]);
   const [background, setBackground] = useState<string>('lined');
   const [highlightColor, setHighlightColor] = useState<string>('#FFF3A3');
@@ -77,6 +99,19 @@ export default function ChurchDayJournalScreen() {
   const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key) : ''), [book, chapter, verse, language.key]);
   const selectedBg = getShopBackground(background.startsWith('shop:') ? background.replace('shop:', '') : null);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const captureLatestSections = () => {
+      sectionsRef.current = getLatestWebSections(sectionsRef.current);
+    };
+
+    document.addEventListener('pointerdown', captureLatestSections, true);
+    return () => document.removeEventListener('pointerdown', captureLatestSections, true);
+  }, []);
+
   const updateIndex = useCallback(async (entry: ChurchDayEntry) => {
     const saved = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
     const entries = saved ? (JSON.parse(saved) as ChurchDayEntry[]) : [];
@@ -86,12 +121,12 @@ export default function ChurchDayJournalScreen() {
   }, []);
 
   const saveEntry = useCallback(async (nextBook: string, nextChapter: string, nextVerse: string, nextSections: ChurchDaySection[], nextStickers = stickers, nextBackground = background, nextHighlightColor = highlightColor) => {
-    const id = currentId || generateId();
+    const id = entryId ?? newEntryToken ?? currentId ?? generateId();
     if (!currentId) setCurrentId(id);
     const entry: ChurchDayEntry = { id, type: 'church-day', date: entryDate, book: nextBook, chapter: nextChapter, verse: nextVerse, sections: nextSections, stickers: nextStickers, background: nextBackground, highlightColor: nextHighlightColor, preview: buildPreview(nextBook, nextChapter, nextVerse, nextSections), isFavorite: isFavorite, updatedAt: Date.now() };
     await AsyncStorage.setItem(`journal_church_day_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
-  }, [background, currentId, entryDate, highlightColor, isFavorite, stickers, updateIndex]);
+  }, [background, currentId, entryDate, entryId, highlightColor, isFavorite, newEntryToken, stickers, updateIndex]);
 
   const recordUndoSnapshot = useCallback(() => {
     setUndoHistory((currentHistory) => [...currentHistory.slice(-19), { book, chapter, verse, sections, stickers, background, highlightColor }]);
@@ -116,31 +151,37 @@ export default function ChurchDayJournalScreen() {
 
   useEffect(() => {
     const load = async () => {
-      if (!entryId) {
-        const nextId = generateId();
-        const nextDate = formatEntryDateTime(new Date());
-        const nextEntry: ChurchDayEntry = {
-          id: nextId,
-          type: 'church-day',
-          date: nextDate,
-          book: '',
-          chapter: '',
-          verse: '',
-          sections: defaultSections,
-          stickers: [],
-          background: 'lined',
-          highlightColor: '#FFF3A3',
-          preview: '',
-          isFavorite: false,
-          updatedAt: Date.now(),
-        };
+      const storageEntryId = entryId ?? newEntryToken;
 
+      if (storageEntryId) {
+        const saved = await AsyncStorage.getItem(`journal_church_day_${storageEntryId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved) as ChurchDayEntry;
+          setCurrentId(parsed.id);
+          setEntryDate(parsed.date || formatEntryDateTime(new Date()));
+          setBook(parsed.book || ''); setChapter(parsed.chapter || ''); setVerse(parsed.verse || '');
+          const loadedSections = Array.isArray(parsed.sections) ? parsed.sections : defaultSections;
+          sectionsRef.current = loadedSections;
+          setSections(loadedSections);
+          setStickers(Array.isArray(parsed.stickers) ? parsed.stickers : []);
+          setBackground(typeof parsed.background === 'string' ? parsed.background : 'lined');
+          setHighlightColor(typeof parsed.highlightColor === 'string' ? parsed.highlightColor : '#FFF3A3');
+          setIsFavorite(Boolean(parsed.isFavorite));
+          setUndoHistory([]);
+          return;
+        }
+      }
+
+      if (!entryId) {
+        const nextId = newEntryToken ?? generateId();
+        const nextDate = formatEntryDateTime(new Date());
         setCurrentId(nextId);
         setEntryDate(nextDate);
         setBook('');
         setChapter('');
         setVerse('');
         setOpenDropdown(null);
+        sectionsRef.current = defaultSections;
         setSections(defaultSections);
         setStickers([]);
         setBackground('lined');
@@ -148,22 +189,8 @@ export default function ChurchDayJournalScreen() {
         setOpenDecor(null);
         setIsFavorite(false);
         setUndoHistory([]);
-        await AsyncStorage.setItem(`journal_church_day_${nextId}`, JSON.stringify(nextEntry));
-        await updateIndex(nextEntry);
         return;
       }
-      const saved = await AsyncStorage.getItem(`journal_church_day_${entryId}`);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as ChurchDayEntry;
-      setCurrentId(parsed.id);
-      setEntryDate(parsed.date || formatEntryDateTime(new Date()));
-      setBook(parsed.book || ''); setChapter(parsed.chapter || ''); setVerse(parsed.verse || '');
-      setSections(Array.isArray(parsed.sections) ? parsed.sections : defaultSections);
-      setStickers(Array.isArray(parsed.stickers) ? parsed.stickers : []);
-      setBackground(typeof parsed.background === 'string' ? parsed.background : 'lined');
-      setHighlightColor(typeof parsed.highlightColor === 'string' ? parsed.highlightColor : '#FFF3A3');
-      setIsFavorite(Boolean(parsed.isFavorite));
-      setUndoHistory([]);
     };
     void load();
   }, [entryId, newEntryToken, updateIndex]);
@@ -172,6 +199,7 @@ export default function ChurchDayJournalScreen() {
     recordUndoSnapshot();
     setSections((current) => {
       const next = current.map((section) => (section.id === id ? { ...section, text } : section));
+      sectionsRef.current = next;
       void saveEntry(book, chapter, verse, next);
       return next;
     });
@@ -179,22 +207,35 @@ export default function ChurchDayJournalScreen() {
 
   const toggleFavorite = async () => {
     const nextValue = !isFavorite;
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
     setIsFavorite(nextValue);
-    const id = currentId || generateId();
-    const entry: ChurchDayEntry = { id, type: 'church-day', date: entryDate, book, chapter, verse, sections, stickers, background, highlightColor, preview: buildPreview(book, chapter, verse, sections), isFavorite: nextValue, updatedAt: Date.now() };
+    const id = entryId ?? newEntryToken ?? currentId ?? generateId();
+    const entry: ChurchDayEntry = { id, type: 'church-day', date: entryDate, book, chapter, verse, sections: latestSections, stickers, background, highlightColor, preview: buildPreview(book, chapter, verse, latestSections), isFavorite: nextValue, updatedAt: Date.now() };
     await AsyncStorage.setItem(`journal_church_day_${id}`, JSON.stringify(entry));
     await updateIndex(entry);
+    if (!entryId) {
+      router.replace({ pathname: '/church-day-journal', params: { entryId: id } });
+    }
+  };
+
+  const captureSectionsBeforeAction = () => {
+    const latestSections = getLatestWebSections(sectionsRef.current);
+    sectionsRef.current = latestSections;
+    setSections(latestSections);
   };
 
   const addNoteSection = () => {
     recordUndoSnapshot();
     const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
+    sectionsRef.current = next;
     setSections(next);
     void saveEntry(book, chapter, verse, next);
   };
 
   const resetJournal = () => {
     recordUndoSnapshot();
+    sectionsRef.current = defaultSections;
     setSections(defaultSections);
     setStickers([]);
     setBackground('lined');
@@ -225,7 +266,7 @@ export default function ChurchDayJournalScreen() {
           <Text style={styles.title}>{t('churchDay')}</Text>
         </View>
         <Text style={styles.date}>{entryDate}</Text>
-        <TouchableOpacity style={styles.favoriteButton} onPress={() => void toggleFavorite()}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.favoriteButton} onPressIn={captureSectionsBeforeAction} onPress={() => void toggleFavorite()} {...(Platform.OS === 'web' ? { onMouseDown: captureSectionsBeforeAction, onPointerDown: captureSectionsBeforeAction } : null)}><Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text></TouchableOpacity>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.decorToolbar} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={[styles.decorButton, openDecor === 'highlight' ? styles.decorButtonActive : null]} onPress={() => setOpenDecor((c) => c === 'highlight' ? null : 'highlight')}>
@@ -256,7 +297,7 @@ export default function ChurchDayJournalScreen() {
         {openDecor === 'bg' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Basic</Text><View style={styles.panelItemRow}><TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity><TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity></View>{TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.backgrounds.map((bg) => <TouchableOpacity key={bg.key} style={styles.bgChip} onPress={() => { recordUndoSnapshot(); const next = `shop:${bg.key}`; setBackground(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, next); }}><Image source={bg.previewImage ?? bg.image} style={styles.bgPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
         {openDecor === 'sticker' ? <View style={styles.decorPanel}><Text style={styles.panelSectionTitle}>Quick Stickers</Text><View style={styles.panelItemRow}>{STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => { recordUndoSnapshot(); const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, emoji }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}</View>{TEST_UNLOCKED_STICKER_PACKS.map((pack) => <View key={pack.id} style={styles.panelSection}><Text style={styles.panelSectionTitle}>{pack.title}</Text><View style={styles.panelItemRow}>{pack.stickers.map((sticker) => <TouchableOpacity key={sticker.key} style={styles.stickerChip} onPress={() => { recordUndoSnapshot(); const next = [...stickers, { id: `${Date.now()}-${stickers.length}`, imageKey: sticker.key }]; setStickers(next); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, next); }}><Image source={sticker.previewImage ?? sticker.image} style={styles.stickerPreview} /></TouchableOpacity>)}</View></View>)}</View> : null}
         {openDecor === 'highlight' ? <View style={styles.decorPanel}>{HIGHLIGHTER_COLORS.map((color) => <TouchableOpacity key={color} style={[styles.colorChip, { backgroundColor: color }, highlightColor === color ? styles.colorChipSelected : null]} onPress={() => { recordUndoSnapshot(); setHighlightColor(color); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, background, color); }} />)}</View> : null}
-        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void saveJournalImage()}><Ionicons name="download-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text></TouchableOpacity><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}><Ionicons name="share-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text></TouchableOpacity><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={resetJournal}><Ionicons name="arrow-redo-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text></TouchableOpacity></View> : null}
+        {openDecor === 'more' ? <View style={styles.decorPanel}><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void saveJournalImage()}><Ionicons name="download-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text></TouchableOpacity><EncryptedCloudSaveAction buttonStyle={[styles.simpleChip, styles.moreActionChip]} textStyle={styles.moreActionText} iconColor="#5B514D" /><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}><Ionicons name="share-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text></TouchableOpacity><TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={resetJournal}><Ionicons name="arrow-redo-outline" size={16} color="#5B514D" /><Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text></TouchableOpacity></View> : null}
 
         <View style={styles.dropdownRow}>{[{ key: 'book' as const, label: 'Book', value: book || 'Select', options: bookOptions, onPick: (value: string) => { setBook(value); setChapter(''); setVerse(''); void saveEntry(value, '', '', sections); } }, { key: 'chapter' as const, label: 'Chapter', value: chapter || 'Select', options: chapterOptions, onPick: (value: string) => { setChapter(value); setVerse(''); void saveEntry(book, value, '', sections); } }, { key: 'verse' as const, label: 'Verse', value: verse || 'Select', options: verseOptions, onPick: (value: string) => { setVerse(value); void saveEntry(book, chapter, value, sections); } }].map((dropdown) => (<View key={dropdown.key} style={styles.dropdownContainer}><Pressable onPress={() => setOpenDropdown((current) => current === dropdown.key ? null : dropdown.key)} style={[styles.dropdownButton, { backgroundColor: colorTheme.cardBackground }]}><Text style={styles.dropdownLabel}>{dropdown.label}</Text><Text numberOfLines={1} style={styles.dropdownValue}>{dropdown.value}</Text></Pressable>{openDropdown === dropdown.key ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{dropdown.options.map((option) => <Pressable key={option} onPress={() => { dropdown.onPick(option); setOpenDropdown(null); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{option}</Text></Pressable>)}</ScrollView></View> : null}</View>))}</View>
 

@@ -14,9 +14,14 @@ import { useState } from 'react';
 import { useAppSettings } from '@/utils/app-settings';
 import {
   SHOP_BACKGROUND_PACKS,
+  TEST_UNLOCKED_BACKGROUND_PACKS,
   type ShopBackground,
 } from '@/utils/shop-backgrounds';
-import { SHOP_STICKER_PACKS, type ShopSticker } from '@/utils/shop-stickers';
+import {
+  SHOP_STICKER_PACKS,
+  TEST_UNLOCKED_STICKER_PACKS,
+  type ShopSticker,
+} from '@/utils/shop-stickers';
 
 const SHOP_TAB_ICON = require('../../assets/images/toolbar-icons/shop-tab.png');
 
@@ -170,13 +175,19 @@ const PACKS: ShopPack[] = [
     productId: 'marketplace_starter_bundle',
   },
 ];
+const INITIAL_UNLOCKED_PACK_IDS = [
+  ...TEST_UNLOCKED_BACKGROUND_PACKS,
+  ...TEST_UNLOCKED_STICKER_PACKS,
+].map((pack) => pack.id);
 
 export default function ShopScreen() {
   const { colorTheme, t } = useAppSettings();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedPackId, setSelectedPackId] = useState(PACKS[0].id);
   const [cartCount, setCartCount] = useState(0);
+  const [unlockedPackIds, setUnlockedPackIds] = useState<string[]>(INITIAL_UNLOCKED_PACK_IDS);
   const selectedPack = PACKS.find((pack) => pack.id === selectedPackId) ?? PACKS[0];
+  const isSelectedPackUnlocked = unlockedPackIds.includes(selectedPack.id);
   const visiblePacks = PACKS.filter(
     (pack) => selectedCategory === 'all' || pack.categoryKey === selectedCategory
   );
@@ -186,6 +197,17 @@ export default function ShopScreen() {
     const nextPack =
       PACKS.find((pack) => categoryKey === 'all' || pack.categoryKey === categoryKey) ?? PACKS[0];
     setSelectedPackId(nextPack.id);
+  };
+
+  const handlePrimaryPackAction = () => {
+    if (selectedPack.price === 'Free test') {
+      setUnlockedPackIds((currentIds) =>
+        currentIds.includes(selectedPack.id) ? currentIds : [...currentIds, selectedPack.id]
+      );
+      return;
+    }
+
+    setCartCount((count) => count + 1);
   };
 
   return (
@@ -288,11 +310,19 @@ export default function ShopScreen() {
             </View>
           </View>
           <Pressable
-            onPress={() => setCartCount((count) => count + 1)}
+            onPress={handlePrimaryPackAction}
             style={[styles.addButton, { backgroundColor: colorTheme.tint }]}>
-            <Ionicons name="bag-add-outline" size={17} color="#FFFDF9" />
+            <Ionicons
+              name={isSelectedPackUnlocked ? 'checkmark-circle-outline' : 'bag-add-outline'}
+              size={17}
+              color="#FFFDF9"
+            />
             <Text style={styles.addButtonText}>
-              {selectedPack.price === 'Free test' ? 'Unlock pack' : 'Add to cart'}
+              {isSelectedPackUnlocked
+                ? 'Unlocked'
+                : selectedPack.price === 'Free test'
+                  ? 'Unlock pack'
+                  : 'Add to cart'}
             </Text>
           </Pressable>
 
@@ -338,18 +368,20 @@ export default function ShopScreen() {
             </View>
           )}
 
-          {selectedPack.id === 'floral-faith-stickers' ? (
+          {isSelectedPackUnlocked ? (
+            <Text style={styles.testPackNote}>
+              This pack is unlocked for Studio and journal decoration tools.
+            </Text>
+          ) : selectedPack.id === 'floral-faith-stickers' ? (
             <Text style={styles.testPackNote}>
               Test pack is unlocked in Studio and Prayer Journal stickers.
             </Text>
-          ) : null}
-          {selectedPack.id === 'scripture-verse-label-stickers' ? (
+          ) : selectedPack.id === 'scripture-verse-label-stickers' ? (
             <Text style={styles.testPackNote}>
               Test unlocked now for Studio and Prayer Journal; this pack is priced for purchase at
               launch.
             </Text>
-          ) : null}
-          {selectedPack.id === 'soft-glitter-backgrounds' ? (
+          ) : selectedPack.id === 'soft-glitter-backgrounds' ? (
             <Text style={styles.testPackNote}>
               Test unlocked now for Studio and Prayer Journal backgrounds.
             </Text>
@@ -406,7 +438,11 @@ export default function ShopScreen() {
 
               <View style={styles.packActionRow}>
                 <Text style={styles.previewAction}>
-                  {(pack.stickers || pack.backgrounds) && pack.price === 'Free test'
+                  {pack.id === selectedPackId
+                    ? unlockedPackIds.includes(pack.id)
+                      ? 'Unlocked'
+                      : 'Selected'
+                    : (pack.stickers || pack.backgrounds) && pack.price === 'Free test'
                     ? pack.backgrounds
                       ? t('shopViewBackgrounds')
                       : t('shopViewStickers')
