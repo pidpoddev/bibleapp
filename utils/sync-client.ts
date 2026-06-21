@@ -144,9 +144,6 @@ export type SyncLog = {
   } | null;
 };
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
 const SYNCABLE_EXACT_KEYS: Record<string, SyncItemType> = {
   account_session_v1: 'account_session',
   app_settings_v1: 'app_settings',
@@ -157,6 +154,83 @@ const SYNCABLE_EXACT_KEYS: Record<string, SyncItemType> = {
   verse_design_index_v1: 'verse_design_index',
   verse_design_timestamps_v1: 'verse_design_timestamps',
 };
+
+function utf8ToBytes(value: string) {
+  const bytes: number[] = [];
+
+  for (let index = 0; index < value.length; index += 1) {
+    const codePoint = value.codePointAt(index);
+
+    if (codePoint === undefined) {
+      continue;
+    }
+
+    if (codePoint > 0xffff) {
+      index += 1;
+    }
+
+    if (codePoint <= 0x7f) {
+      bytes.push(codePoint);
+    } else if (codePoint <= 0x7ff) {
+      bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
+    } else if (codePoint <= 0xffff) {
+      bytes.push(
+        0xe0 | (codePoint >> 12),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f)
+      );
+    } else {
+      bytes.push(
+        0xf0 | (codePoint >> 18),
+        0x80 | ((codePoint >> 12) & 0x3f),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f)
+      );
+    }
+  }
+
+  return Uint8Array.from(bytes);
+}
+
+function bytesToUtf8(bytes: Uint8Array) {
+  let output = '';
+
+  for (let index = 0; index < bytes.length; ) {
+    const first = bytes[index++];
+
+    if (first < 0x80) {
+      output += String.fromCodePoint(first);
+      continue;
+    }
+
+    if (first >= 0xc0 && first < 0xe0) {
+      const second = bytes[index++] ?? 0;
+      output += String.fromCodePoint(((first & 0x1f) << 6) | (second & 0x3f));
+      continue;
+    }
+
+    if (first >= 0xe0 && first < 0xf0) {
+      const second = bytes[index++] ?? 0;
+      const third = bytes[index++] ?? 0;
+      output += String.fromCodePoint(
+        ((first & 0x0f) << 12) | ((second & 0x3f) << 6) | (third & 0x3f)
+      );
+      continue;
+    }
+
+    const second = bytes[index++] ?? 0;
+    const third = bytes[index++] ?? 0;
+    const fourth = bytes[index++] ?? 0;
+    output += String.fromCodePoint(
+      ((first & 0x07) << 18) |
+        ((second & 0x3f) << 12) |
+        ((third & 0x3f) << 6) |
+        (fourth & 0x3f)
+    );
+  }
+
+  return output;
+}
 
 const BLOCKED_MEDIA_PATTERNS = [
   'data:image/',
@@ -235,8 +309,8 @@ async function derivePhraseMaterial(phrase: string) {
   const encryptionKey = derived.slice(64, 96);
 
   return {
-    recoveryId: bytesToHex(sha256(new Uint8Array([...recoveryKey, ...encoder.encode('recovery')]))),
-    authSecret: bytesToHex(sha256(new Uint8Array([...authKey, ...encoder.encode('auth')]))),
+    recoveryId: bytesToHex(sha256(new Uint8Array([...recoveryKey, ...utf8ToBytes('recovery')]))),
+    authSecret: bytesToHex(sha256(new Uint8Array([...authKey, ...utf8ToBytes('auth')]))),
     encryptionKey,
     phraseFingerprint: bytesToHex(sha256(encryptionKey)).slice(0, 16),
   };
@@ -486,7 +560,7 @@ async function encryptRecord(
     value: record.value,
     deleted: record.deleted === true,
   };
-  const plaintext = encoder.encode(JSON.stringify(payload));
+  const plaintext = utf8ToBytes(JSON.stringify(payload));
   const nonce = randomBytes(24);
   const cipher = xchacha20poly1305(encryptionKey, nonce);
   const ciphertext = cipher.encrypt(plaintext);
@@ -509,8 +583,8 @@ async function encryptRecord(
 async function decryptPulledItem(item: PullResponseItem, encryptionKey: Uint8Array) {
   const cipher = xchacha20poly1305(encryptionKey, base64ToBytes(item.version.nonce));
   const plaintext = cipher.decrypt(base64ToBytes(item.version.ciphertext));
-  const payloadText = decoder.decode(plaintext);
-  const digest = bytesToHex(sha256(encoder.encode(payloadText)));
+  const payloadText = bytesToUtf8(plaintext);
+  const digest = bytesToHex(sha256(utf8ToBytes(payloadText)));
 
   if (digest !== item.version.payloadSha256) {
     throw new Error('Downloaded sync item failed integrity check.');
