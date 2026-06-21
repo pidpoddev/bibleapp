@@ -3307,7 +3307,7 @@ export default function StudioScreen() {
         scrollEnabled={!isBookDropdownOpen && !isChapterDropdownOpen && !isVerseDropdownOpen}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 32 : 32 },
+          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 220 : 220 },
         ]}
         keyboardShouldPersistTaps="handled">
         <View
@@ -3586,7 +3586,15 @@ export default function StudioScreen() {
           </View>
         </View>
 
-        <View style={styles.toolbarSection}>
+        <View
+          style={[
+            styles.toolbarSection,
+            {
+              backgroundColor: colorTheme.screenBackground,
+              borderColor: colorTheme.border,
+              bottom: keyboardHeight > 0 ? keyboardHeight + 12 : Math.max(insets.bottom + 14, 18),
+            },
+          ]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -4176,6 +4184,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'column',
+    position: 'relative',
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
     paddingBottom: 20,
@@ -4475,19 +4484,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   toolbarSection: {
-    marginTop: 10,
-    marginBottom: 8,
-    zIndex: 15,
+    position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 80,
+    elevation: 80,
+    flexDirection: 'column-reverse',
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderRadius: 26,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
   },
   toolbarDivider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginBottom: 8,
+    height: 0,
+    marginBottom: 0,
   },
   dropdownToolbarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
   },
   dropdownToolbarButton: {
     minWidth: 64,
@@ -4551,7 +4572,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   dropdownPanel: {
-    marginTop: 10,
+    marginBottom: 10,
     padding: 12,
     borderRadius: 20,
     backgroundColor: '#FFFDF9',
