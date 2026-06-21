@@ -13,6 +13,18 @@ async function main() {
     await pool.query(statement);
   }
 
+  const [columns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME = 'username'`
+  );
+
+  if (columns.length === 0) {
+    await pool.query('ALTER TABLE users ADD COLUMN username VARCHAR(40) NULL UNIQUE AFTER recovery_id');
+  }
+
   await pool.end();
   console.log(`Applied ${statements.length} schema statements.`);
 }

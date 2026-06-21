@@ -33,6 +33,7 @@ type SyncSession = {
   deviceId: string;
   deviceSecret: string;
   recoveryId: string;
+  username?: string | null;
   phraseFingerprint: string;
   createdAt: number;
   lastSyncedAt?: string;
@@ -384,12 +385,13 @@ async function requestJson<T>(
   return payload as T;
 }
 
-export async function connectPrivateSyncPhrase(phrase: string) {
+export async function connectPrivateSyncPhrase(phrase: string, preferredUsername?: string) {
   const material = await derivePhraseMaterial(phrase);
   const deviceSecret = generateDeviceSecret();
   const response = await requestJson<{
     userId: string;
     deviceId: string;
+    username?: string | null;
     status?: string;
     message?: string;
   }>(
@@ -401,6 +403,7 @@ export async function connectPrivateSyncPhrase(phrase: string) {
         authSecret: material.authSecret,
         deviceSecret,
         deviceName: getDeviceName(),
+        preferredUsername,
       }),
     }
   );
@@ -409,6 +412,7 @@ export async function connectPrivateSyncPhrase(phrase: string) {
     deviceId: response.deviceId,
     deviceSecret,
     recoveryId: material.recoveryId,
+    username: response.username ?? preferredUsername ?? null,
     phraseFingerprint: material.phraseFingerprint,
     createdAt: Date.now(),
   };

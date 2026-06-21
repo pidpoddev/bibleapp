@@ -86,6 +86,38 @@ function requireString(mixed $value, string $name): string
     return trim($value);
 }
 
+function normalizeUsername(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $username = preg_replace('/[^A-Za-z0-9_]/', '', preg_replace('/\s+/', '', trim($value)) ?? '') ?? '';
+    if ($username === '') {
+        return null;
+    }
+
+    if (strlen($username) < 3 || strlen($username) > 40) {
+        throw httpError('Username must be 3 to 40 letters or numbers.', 400);
+    }
+
+    return $username;
+}
+
+function assertUsernameAvailable(PDO $pdo, ?string $username = null, string $userId = ''): void
+{
+    if (!$username) {
+        return;
+    }
+
+    $statement = $pdo->prepare('SELECT id FROM users WHERE username = ? AND id <> ? AND disabled_at IS NULL LIMIT 1');
+    $statement->execute([$username, $userId]);
+
+    if ($statement->fetch()) {
+        throw httpError('That username is already taken.', 409);
+    }
+}
+
 function sha256(string $value): string
 {
     return hash('sha256', $value);
@@ -192,6 +224,7 @@ try {
         $authSecret = requireString($body['authSecret'] ?? null, 'authSecret');
         $deviceSecret = requireString($body['deviceSecret'] ?? null, 'deviceSecret');
         $deviceName = trimNullableString($body['deviceName'] ?? null, 120);
+        $preferredUsername = normalizeUsername($body['preferredUsername'] ?? null);
         $authHash = sha256($authSecret);
         $deviceSecretHash = sha256($deviceSecret);
         $userId = randomId();
@@ -199,10 +232,11 @@ try {
         $kdfSalt = random_bytes(32);
 
         $pdo->beginTransaction();
-        $statement = $pdo->prepare('SELECT id, sync_phrase_auth_hash FROM users WHERE recovery_id = ? AND disabled_at IS NULL');
+        $statement = $pdo->prepare('SELECT id, username, sync_phrase_auth_hash FROM users WHERE recovery_id = ? AND disabled_at IS NULL');
         $statement->execute([$recoveryId]);
         $existing = $statement->fetch();
         $resolvedUserId = $userId;
+        $resolvedUsername = $preferredUsername;
 
         if ($existing) {
             if (!hash_equals($existing['sync_phrase_auth_hash'], $authHash)) {
@@ -210,9 +244,16 @@ try {
                 respond(401, ['error' => 'Private Sync Phrase did not match.']);
             }
             $resolvedUserId = $existing['id'];
+            assertUsernameAvailable($pdo, $preferredUsername, $resolvedUserId);
+            if ($preferredUsername) {
+                $pdo->prepare('UPDATE users SET username = ? WHERE id = ?')
+                    ->execute([$preferredUsername, $resolvedUserId]);
+            }
+            $resolvedUsername = $preferredUsername ?: $existing['username'];
         } else {
-            $pdo->prepare('INSERT INTO users (id, recovery_id, sync_phrase_auth_hash, kdf_salt) VALUES (?, ?, ?, ?)')
-                ->execute([$resolvedUserId, $recoveryId, $authHash, $kdfSalt]);
+            assertUsernameAvailable($pdo, $preferredUsername, $resolvedUserId);
+            $pdo->prepare('INSERT INTO users (id, recovery_id, username, sync_phrase_auth_hash, kdf_salt) VALUES (?, ?, ?, ?, ?)')
+                ->execute([$resolvedUserId, $recoveryId, $preferredUsername, $authHash, $kdfSalt]);
         }
 
         $pdo->prepare('INSERT INTO devices (id, user_id, device_name, device_secret_hash, last_seen_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)')
@@ -224,6 +265,7 @@ try {
         respond(200, [
             'userId' => $resolvedUserId,
             'deviceId' => $deviceId,
+            'username' => $resolvedUsername,
             'status' => 'connected',
             'message' => 'Connected',
         ]);

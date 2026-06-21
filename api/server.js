@@ -32,6 +32,42 @@ function requireString(value, name) {
   return value.trim();
 }
 
+function normalizeUsername(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const username = value.trim().replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '');
+  if (!username) {
+    return null;
+  }
+
+  if (username.length < 3 || username.length > 40) {
+    const error = new Error('Username must be 3 to 40 letters or numbers.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return username;
+}
+
+async function assertUsernameAvailable(connection, username, userId) {
+  if (!username) {
+    return;
+  }
+
+  const [rows] = await connection.query(
+    'SELECT id FROM users WHERE username = ? AND id <> ? AND disabled_at IS NULL LIMIT 1',
+    [username, userId]
+  );
+
+  if (rows.length > 0) {
+    const error = new Error('That username is already taken.');
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
 function getSafeErrorCode(error) {
   if (typeof error.code === 'string') {
     return error.code;
@@ -128,6 +164,7 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
     const deviceSecret = requireString(req.body.deviceSecret, 'deviceSecret');
     const deviceName =
       typeof req.body.deviceName === 'string' ? req.body.deviceName.slice(0, 120) : null;
+    const preferredUsername = normalizeUsername(req.body.preferredUsername);
     const authHash = sha256(authSecret);
     const deviceSecretHash = sha256(deviceSecret);
     const userId = randomId();
@@ -137,11 +174,12 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
     await connection.beginTransaction();
 
     const [existingUsers] = await connection.query(
-      'SELECT id, sync_phrase_auth_hash FROM users WHERE recovery_id = ? AND disabled_at IS NULL',
+      'SELECT id, username, sync_phrase_auth_hash FROM users WHERE recovery_id = ? AND disabled_at IS NULL',
       [recoveryId]
     );
 
     let resolvedUserId = userId;
+    let resolvedUsername = preferredUsername;
 
     if (existingUsers.length > 0) {
       const existing = existingUsers[0];
@@ -150,11 +188,20 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
         return res.status(401).json({ error: 'Private Sync Phrase did not match.' });
       }
       resolvedUserId = existing.id;
+      await assertUsernameAvailable(connection, preferredUsername, resolvedUserId);
+      if (preferredUsername) {
+        await connection.query('UPDATE users SET username = ? WHERE id = ?', [
+          preferredUsername,
+          resolvedUserId,
+        ]);
+      }
+      resolvedUsername = preferredUsername || existing.username;
     } else {
+      await assertUsernameAvailable(connection, preferredUsername, resolvedUserId);
       await connection.query(
-        `INSERT INTO users (id, recovery_id, sync_phrase_auth_hash, kdf_salt)
-         VALUES (?, ?, ?, ?)`,
-        [resolvedUserId, recoveryId, authHash, kdfSalt]
+        `INSERT INTO users (id, recovery_id, username, sync_phrase_auth_hash, kdf_salt)
+         VALUES (?, ?, ?, ?, ?)`,
+        [resolvedUserId, recoveryId, preferredUsername, authHash, kdfSalt]
       );
     }
 
@@ -174,6 +221,7 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
     res.json({
       userId: resolvedUserId,
       deviceId,
+      username: resolvedUsername,
       status: 'connected',
       message: 'Connected',
     });

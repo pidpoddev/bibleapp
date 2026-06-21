@@ -34,8 +34,49 @@ type AccountSession = {
   signedInAt: number;
 };
 
+const USERNAME_PREFIXES = [
+  'Grace',
+  'Mercy',
+  'Hope',
+  'Joy',
+  'Faith',
+  'Glory',
+  'Peace',
+  'Light',
+  'Blessed',
+  'Promise',
+];
+
+const USERNAME_SUFFIXES = [
+  'Bloom',
+  'Dove',
+  'Lily',
+  'Song',
+  'Star',
+  'Sprout',
+  'Rose',
+  'River',
+  'Garden',
+  'Sparkle',
+];
+
+function makePrettyUsername() {
+  const prefix = USERNAME_PREFIXES[Math.floor(Math.random() * USERNAME_PREFIXES.length)];
+  const suffix = USERNAME_SUFFIXES[Math.floor(Math.random() * USERNAME_SUFFIXES.length)];
+  const number = Math.floor(100 + Math.random() * 900);
+  return `${prefix}${suffix}${number}`;
+}
+
+function cleanUsername(value: string) {
+  return value.replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+}
+
 function getFriendlySyncError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
+
+  if (message.includes('username is already taken') || message.includes('Username')) {
+    return 'That username is taken. Try changing it a little.';
+  }
 
   if (message.includes('did not match') || message.includes('does not match')) {
     return 'That phrase does not match this device.';
@@ -80,6 +121,7 @@ export default function SettingsScreen() {
   const [dataMessage, setDataMessage] = useState('');
   const [dataError, setDataError] = useState('');
   const [exportText, setExportText] = useState('');
+  const [cloudUsername, setCloudUsername] = useState(() => makePrettyUsername());
   const [privateSyncPhrase, setPrivateSyncPhrase] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const [syncError, setSyncError] = useState('');
@@ -95,9 +137,12 @@ export default function SettingsScreen() {
 
         if (storedSyncSession) {
           setAccountSession({
-            email: `Cloud Save ${storedSyncSession.phraseFingerprint}`,
+            email: storedSyncSession.username || `Cloud Save ${storedSyncSession.phraseFingerprint}`,
             signedInAt: storedSyncSession.createdAt,
           });
+          if (storedSyncSession.username) {
+            setCloudUsername(storedSyncSession.username);
+          }
         }
       } catch (error) {
         console.log('Error loading account session:', error);
@@ -112,123 +157,63 @@ export default function SettingsScreen() {
 
     if (storedSyncSession) {
       setAccountSession({
-        email: `Cloud Save ${storedSyncSession.phraseFingerprint}`,
+        email: storedSyncSession.username || `Cloud Save ${storedSyncSession.phraseFingerprint}`,
         signedInAt: storedSyncSession.createdAt,
       });
+      if (storedSyncSession.username) {
+        setCloudUsername(storedSyncSession.username);
+      }
     } else {
       setAccountSession(null);
     }
   };
 
-  const handleConnectPrivateSyncPhrase = async () => {
+  const handleCloudConnectAndSync = async () => {
     if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase first.');
+      setSyncError('Enter your Secret Phrase.');
+      setSyncMessage('');
+      return;
+    }
+
+    const username = cleanUsername(cloudUsername);
+    if (username.length < 3) {
+      setSyncError('Pick a username with at least 3 letters or numbers.');
       setSyncMessage('');
       return;
     }
 
     setIsSyncBusy(true);
     setSyncError('');
-    setSyncMessage('Connecting Cloud Save...');
     try {
       await waitForBusyIndicator();
-      const result = await connectPrivateSyncPhrase(privateSyncPhrase);
+      if (!accountSession || username !== accountSession.email) {
+        setSyncMessage('Connecting...');
+        const result = await connectPrivateSyncPhrase(privateSyncPhrase, username);
+        setCloudUsername(result.username || username);
+        await refreshPrivateSyncSession();
+      }
+
+      setSyncMessage('Saving...');
+      const pushResult = await pushEncryptedSync(privateSyncPhrase);
       await refreshPrivateSyncSession();
+
+      setSyncMessage('Checking for new saves...');
+      const pullResult = await pullEncryptedSync(privateSyncPhrase, { full: true });
       setSyncConflicts([]);
       setSyncError('');
-      setSyncMessage(result.message || 'Connected');
-    } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not connect cloud save.'));
-      setSyncMessage('');
-    } finally {
-      setIsSyncBusy(false);
-    }
-  };
-
-  const handlePushPrivateSync = async () => {
-    if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase to save to cloud.');
-      setSyncMessage('');
-      return;
-    }
-
-    setIsSyncBusy(true);
-    setSyncError('');
-    setSyncMessage('Uploading your saves...');
-    try {
-      await waitForBusyIndicator();
-      const result = await pushEncryptedSync(privateSyncPhrase);
-      await refreshPrivateSyncSession();
-      setSyncError('');
       setSyncMessage(
-        result.conflictCount > 0
-          ? `Saved ${result.pushedCount} things. ${result.conflictCount} need a quick check.`
-          : "Y'all N Sync"
+        pushResult.conflictCount > 0
+          ? `${pushResult.conflictCount} saved thing${pushResult.conflictCount === 1 ? '' : 's'} need a quick check.`
+          : pullResult.pulledCount > 0 || pullResult.deletedCount > 0
+            ? "Y'all N Sync"
+            : "Y'all N Sync"
       );
 
-      if (result.conflictCount > 0) {
+      if (pushResult.conflictCount > 0) {
         setSyncConflicts(await getEncryptedSyncConflicts(privateSyncPhrase));
       }
     } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not save to cloud.'));
-      setSyncMessage('');
-    } finally {
-      setIsSyncBusy(false);
-    }
-  };
-
-  const handlePullPrivateSync = async () => {
-    if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase to get your cloud saves.');
-      setSyncMessage('');
-      return;
-    }
-
-    setIsSyncBusy(true);
-    setSyncError('');
-    setSyncMessage('Downloading cloud saves...');
-    try {
-      await waitForBusyIndicator();
-      const result = await pullEncryptedSync(privateSyncPhrase, { full: true });
-      await refreshPrivateSyncSession();
-      setSyncError('');
-      setSyncMessage(
-        result.pulledCount === 0 && result.deletedCount === 0
-          ? "Y'all N Sync"
-          : `Got ${result.pulledCount} saved thing${result.pulledCount === 1 ? '' : 's'}${
-              result.deletedCount ? ` and cleaned up ${result.deletedCount}` : ''
-            }.`
-      );
-    } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not get cloud saves.'));
-      setSyncMessage('');
-    } finally {
-      setIsSyncBusy(false);
-    }
-  };
-
-  const handleReviewSyncConflicts = async () => {
-    if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase to check saved versions.');
-      setSyncMessage('');
-      return;
-    }
-
-    setIsSyncBusy(true);
-    setSyncError('');
-    setSyncMessage('Checking for mix-ups...');
-    try {
-      await waitForBusyIndicator();
-      const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
-      setSyncConflicts(conflicts);
-      setSyncError('');
-      setSyncMessage(
-        conflicts.length === 0
-          ? 'No mix-ups to fix.'
-          : `${conflicts.length} saved thing${conflicts.length === 1 ? '' : 's'} need a quick check.`
-      );
-    } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not check saved versions.'));
+      setSyncError(getFriendlySyncError(error, 'Cloud Save got stuck. Try again.'));
       setSyncMessage('');
     } finally {
       setIsSyncBusy(false);
@@ -394,26 +379,54 @@ export default function SettingsScreen() {
           ]}>
           <View style={styles.accountHeader}>
             <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
-              <Ionicons name="key-outline" size={22} color="#5B514D" />
+              <Ionicons name="sparkles-outline" size={22} color="#5B514D" />
             </View>
 
             <View style={styles.accountHeaderText}>
-              <Text style={styles.accountTitle}>
-                {accountSession
-                  ? 'Cloud Save connected'
-                  : 'Secret Phrase'}
-              </Text>
-              <Text style={styles.accountHint}>
-                {accountSession
-                  ? 'Your journal can save to the cloud.'
-                  : 'Use one phrase to save and get your journal on your devices.'}
-              </Text>
+              <Text style={styles.accountTitle}>{accountSession ? accountSession.email : 'Cloud Save'}</Text>
+              <Text style={styles.accountHint}>Save your journal with a secret phrase.</Text>
+            </View>
+
+            <TouchableOpacity
+              accessibilityLabel="Cloud Save Log"
+              activeOpacity={0.86}
+              disabled={isSyncBusy || !accountSession}
+              onPress={handleShowSyncLog}
+              style={[styles.iconOnlyButton, { borderColor: colorTheme.border }]}>
+              <Ionicons name="list-outline" size={18} color="#5B514D" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Username</Text>
+            <View style={styles.usernameRow}>
+              <TextInput
+                value={cloudUsername}
+                onChangeText={(value) => setCloudUsername(cleanUsername(value))}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="GraceBloom123"
+                placeholderTextColor="#A99D96"
+                style={[
+                  styles.textInput,
+                  styles.usernameInput,
+                  {
+                    backgroundColor: colorTheme.paperBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}
+              />
+              <TouchableOpacity
+                accessibilityLabel="Make a new username"
+                activeOpacity={0.86}
+                disabled={isSyncBusy}
+                onPress={() => setCloudUsername(makePrettyUsername())}
+                style={[styles.shuffleButton, { borderColor: colorTheme.border }]}>
+                <Ionicons name="sparkles-outline" size={17} color="#5B514D" />
+              </TouchableOpacity>
             </View>
           </View>
 
-          <Text style={styles.accountHint}>
-            Your journal is locked before it saves to the cloud.
-          </Text>
           <Text style={styles.phraseWarningText}>
             {"Don't lose the phrase! It can't be recovered."}
           </Text>
@@ -438,21 +451,17 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={styles.signedInRow}>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              onPress={() => setIsPasswordVisible((current) => !current)}
-              style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
-              <Ionicons
-                name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
-                size={16}
-                color="#5B514D"
-              />
-              <Text style={styles.secondaryButtonText}>
-                {isPasswordVisible ? 'Hide' : 'Show'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            activeOpacity={0.86}
+            onPress={() => setIsPasswordVisible((current) => !current)}
+            style={[styles.secondaryButton, styles.showPhraseButton, { borderColor: colorTheme.border }]}>
+            <Ionicons
+              name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={16}
+              color="#5B514D"
+            />
+            <Text style={styles.secondaryButtonText}>{isPasswordVisible ? 'Hide phrase' : 'Show phrase'}</Text>
+          </TouchableOpacity>
 
           {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
           {isSyncBusy && syncMessage ? (
@@ -467,48 +476,12 @@ export default function SettingsScreen() {
           <TouchableOpacity
             activeOpacity={0.88}
             disabled={isSyncBusy}
-            onPress={handleConnectPrivateSyncPhrase}
+            onPress={handleCloudConnectAndSync}
             style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
-            <Ionicons name="link-outline" size={17} color="#FFFFFF" />
+            <Ionicons name={accountSession ? 'sync-outline' : 'link-outline'} size={17} color="#FFFFFF" />
             <Text style={styles.primaryButtonText}>
-              {accountSession ? 'Reconnect Cloud Save' : 'Connect Cloud Save'}
+              {accountSession ? 'Sync Now' : 'Connect'}
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.88}
-            disabled={isSyncBusy || !accountSession}
-            onPress={handlePushPrivateSync}
-            style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
-            <Ionicons name="cloud-upload-outline" size={17} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>Save to Cloud</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.88}
-            disabled={isSyncBusy || !accountSession}
-            onPress={handlePullPrivateSync}
-            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
-            <Ionicons name="cloud-download-outline" size={17} color="#5B514D" />
-            <Text style={styles.secondaryButtonText}>Get Cloud Saves</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.88}
-            disabled={isSyncBusy || !accountSession}
-            onPress={handleReviewSyncConflicts}
-            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
-            <Ionicons name="git-compare-outline" size={17} color="#5B514D" />
-            <Text style={styles.secondaryButtonText}>Fix Mix-Ups</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.88}
-            disabled={isSyncBusy || !accountSession}
-            onPress={handleShowSyncLog}
-            style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
-            <Ionicons name="list-outline" size={17} color="#5B514D" />
-            <Text style={styles.secondaryButtonText}>Log</Text>
           </TouchableOpacity>
 
           {isSyncLogVisible ? (
@@ -829,6 +802,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  iconOnlyButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
   accountIcon: {
     width: 38,
     height: 38,
@@ -873,6 +855,11 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 12,
   },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   inputLabel: {
     marginBottom: 6,
     fontSize: 13,
@@ -886,6 +873,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     fontSize: 15,
     color: '#1F1F1F',
+  },
+  usernameInput: {
+    flex: 1,
+  },
+  shuffleButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   passwordRow: {
     minHeight: 46,
@@ -951,6 +949,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
+  },
+  showPhraseButton: {
+    alignSelf: 'flex-start',
+    marginTop: -4,
+    marginBottom: 8,
   },
   secondaryButtonText: {
     fontSize: 13,
