@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   ScrollView,
@@ -56,6 +57,12 @@ function getFriendlySyncError(error: unknown, fallback: string) {
     .replaceAll('Private Sync', 'Cloud Save')
     .replaceAll('sync', 'cloud save')
     .replaceAll('Sync', 'Cloud Save');
+}
+
+function waitForBusyIndicator() {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 80);
+  });
 }
 
 export default function SettingsScreen() {
@@ -121,7 +128,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Connecting Cloud Save...');
     try {
+      await waitForBusyIndicator();
       const result = await connectPrivateSyncPhrase(privateSyncPhrase);
       await refreshPrivateSyncSession();
       setSyncConflicts([]);
@@ -143,7 +153,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Uploading your saves...');
     try {
+      await waitForBusyIndicator();
       const result = await pushEncryptedSync(privateSyncPhrase);
       await refreshPrivateSyncSession();
       setSyncError('');
@@ -172,7 +185,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Downloading cloud saves...');
     try {
+      await waitForBusyIndicator();
       const result = await pullEncryptedSync(privateSyncPhrase, { full: true });
       await refreshPrivateSyncSession();
       setSyncError('');
@@ -199,7 +215,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Checking for mix-ups...');
     try {
+      await waitForBusyIndicator();
       const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
       setSyncConflicts(conflicts);
       setSyncError('');
@@ -218,7 +237,10 @@ export default function SettingsScreen() {
 
   const handleShowSyncLog = async () => {
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Loading Cloud Save Log...');
     try {
+      await waitForBusyIndicator();
       const log = await getEncryptedSyncLog();
       setSyncLogEvents(log.events);
       setIsSyncLogVisible(true);
@@ -243,7 +265,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Fixing saved versions...');
     try {
+      await waitForBusyIndicator();
       await keepEncryptedSyncConflictVersion(privateSyncPhrase, conflict, version);
       const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
       setSyncConflicts(conflicts);
@@ -265,7 +290,10 @@ export default function SettingsScreen() {
     }
 
     setIsSyncBusy(true);
+    setSyncError('');
+    setSyncMessage('Saving both versions...');
     try {
+      await waitForBusyIndicator();
       await saveBothEncryptedSyncConflictVersions(privateSyncPhrase, conflict);
       const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
       setSyncConflicts(conflicts);
@@ -427,7 +455,14 @@ export default function SettingsScreen() {
           </View>
 
           {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
-          {syncMessage ? <Text style={styles.successText}>{syncMessage}</Text> : null}
+          {isSyncBusy && syncMessage ? (
+            <View style={styles.busyRow}>
+              <ActivityIndicator size="small" color="#5F8F73" />
+              <Text style={styles.busyText}>{syncMessage}</Text>
+            </View>
+          ) : syncMessage ? (
+            <Text style={styles.successText}>{syncMessage}</Text>
+          ) : null}
 
           <TouchableOpacity
             activeOpacity={0.88}
@@ -958,6 +993,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 13,
     fontWeight: '600',
+    color: '#5F8F73',
+  },
+  busyRow: {
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  busyText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: '#5F8F73',
   },
   phraseWarningText: {

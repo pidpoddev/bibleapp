@@ -302,7 +302,7 @@ async function derivePhraseMaterial(phrase: string) {
   const derived = await pbkdf2Async(sha256, normalizedPhrase, KDF_SALT, {
     c: KDF_ITERATIONS,
     dkLen: 96,
-    asyncTick: 20,
+    asyncTick: 4,
   });
   const recoveryKey = derived.slice(0, 32);
   const authKey = derived.slice(32, 64);
