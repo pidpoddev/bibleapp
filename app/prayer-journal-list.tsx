@@ -71,8 +71,8 @@ export default function PrayerJournalListScreen() {
 
   const handleNewEntry = () => {
     router.push({
-      pathname: '/prayer-journal',
-      params: { newEntryToken: Date.now().toString() },
+      pathname: '/studio',
+      params: { blankStudioToken: Date.now().toString(), saveTarget: 'prayer' },
     });
   };
 

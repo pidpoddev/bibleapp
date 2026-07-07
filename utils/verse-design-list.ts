@@ -1,20 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import bible from '@/assets/bible.json';
-import { SAVED_DESIGNS_STORAGE_KEY } from '@/utils/storage-keys';
+import {
+  SAVED_DESIGNS_STORAGE_KEY,
+  VERSE_DESIGN_INDEX_STORAGE_KEY,
+  VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
+} from '@/utils/storage-keys';
 import {
   getVerseStorageKey,
   loadVerseStateMap,
   saveVerseStateMap,
   type HighlightColor,
+  type DrawingStrokeData,
   type NoteData,
   type StickerData,
   type VerseCardData,
   type VerseEditorState,
 } from '@/utils/verse-storage';
 
-const VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY = 'verse_design_timestamps_v1';
-const VERSE_DESIGN_INDEX_STORAGE_KEY = 'verse_design_index_v1';
 export { SAVED_DESIGNS_STORAGE_KEY };
 
 type BibleBook = {
@@ -31,6 +34,7 @@ export type VerseDesignListItem = {
   verseCards: VerseCardData[];
   stickers: StickerData[];
   notes: NoteData[];
+  drawingStrokes: DrawingStrokeData[];
   backgroundKey: string | null;
   highlights: Record<string, HighlightColor>;
   selectedFont: string;
@@ -78,6 +82,7 @@ export function isVerseDesignDecorated(state: VerseEditorState) {
     state.verseCards.length > 0 ||
     state.stickers.length > 0 ||
     state.notes.length > 0 ||
+    state.drawingStrokes.length > 0 ||
     state.backgroundKey !== null ||
     Object.keys(state.highlightedWords).length > 0
   );
@@ -128,6 +133,10 @@ function buildVerseDesignListItem(
     verseCards: state.verseCards.map((verseCard) => ({ ...verseCard })),
     stickers: state.stickers.map((sticker) => ({ ...sticker })),
     notes: state.notes.map((note) => ({ ...note })),
+    drawingStrokes: state.drawingStrokes.map((stroke) => ({
+      ...stroke,
+      points: stroke.points.map((point) => ({ ...point })),
+    })),
     backgroundKey: state.backgroundKey,
     highlights: { ...state.highlightedWords },
     selectedFont: state.selectedFont,
@@ -153,6 +162,8 @@ function normalizeVerseDesignListItem(value: unknown): VerseDesignListItem | nul
     !Array.isArray(candidate.verseCards) ||
     !Array.isArray(candidate.stickers) ||
     !Array.isArray(candidate.notes) ||
+    (typeof candidate.drawingStrokes !== 'undefined' &&
+      !Array.isArray(candidate.drawingStrokes)) ||
     typeof candidate.selectedFont !== 'string' ||
     typeof candidate.fontSize !== 'number'
   ) {
@@ -171,6 +182,9 @@ function normalizeVerseDesignListItem(value: unknown): VerseDesignListItem | nul
     verseCards: candidate.verseCards as VerseCardData[],
     stickers: candidate.stickers as StickerData[],
     notes: candidate.notes as NoteData[],
+    drawingStrokes: Array.isArray(candidate.drawingStrokes)
+      ? (candidate.drawingStrokes as DrawingStrokeData[])
+      : [],
     backgroundKey:
       typeof candidate.backgroundKey === 'string' ? candidate.backgroundKey : null,
     highlights:

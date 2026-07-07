@@ -19,6 +19,7 @@ import {
   getSyncSession,
   pushEncryptedSync,
 } from '@/utils/sync-client';
+import { useAppSettings, type TranslationKey } from '@/utils/app-settings';
 
 type CloudSaveResult = {
   pushedCount: number;
@@ -34,23 +35,26 @@ type EncryptedCloudSaveActionProps = {
   onSaved?: (result: CloudSaveResult) => void;
 };
 
-function getFriendlyCloudError(error: unknown) {
-  const message = error instanceof Error ? error.message : 'Could not save to cloud.';
+function getFriendlyCloudError(
+  error: unknown,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string
+) {
+  const message = error instanceof Error ? error.message : t('cloudSaveGenericError');
 
   if (message.includes('did not match') || message.includes('does not match')) {
-    return 'That phrase does not match this device.';
+    return t('cloudSavePhraseMismatch');
   }
 
   if (message.includes('Unauthorized sync device')) {
-    return 'Cloud Save needs to reconnect. Enter your Secret Phrase again.';
+    return t('cloudSaveReconnect');
   }
 
   if (message.includes('Private Sync Phrase') || message.includes('Create or enter')) {
-    return 'Enter your Secret Phrase first.';
+    return t('cloudSaveEnterPhrase');
   }
 
   if (message.includes('Unexpected API error') || message.includes('Sync request failed')) {
-    return 'Could not save to cloud.';
+    return t('cloudSaveGenericError');
   }
 
   return message
@@ -60,19 +64,21 @@ function getFriendlyCloudError(error: unknown) {
 }
 
 export function EncryptedCloudSaveAction({
-  label = 'Save to Cloud',
+  label,
   buttonStyle,
   textStyle,
   iconColor = '#5B514D',
   disabledStyle,
   onSaved,
 }: EncryptedCloudSaveActionProps) {
+  const { t } = useAppSettings();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
   const [phrase, setPhrase] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const buttonLabel = label ?? t('actionSaveToCloud');
 
   const openCloudSave = async () => {
     setError('');
@@ -84,12 +90,12 @@ export function EncryptedCloudSaveAction({
       setHasSession(Boolean(session));
       setMessage(
         session
-          ? 'Enter your Secret Phrase to save this device.'
-          : 'Enter your Secret Phrase to turn on Cloud Save.'
+          ? t('cloudSaveExistingSessionPrompt')
+          : t('cloudSaveNewSessionPrompt')
       );
     } catch {
       setHasSession(false);
-      setMessage('Enter your Secret Phrase to turn on Cloud Save.');
+      setMessage(t('cloudSaveNewSessionPrompt'));
     }
   };
 
@@ -105,7 +111,7 @@ export function EncryptedCloudSaveAction({
 
   const saveToCloud = async () => {
     if (!phrase.trim()) {
-      setError('Enter your Secret Phrase first.');
+      setError(t('cloudSaveEnterPhrase'));
       return;
     }
 
@@ -130,12 +136,14 @@ export function EncryptedCloudSaveAction({
       } else {
         setMessage(
           result.conflictCount > 0
-            ? 'Saved to cloud. Some things need a quick check in Settings.'
-            : `Saved ${result.pushedCount} thing${result.pushedCount === 1 ? '' : 's'} to cloud.`
+            ? t('cloudSaveConflictMessage')
+            : t(result.pushedCount === 1 ? 'cloudSaveSuccessCountOne' : 'cloudSaveSuccessCount', {
+                count: result.pushedCount,
+              })
         );
       }
     } catch (cloudError) {
-      setError(getFriendlyCloudError(cloudError));
+      setError(getFriendlyCloudError(cloudError, t));
     } finally {
       setIsBusy(false);
     }
@@ -150,7 +158,7 @@ export function EncryptedCloudSaveAction({
         }}
         style={[buttonStyle, isBusy ? disabledStyle : null]}
         accessibilityRole="button"
-        accessibilityLabel="Save to cloud">
+        accessibilityLabel={buttonLabel}>
         <View style={styles.encryptedIcon}>
           <Ionicons name="cloud-upload-outline" size={17} color={iconColor} />
           <View style={styles.lockBadge}>
@@ -158,7 +166,7 @@ export function EncryptedCloudSaveAction({
           </View>
         </View>
         <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={textStyle}>
-          {label}
+          {buttonLabel}
         </Text>
       </TouchableOpacity>
 
@@ -175,17 +183,17 @@ export function EncryptedCloudSaveAction({
                 <Ionicons name="lock-closed" size={11} color="#FFFFFF" />
               </View>
             </View>
-            <Text style={styles.modalTitle}>Save to Cloud</Text>
-            <Text style={styles.modalBody}>Your journal is locked before it saves.</Text>
+            <Text style={styles.modalTitle}>{t('actionSaveToCloud')}</Text>
+            <Text style={styles.modalBody}>{t('cloudSaveModalBody')}</Text>
             <Text style={styles.phraseWarningText}>
-              {"Don't lose the phrase! It can't be recovered."}
+              {t('settingsPhraseWarning')}
             </Text>
             {message ? <Text style={styles.modalMessage}>{message}</Text> : null}
 
             <TextInput
               value={phrase}
               onChangeText={setPhrase}
-              placeholder="Secret Phrase"
+              placeholder={t('settingsSecretPhrase')}
               placeholderTextColor="#9C9087"
               autoCapitalize="none"
               autoCorrect={false}
@@ -201,7 +209,7 @@ export function EncryptedCloudSaveAction({
                 onPress={closeCloudSave}
                 disabled={isBusy}
                 style={[styles.secondaryAction, isBusy ? styles.disabledAction : null]}>
-                <Text style={styles.secondaryActionText}>Cancel</Text>
+                <Text style={styles.secondaryActionText}>{t('actionCancel')}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -211,7 +219,7 @@ export function EncryptedCloudSaveAction({
                 style={[styles.primaryAction, isBusy ? styles.disabledAction : null]}>
                 {isBusy ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
                 <Text style={styles.primaryActionText}>
-                  {isBusy ? 'Saving...' : 'Save to Cloud'}
+                  {isBusy ? t('actionSaving') : t('actionSaveToCloud')}
                 </Text>
               </Pressable>
             </View>

@@ -10,6 +10,11 @@ import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-da
 import { useAppSettings } from '@/utils/app-settings';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 import { formatEntryDateTime } from '@/utils/date-time';
+import {
+  BIBLE_STUDY_SECTION_KEYS,
+  localizeJournalSections,
+  makeJournalSections,
+} from '@/utils/journal-localization';
 import { getShopBackground, TEST_UNLOCKED_BACKGROUND_PACKS } from '@/utils/shop-backgrounds';
 import { getShopSticker, TEST_UNLOCKED_STICKER_PACKS } from '@/utils/shop-stickers';
 
@@ -54,20 +59,12 @@ const JOURNAL_TOOLBAR_ICONS = {
 } as const;
 const HEADER_ICON = require('../assets/images/toolbar-icons/journal-bible-study.png');
 
-const defaultSections: BibleStudySection[] = [
-  { id: '1', label: 'What stands out:', text: '' },
-  { id: '2', label: 'What it means:', text: '' },
-  { id: '3', label: 'How I can apply it:', text: '' },
-  { id: '4', label: 'Prayer response:', text: '' },
-  { id: '5', label: 'Notes:', text: '' },
-];
-
 function getLatestWebSections(sections: BibleStudySection[]) {
   if (Platform.OS !== 'web' || typeof document === 'undefined') {
     return sections;
   }
 
-  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write here..."]'))
+  const values = Array.from(document.querySelectorAll('textarea'))
     .map((textarea) => (textarea as HTMLTextAreaElement).value);
 
   if (values.length < sections.length) {
@@ -84,12 +81,14 @@ const BibleStudySectionField = memo(function BibleStudySectionField({
   label,
   value,
   onChangeText,
+  placeholder,
   cardBackground,
   accentColor,
 }: {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
+  placeholder: string;
   cardBackground: string;
   accentColor: string;
 }) {
@@ -116,7 +115,7 @@ const BibleStudySectionField = memo(function BibleStudySectionField({
           multiline
           scrollEnabled={false}
           blurOnSubmit={false}
-          placeholder="Write here..."
+          placeholder={placeholder}
           placeholderTextColor="#A79B92"
           style={styles.inputOverlay}
           textAlignVertical="top"
@@ -163,7 +162,7 @@ function buildPreview(book: string, chapter: string, verse: string, sections: Bi
 }
 
 export default function BibleStudyJournalScreen() {
-  const { colorTheme, language } = useAppSettings();
+  const { colorTheme, language, t } = useAppSettings();
   const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
@@ -178,7 +177,11 @@ export default function BibleStudyJournalScreen() {
   const [verse, setVerse] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'book' | 'chapter' | 'verse' | null>(null);
   const canvasRef = useRef<View>(null);
-  const [sections, setSections] = useState<BibleStudySection[]>(defaultSections);
+  const defaultSections = useMemo(
+    () => makeJournalSections(BIBLE_STUDY_SECTION_KEYS, t) as BibleStudySection[],
+    [t]
+  );
+  const [sections, setSections] = useState<BibleStudySection[]>(() => defaultSections);
   const sectionsRef = useRef<BibleStudySection[]>(defaultSections);
   const [stickers, setStickers] = useState<DecorSticker[]>([]);
   const [background, setBackground] = useState<string>('lined');
@@ -319,7 +322,7 @@ export default function BibleStudyJournalScreen() {
       }
     };
     void loadEntry();
-  }, [entryId, newEntryToken, today, updateIndex]);
+  }, [defaultSections, entryId, newEntryToken, today, updateIndex]);
 
   const updateSection = useCallback((sectionId: string, text: string) => {
     recordUndoSnapshot();
@@ -390,7 +393,7 @@ export default function BibleStudyJournalScreen() {
 
   const addNoteSection = () => {
     recordUndoSnapshot();
-    const next = [...sections, { id: generateId(), label: 'Note', text: '' }];
+    const next = [...sections, { id: generateId(), label: t('editorNote'), text: '' }];
     sectionsRef.current = next;
     setSections(next);
     void saveEntry(book, chapter, verse, next);
@@ -409,7 +412,7 @@ export default function BibleStudyJournalScreen() {
 
   const saveJournalImage = async () => {
     if (!canvasRef.current) return;
-    const permission = await MediaLibrary.requestPermissionsAsync();
+    const permission = await MediaLibrary.requestPermissionsAsync(true, ["photo"]);
     if (!permission.granted) return;
     const uri = await captureRef(canvasRef, { format: 'png', quality: 1 });
     await MediaLibrary.createAssetAsync(uri);
@@ -422,13 +425,17 @@ export default function BibleStudyJournalScreen() {
     await Share.share({ url: uri });
     setOpenDecor(null);
   };
+  const localizedSections = useMemo(
+    () => localizeJournalSections(sections, BIBLE_STUDY_SECTION_KEYS, t),
+    [sections, t]
+  );
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.container, { backgroundColor: colorTheme.editorBackground }]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { setOpenDropdown(null); }} showsVerticalScrollIndicator={false}>
         <View style={styles.titleRow}>
           <Image source={HEADER_ICON} style={styles.titleIcon} resizeMode="contain" />
-          <Text style={styles.title}>Bible Study</Text>
+          <Text style={styles.title}>{t('bibleStudy')}</Text>
         </View>
         <Text style={styles.date}>{entryDate}</Text>
         <TouchableOpacity
@@ -438,7 +445,9 @@ export default function BibleStudyJournalScreen() {
           {...(Platform.OS === 'web'
             ? { onMouseDown: captureSectionsBeforeAction, onPointerDown: captureSectionsBeforeAction }
             : null)}>
-          <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
+          <Text style={styles.favoriteButtonText}>
+            {isFavorite ? `❤️ ${t('editorSavedToFavorites')}` : `🤍 ${t('editorSaveToFavorites')}`}
+          </Text>
         </TouchableOpacity>
 
         <ScrollView
@@ -450,47 +459,47 @@ export default function BibleStudyJournalScreen() {
             style={[styles.decorButton, openDecor === 'highlight' ? styles.decorButtonActive : null]}
             onPress={() => setOpenDecor((current) => current === 'highlight' ? null : 'highlight')}>
             <Image source={JOURNAL_TOOLBAR_ICONS.text} style={styles.decorButtonIcon} resizeMode="contain" />
-            <Text style={styles.decorButtonText}>Text</Text>
+            <Text style={styles.decorButtonText}>{t('editorText')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.decorButton, openDecor === 'bg' ? styles.decorButtonActive : null]}
             onPress={() => setOpenDecor((current) => current === 'bg' ? null : 'bg')}>
             <Image source={JOURNAL_TOOLBAR_ICONS.canvas} style={styles.decorButtonIcon} resizeMode="contain" />
-            <Text style={styles.decorButtonText}>Canvas</Text>
+            <Text style={styles.decorButtonText}>{t('editorCanvas')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.decorButton, openDecor === 'sticker' ? styles.decorButtonActive : null]}
             onPress={() => setOpenDecor((current) => current === 'sticker' ? null : 'sticker')}>
             <Image source={JOURNAL_TOOLBAR_ICONS.decor} style={styles.decorButtonIcon} resizeMode="contain" />
-            <Text style={styles.decorButtonText}>Decor</Text>
+            <Text style={styles.decorButtonText}>{t('editorDecor')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.decorButton}
             onPress={addNoteSection}>
             <Image source={JOURNAL_TOOLBAR_ICONS.note} style={styles.decorButtonIcon} resizeMode="contain" />
-            <Text style={styles.decorButtonText}>Note</Text>
+            <Text style={styles.decorButtonText}>{t('editorNote')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.decorButton, openDecor === 'more' ? styles.decorButtonActive : null]}
             onPress={() => setOpenDecor((current) => current === 'more' ? null : 'more')}>
             <Image source={JOURNAL_TOOLBAR_ICONS.more} style={styles.decorButtonIcon} resizeMode="contain" />
-            <Text style={styles.decorButtonText}>More</Text>
+            <Text style={styles.decorButtonText}>{t('editorMore')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             disabled={undoHistory.length === 0}
             style={[styles.decorButton, undoHistory.length === 0 ? styles.decorButtonDisabled : null]}
             onPress={undoLastEdit}>
             <Ionicons name="arrow-undo-outline" size={20} color="#4A403C" />
-            <Text style={styles.decorButtonText}>Undo</Text>
+            <Text style={styles.decorButtonText}>{t('actionUndo')}</Text>
           </TouchableOpacity>
         </ScrollView>
 
         {openDecor === 'bg' ? (
           <View style={styles.decorPanel}>
-            <Text style={styles.panelSectionTitle}>Basic</Text>
+            <Text style={styles.panelSectionTitle}>{t('editorBasic')}</Text>
             <View style={styles.panelItemRow}>
-              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>Lined</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>Plain</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('lined'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'lined'); }}><Text>{t('editorLined')}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.simpleChip} onPress={() => { recordUndoSnapshot(); setBackground('plain'); setOpenDecor(null); void saveEntry(book, chapter, verse, sections, stickers, 'plain'); }}><Text>{t('editorPlain')}</Text></TouchableOpacity>
             </View>
             {TEST_UNLOCKED_BACKGROUND_PACKS.map((pack) => (
               <View key={pack.id} style={styles.panelSection}>
@@ -509,7 +518,7 @@ export default function BibleStudyJournalScreen() {
 
         {openDecor === 'sticker' ? (
           <View style={styles.decorPanel}>
-            <Text style={styles.panelSectionTitle}>Quick Stickers</Text>
+            <Text style={styles.panelSectionTitle}>{t('editorQuickStickers')}</Text>
             <View style={styles.panelItemRow}>
               {STICKER_CHOICES.map((emoji) => <TouchableOpacity key={emoji} style={styles.emojiChip} onPress={() => addEmojiSticker(emoji)}><Text style={styles.emojiText}>{emoji}</Text></TouchableOpacity>)}
             </View>
@@ -539,7 +548,7 @@ export default function BibleStudyJournalScreen() {
           <View style={styles.decorPanel}>
             <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void saveJournalImage()}>
               <Ionicons name="download-outline" size={16} color="#5B514D" />
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionSaveImage')}</Text>
             </TouchableOpacity>
             <EncryptedCloudSaveAction
               buttonStyle={[styles.simpleChip, styles.moreActionChip]}
@@ -548,11 +557,11 @@ export default function BibleStudyJournalScreen() {
             />
             <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={() => void shareJournalImage()}>
               <Ionicons name="share-outline" size={16} color="#5B514D" />
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionShare')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.simpleChip, styles.moreActionChip]} onPress={resetJournal}>
               <Ionicons name="arrow-redo-outline" size={16} color="#5B514D" />
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionStartOver')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -560,22 +569,22 @@ export default function BibleStudyJournalScreen() {
         <View style={styles.referenceRow}>
           <View style={[styles.referenceDropdownContainer, styles.bookCard]}>
             <Pressable onPress={() => setOpenDropdown((current) => (current === 'book' ? null : 'book'))} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }]}>
-              <Text numberOfLines={1} style={styles.referenceLabel}>Book</Text>
-              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{book || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View>
+              <Text numberOfLines={1} style={styles.referenceLabel}>{t('commonBook')}</Text>
+              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{book || t('commonSelect')}</Text><Text style={styles.referenceChevron}>▼</Text></View>
             </Pressable>
             {openDropdown === 'book' ? <View style={[styles.dropdownMenu, styles.bookDropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{bookOptions.map((bookOption) => <Pressable key={bookOption} onPress={() => { setBook(bookOption); setChapter(''); setVerse(''); setOpenDropdown(null); void saveEntry(bookOption, '', '', sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{bookOption}</Text></Pressable>)}</ScrollView></View> : null}
           </View>
           <View style={styles.referenceDropdownContainer}>
             <Pressable onPress={() => { if (!book) return; setOpenDropdown((current) => (current === 'chapter' ? null : 'chapter')); }} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }, !book ? styles.referenceCardDisabled : null]}>
-              <Text numberOfLines={1} style={styles.referenceLabel}>Chapter</Text>
-              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{chapter || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View>
+              <Text numberOfLines={1} style={styles.referenceLabel}>{t('commonChapter')}</Text>
+              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{chapter || t('commonSelect')}</Text><Text style={styles.referenceChevron}>▼</Text></View>
             </Pressable>
             {openDropdown === 'chapter' ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{chapterOptions.map((chapterOption) => <Pressable key={chapterOption} onPress={() => { setChapter(chapterOption); setVerse(''); setOpenDropdown(null); void saveEntry(book, chapterOption, '', sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{chapterOption}</Text></Pressable>)}</ScrollView></View> : null}
           </View>
           <View style={styles.referenceDropdownContainer}>
             <Pressable onPress={() => { if (!book || !chapter) return; setOpenDropdown((current) => (current === 'verse' ? null : 'verse')); }} style={[styles.referenceCard, { backgroundColor: colorTheme.cardBackground }, !book || !chapter ? styles.referenceCardDisabled : null]}>
-              <Text numberOfLines={1} style={styles.referenceLabel}>Verse</Text>
-              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{verse || 'Select'}</Text><Text style={styles.referenceChevron}>▼</Text></View>
+              <Text numberOfLines={1} style={styles.referenceLabel}>{t('commonVerse')}</Text>
+              <View style={styles.referenceValueRow}><Text numberOfLines={1} style={styles.referenceValueText}>{verse || t('commonSelect')}</Text><Text style={styles.referenceChevron}>▼</Text></View>
             </Pressable>
             {openDropdown === 'verse' ? <View style={[styles.dropdownMenu, { backgroundColor: colorTheme.screenBackground, borderColor: colorTheme.border }]}><ScrollView nestedScrollEnabled>{verseOptions.map((verseOption) => <Pressable key={verseOption} onPress={() => { setVerse(verseOption); setOpenDropdown(null); void saveEntry(book, chapter, verseOption, sections); }} style={styles.dropdownOption}><Text style={styles.dropdownOptionText}>{verseOption}</Text></Pressable>)}</ScrollView></View> : null}
           </View>
@@ -602,8 +611,8 @@ export default function BibleStudyJournalScreen() {
             </View>
           ) : null}
 
-          {sections.map((section) => (
-            <BibleStudySectionField key={section.id} label={section.label} value={section.text} onChangeText={(text) => updateSection(section.id, text)} cardBackground={colorTheme.cardBackground} accentColor={highlightColor} />
+          {localizedSections.map((section) => (
+            <BibleStudySectionField key={section.id} label={section.label} value={section.text} onChangeText={(text) => updateSection(section.id, text)} placeholder={t('editorWriteHere')} cardBackground={colorTheme.cardBackground} accentColor={highlightColor} />
           ))}
         </ImageBackground>
         </View>

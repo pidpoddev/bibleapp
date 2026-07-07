@@ -14,10 +14,8 @@ export type ShopBackgroundPack = {
   subtitle: string;
   category: string;
   tag: string;
-  price: string;
-  productId: string;
   backgrounds: ShopBackground[];
-  isTestUnlocked?: boolean;
+  isIncluded?: boolean;
 };
 
 export const SOFT_GLITTER_BACKGROUNDS: ShopBackground[] = [
@@ -99,17 +97,14 @@ export const SHOP_BACKGROUND_PACKS: ShopBackgroundPack[] = [
     title: 'Soft Glitter Backgrounds',
     subtitle: '10 shimmering paper backgrounds for Studio and journals',
     category: 'Backgrounds',
-    tag: 'Test Pack',
-    price: 'Free test',
-    productId: 'soft_glitter_backgrounds',
+    tag: 'Included',
     backgrounds: SOFT_GLITTER_BACKGROUNDS,
-    isTestUnlocked: true,
+    isIncluded: true,
   },
 ];
 
-export const TEST_UNLOCKED_BACKGROUND_PACKS = SHOP_BACKGROUND_PACKS.filter(
-  (pack) => pack.isTestUnlocked
-);
+export const INCLUDED_BACKGROUND_PACKS = SHOP_BACKGROUND_PACKS.filter((pack) => pack.isIncluded);
+export const TEST_UNLOCKED_BACKGROUND_PACKS = INCLUDED_BACKGROUND_PACKS;
 
 export const SHOP_BACKGROUNDS = SOFT_GLITTER_BACKGROUNDS.reduce<
   Record<string, ShopBackground>

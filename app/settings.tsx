@@ -1,20 +1,32 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  Keyboard,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 
-import { useAppSettings } from '@/utils/app-settings';
-import { buildJournalExportSnapshot, resetJournalData } from '@/utils/journal-storage';
+import { useAppSettings, type TranslationKey } from '@/utils/app-settings';
 import {
+  getBibleReadingProgress,
+  type BibleReadingProgress,
+} from '@/utils/bible-reading-progress';
+import { buildJournalExportSnapshot, resetJournalData } from '@/utils/journal-storage';
+import { useResponsiveLayout } from '@/utils/responsive-layout';
+import {
+  checkSyncUsernameAvailability,
   connectPrivateSyncPhrase,
   disconnectPrivateSync,
   getEncryptedSyncConflicts,
@@ -24,6 +36,7 @@ import {
   pullEncryptedSync,
   pushEncryptedSync,
   saveBothEncryptedSyncConflictVersions,
+  updateSyncUsername,
   type SyncConflict,
   type SyncConflictVersion,
   type SyncLogEvent,
@@ -32,6 +45,15 @@ import {
 type AccountSession = {
   email: string;
   signedInAt: number;
+};
+
+const CLOUD_USERNAME_STORAGE_KEY = 'bibleapp:cloud-username';
+const FAITH_CANVAS_ICON = require('../assets/brand/faith-canvas/light/app-icon-light.png');
+const FAITH_CANVAS_LINKS = {
+  privacy: 'https://pidpod.com/faithcanvas/privacy.html',
+  safety: 'https://pidpod.com/faithcanvas/safety.html',
+  support: 'https://pidpod.com/faithcanvas/support.html',
+  email: 'mailto:support@pidpod.com',
 };
 
 const USERNAME_PREFIXES = [
@@ -71,27 +93,40 @@ function cleanUsername(value: string) {
   return value.replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
 }
 
-function getFriendlySyncError(error: unknown, fallback: string) {
+type SettingsTranslator = (
+  key: TranslationKey,
+  params?: Record<string, string | number>
+) => string;
+
+function getFriendlySyncError(error: unknown, fallback: string, t: SettingsTranslator) {
   const message = error instanceof Error ? error.message : fallback;
 
+  if (message.includes('Username and Secret Phrase')) {
+    return t('settingsSyncErrorUsernamePhraseMismatch');
+  }
+
   if (message.includes('username is already taken') || message.includes('Username')) {
-    return 'That username is taken. Try changing it a little.';
+    return t('settingsSyncErrorUsernameTaken');
   }
 
   if (message.includes('did not match') || message.includes('does not match')) {
-    return 'That phrase does not match this device.';
+    return t('settingsSyncErrorPhraseMismatch');
   }
 
   if (message.includes('Unauthorized sync device')) {
-    return 'Cloud Save needs to reconnect. Enter your Secret Phrase again.';
+    return t('settingsSyncErrorReconnect');
   }
 
   if (message.includes('Private Sync Phrase') || message.includes('Create or enter')) {
-    return 'Enter your Secret Phrase first.';
+    return t('settingsSyncErrorEnterPhrase');
   }
 
   if (message.includes('Unexpected API error') || message.includes('Sync request failed')) {
     return fallback;
+  }
+
+  if (message.includes('timed out')) {
+    return t('settingsSyncErrorTimedOut');
   }
 
   return message
@@ -106,16 +141,79 @@ function waitForBusyIndicator() {
   });
 }
 
+function confirmUsernameChange(
+  currentUsername: string,
+  nextUsername: string,
+  t: SettingsTranslator
+) {
+  const message = t('settingsUsernameChangeMessage', { currentUsername, nextUsername });
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return Promise.resolve(window.confirm(message));
+  }
+
+  return new Promise<boolean>((resolve) => {
+    Alert.alert(t('settingsUsernameChangeTitle'), message, [
+      { text: t('actionCancel'), style: 'cancel', onPress: () => resolve(false) },
+      { text: t('settingsUsernameChangeAction'), onPress: () => resolve(true) },
+    ]);
+  });
+}
+
+function getCloudSaveSuccessMessage({
+  pushedCount,
+  pulledCount,
+  deletedCount,
+}: {
+  pushedCount: number;
+  pulledCount: number;
+  deletedCount: number;
+}, t: SettingsTranslator) {
+  const changedCount = pushedCount + pulledCount + deletedCount;
+
+  if (changedCount === 0) {
+    return t('settingsCloudConnectedNothingNew');
+  }
+
+  const parts = [];
+
+  if (pushedCount > 0) {
+    parts.push(t('settingsCloudSavedCount', { count: pushedCount }));
+  }
+
+  if (pulledCount > 0) {
+    parts.push(t('settingsCloudDownloadedCount', { count: pulledCount }));
+  }
+
+  if (deletedCount > 0) {
+    parts.push(t('settingsCloudRemovedCount', { count: deletedCount }));
+  }
+
+  return `Cloud Save complete: ${parts.join(', ')}.`;
+}
+
+async function openFaithCanvasLink(url: string) {
+  try {
+    await Linking.openURL(url);
+  } catch (error) {
+    console.log('Could not open Faith Canvas link:', error);
+    Alert.alert('Could not open link', url);
+  }
+}
+
 export default function SettingsScreen() {
   const {
     colorTheme,
     colorThemes,
     language,
     languages,
+    bibleReadingImagesEnabled,
     setColorThemeKey,
+    setBibleReadingImagesEnabled,
     setLanguageKey,
     t,
   } = useAppSettings();
+  const layout = useResponsiveLayout();
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
   const [dataMessage, setDataMessage] = useState('');
@@ -126,14 +224,48 @@ export default function SettingsScreen() {
   const [syncMessage, setSyncMessage] = useState('');
   const [syncError, setSyncError] = useState('');
   const [isSyncBusy, setIsSyncBusy] = useState(false);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
   const [syncLogEvents, setSyncLogEvents] = useState<SyncLogEvent[]>([]);
   const [isSyncLogVisible, setIsSyncLogVisible] = useState(false);
+  const isMountedRef = useRef(true);
+  const activeCloudSyncRef = useRef(false);
+  const [bibleReadingProgress, setBibleReadingProgress] = useState<BibleReadingProgress>({
+    readCount: 0,
+    totalCount: 0,
+    percent: 0,
+  });
+  const isCloudSaveBusy = isSyncBusy || isBackgroundSyncing;
+
+  const persistCloudUsername = async (
+    value: string,
+    options: {
+      fallbackIfEmpty?: boolean;
+    } = {}
+  ) => {
+    const { fallbackIfEmpty = true } = options;
+    const cleaned = cleanUsername(value);
+    const nextUsername = cleaned || (fallbackIfEmpty ? makePrettyUsername() : '');
+    setCloudUsername(nextUsername);
+
+    try {
+      await AsyncStorage.setItem(CLOUD_USERNAME_STORAGE_KEY, nextUsername);
+    } catch (error) {
+      console.log('Error saving cloud username:', error);
+    }
+
+    return nextUsername;
+  };
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const loadAccountSession = async () => {
       try {
-        const storedSyncSession = await getSyncSession();
+        const [storedSyncSession, storedCloudUsername] = await Promise.all([
+          getSyncSession(),
+          AsyncStorage.getItem(CLOUD_USERNAME_STORAGE_KEY),
+        ]);
 
         if (storedSyncSession) {
           setAccountSession({
@@ -142,15 +274,52 @@ export default function SettingsScreen() {
           });
           if (storedSyncSession.username) {
             setCloudUsername(storedSyncSession.username);
+            try {
+              await AsyncStorage.setItem(CLOUD_USERNAME_STORAGE_KEY, storedSyncSession.username);
+            } catch (error) {
+              console.log('Error saving synced cloud username:', error);
+            }
           }
+          return;
         }
+
+        if (storedCloudUsername !== null) {
+          setCloudUsername(storedCloudUsername);
+          return;
+        }
+
+        await persistCloudUsername(makePrettyUsername());
       } catch (error) {
         console.log('Error loading account session:', error);
       }
     };
 
     void loadAccountSession();
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      void getBibleReadingProgress()
+        .then((progress) => {
+          if (isActive) {
+            setBibleReadingProgress(progress);
+          }
+        })
+        .catch((error) => {
+          console.warn('Failed to load Bible reading progress', error);
+        });
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   const refreshPrivateSyncSession = async () => {
     const storedSyncSession = await getSyncSession();
@@ -161,78 +330,181 @@ export default function SettingsScreen() {
         signedInAt: storedSyncSession.createdAt,
       });
       if (storedSyncSession.username) {
-        setCloudUsername(storedSyncSession.username);
+        await persistCloudUsername(storedSyncSession.username);
       }
     } else {
       setAccountSession(null);
     }
   };
 
+  const startCloudSaveSyncInBackground = (phrase: string, connectedMessage: string) => {
+    if (activeCloudSyncRef.current) {
+      return;
+    }
+
+    activeCloudSyncRef.current = true;
+    setIsSyncBusy(false);
+    setIsBackgroundSyncing(true);
+    setSyncError('');
+    setSyncMessage(connectedMessage);
+
+    void (async () => {
+      try {
+        const pushResult = await pushEncryptedSync(phrase);
+        const pullResult = await pullEncryptedSync(phrase, { full: true });
+
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        await refreshPrivateSyncSession();
+        setSyncError('');
+        setSyncMessage(
+          pushResult.conflictCount > 0
+            ? t(
+                pushResult.conflictCount === 1
+                  ? 'settingsSyncConflictNeedsCheckOne'
+                  : 'settingsSyncConflictNeedsCheck',
+                { count: pushResult.conflictCount }
+              )
+            : getCloudSaveSuccessMessage({
+                pushedCount: pushResult.pushedCount,
+                pulledCount: pullResult.pulledCount,
+                deletedCount: pullResult.deletedCount,
+              }, t)
+        );
+
+        if (pushResult.conflictCount > 0) {
+          setSyncConflicts(await getEncryptedSyncConflicts(phrase));
+        }
+      } catch (error) {
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        setSyncError(
+          getFriendlySyncError(
+            error,
+            t('settingsSyncConnectedGotStuck'),
+            t
+          )
+        );
+        setSyncMessage(t('settingsSyncConnectedFinishNeeded'));
+      } finally {
+        activeCloudSyncRef.current = false;
+        if (isMountedRef.current) {
+          setIsBackgroundSyncing(false);
+        }
+      }
+    })();
+  };
+
   const handleCloudConnectAndSync = async () => {
+    if (isCloudSaveBusy) {
+      return;
+    }
+
     if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase.');
+      setSyncError(t('cloudSaveEnterPhrase'));
       setSyncMessage('');
       return;
     }
 
     const username = cleanUsername(cloudUsername);
     if (username.length < 3) {
-      setSyncError('Pick a username with at least 3 letters or numbers.');
+      setSyncError(t('settingsUsernameTooShort'));
       setSyncMessage('');
       return;
     }
 
     setIsSyncBusy(true);
     setSyncError('');
+    setSyncConflicts([]);
+    setSyncMessage(accountSession ? t('settingsSyncStarting') : t('settingsSyncConnecting'));
+    Keyboard.dismiss();
+    let didStartBackgroundSync = false;
+
     try {
       await waitForBusyIndicator();
-      if (!accountSession || username !== accountSession.email) {
-        setSyncMessage('Connecting...');
+      if (!accountSession) {
+        setSyncMessage(t('settingsSyncProtectingPhrase'));
+        await waitForBusyIndicator();
         const result = await connectPrivateSyncPhrase(privateSyncPhrase, username);
-        setCloudUsername(result.username || username);
-        await refreshPrivateSyncSession();
-      }
+        const connectedUsername = result.username || username;
+        await persistCloudUsername(connectedUsername);
+        setAccountSession({
+          email: connectedUsername,
+          signedInAt: result.createdAt,
+        });
+        didStartBackgroundSync = true;
+        startCloudSaveSyncInBackground(
+          privateSyncPhrase,
+          t('settingsSyncConnectedBackground')
+        );
+        return;
+      } else if (username !== accountSession.email) {
+        setSyncMessage(t('settingsSyncCheckingUsername'));
+        const availability = await checkSyncUsernameAvailability(username);
+        if (!availability.available) {
+          setSyncError(t('settingsSyncErrorUsernameTaken'));
+          setSyncMessage('');
+          return;
+        }
 
-      setSyncMessage('Saving...');
-      const pushResult = await pushEncryptedSync(privateSyncPhrase);
-      await refreshPrivateSyncSession();
+        const didConfirm = await confirmUsernameChange(accountSession.email, availability.username, t);
+        if (!didConfirm) {
+          setSyncMessage('');
+          return;
+        }
 
-      setSyncMessage('Checking for new saves...');
-      const pullResult = await pullEncryptedSync(privateSyncPhrase, { full: true });
-      setSyncConflicts([]);
-      setSyncError('');
-      setSyncMessage(
-        pushResult.conflictCount > 0
-          ? `${pushResult.conflictCount} saved thing${pushResult.conflictCount === 1 ? '' : 's'} need a quick check.`
-          : pullResult.pulledCount > 0 || pullResult.deletedCount > 0
-            ? "Y'all N Sync"
-            : "Y'all N Sync"
-      );
-
-      if (pushResult.conflictCount > 0) {
-        setSyncConflicts(await getEncryptedSyncConflicts(privateSyncPhrase));
+        setSyncMessage(t('settingsSyncSavingUsername'));
+        const nextSession = await updateSyncUsername(availability.username, privateSyncPhrase);
+        const connectedUsername = nextSession.username || username;
+        await persistCloudUsername(connectedUsername);
+        setAccountSession({
+          email: connectedUsername,
+          signedInAt: nextSession.createdAt,
+        });
+        didStartBackgroundSync = true;
+        startCloudSaveSyncInBackground(
+          privateSyncPhrase,
+          t('settingsSyncUsernameChangedBackground')
+        );
+        return;
+      } else {
+        didStartBackgroundSync = true;
+        startCloudSaveSyncInBackground(privateSyncPhrase, t('settingsSyncBackground'));
+        return;
       }
     } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Cloud Save got stuck. Try again.'));
+      setSyncError(
+        getFriendlySyncError(
+          error,
+          t('settingsSyncGotStuck'),
+          t
+        )
+      );
       setSyncMessage('');
     } finally {
-      setIsSyncBusy(false);
+      if (!didStartBackgroundSync) {
+        setIsSyncBusy(false);
+      }
     }
   };
 
   const handleShowSyncLog = async () => {
     setIsSyncBusy(true);
     setSyncError('');
-    setSyncMessage('Loading Cloud Save Log...');
+    setSyncMessage(t('settingsSyncLogLoading'));
     try {
       await waitForBusyIndicator();
       const log = await getEncryptedSyncLog();
       setSyncLogEvents(log.events);
       setIsSyncLogVisible(true);
       setSyncError('');
-      setSyncMessage(log.events.length === 0 ? 'Nothing saved or downloaded yet.' : "Y'all N Sync");
+      setSyncMessage(log.events.length === 0 ? t('settingsSyncLogNothing') : t('settingsSyncLogLoaded'));
     } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not load Cloud Save Log.'));
+      setSyncError(getFriendlySyncError(error, t('settingsSyncLogLoadError'), t));
       setSyncMessage('');
     } finally {
       setIsSyncBusy(false);
@@ -244,23 +516,23 @@ export default function SettingsScreen() {
     version: SyncConflictVersion
   ) => {
     if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase to fix this.');
+      setSyncError(t('settingsSyncConflictEnterPhrase'));
       setSyncMessage('');
       return;
     }
 
     setIsSyncBusy(true);
     setSyncError('');
-    setSyncMessage('Fixing saved versions...');
+    setSyncMessage(t('settingsSyncConflictFixing'));
     try {
       await waitForBusyIndicator();
       await keepEncryptedSyncConflictVersion(privateSyncPhrase, conflict, version);
       const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
       setSyncConflicts(conflicts);
       setSyncError('');
-      setSyncMessage('Saved version picked.');
+      setSyncMessage(t('settingsSyncConflictPicked'));
     } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not pick that version.'));
+      setSyncError(getFriendlySyncError(error, t('settingsSyncConflictPickError'), t));
       setSyncMessage('');
     } finally {
       setIsSyncBusy(false);
@@ -269,23 +541,23 @@ export default function SettingsScreen() {
 
   const handleSaveBothConflictVersions = async (conflict: SyncConflict) => {
     if (!privateSyncPhrase.trim()) {
-      setSyncError('Enter your Secret Phrase to fix this.');
+      setSyncError(t('settingsSyncConflictEnterPhrase'));
       setSyncMessage('');
       return;
     }
 
     setIsSyncBusy(true);
     setSyncError('');
-    setSyncMessage('Saving both versions...');
+    setSyncMessage(t('settingsSyncConflictBothSaving'));
     try {
       await waitForBusyIndicator();
       await saveBothEncryptedSyncConflictVersions(privateSyncPhrase, conflict);
       const conflicts = await getEncryptedSyncConflicts(privateSyncPhrase);
       setSyncConflicts(conflicts);
       setSyncError('');
-      setSyncMessage('Both versions were saved.');
+      setSyncMessage(t('settingsSyncConflictBothSaved'));
     } catch (error) {
-      setSyncError(getFriendlySyncError(error, 'Could not save both versions.'));
+      setSyncError(getFriendlySyncError(error, t('settingsSyncConflictBothError'), t));
       setSyncMessage('');
     } finally {
       setIsSyncBusy(false);
@@ -313,16 +585,15 @@ export default function SettingsScreen() {
     try {
       const snapshot = await buildJournalExportSnapshot();
       const nextExportText = JSON.stringify(snapshot, null, 2);
-      setExportText(nextExportText);
+      const didDownload = downloadExportText(nextExportText);
+      setExportText(didDownload ? '' : nextExportText);
       setDataError('');
       setDataMessage(
-        downloadExportText(nextExportText)
-          ? 'Journal backup downloaded.'
-          : 'Journal backup is ready below.'
+        didDownload ? t('settingsExportDownloaded') : t('settingsExportReady')
       );
     } catch (error) {
       console.log('Error exporting journal data:', error);
-      setDataError('Could not prepare journal backup.');
+      setDataError(t('settingsExportError'));
       setDataMessage('');
     }
   };
@@ -332,28 +603,28 @@ export default function SettingsScreen() {
       await resetJournalData();
       setExportText('');
       setDataError('');
-      setDataMessage('Journal entries and saved designs were reset.');
+      setDataMessage(t('settingsResetSuccess'));
     } catch (error) {
       console.log('Error resetting journal data:', error);
-      setDataError('Could not reset journal data.');
+      setDataError(t('settingsResetError'));
       setDataMessage('');
     }
   };
 
   const handleResetJournalData = () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (window.confirm('Reset all journal entries and saved designs? This cannot be undone.')) {
+      if (window.confirm(t('settingsResetMessage'))) {
         void performResetJournalData();
       }
       return;
     }
 
     Alert.alert(
-      'Reset journal data?',
-      'This removes journal entries and saved designs from this device. Account, theme, and language settings stay.',
+      t('settingsResetTitle'),
+      t('settingsResetMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: () => void performResetJournalData() },
+        { text: t('actionCancel'), style: 'cancel' },
+        { text: t('settingsResetJournalData'), style: 'destructive', onPress: () => void performResetJournalData() },
       ]
     );
   };
@@ -361,10 +632,94 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        layout.isTablet
+          ? [
+              styles.tabletContent,
+              {
+                maxWidth: layout.settingsMaxWidth,
+                paddingHorizontal: layout.pagePaddingHorizontal,
+              },
+            ]
+          : null,
+      ]}
       showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled">
+      keyboardShouldPersistTaps="always">
       <Text style={styles.title}>{t('settingsTitle')}</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('settingsBibleReadingTitle')}</Text>
+
+        <View
+          style={[
+            styles.bibleProgressCard,
+            {
+              backgroundColor: colorTheme.cardBackground,
+              borderColor: colorTheme.border,
+            },
+          ]}>
+          <View style={styles.bibleProgressHeader}>
+            <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name="book-outline" size={22} color="#5B514D" />
+            </View>
+            <View style={styles.accountHeaderText}>
+              <Text style={styles.accountTitle}>{t('settingsBibleProgressTitle')}</Text>
+              <Text style={styles.accountHint}>
+                {t('settingsBibleProgressHint', {
+                  read: bibleReadingProgress.readCount.toLocaleString(),
+                  total: bibleReadingProgress.totalCount.toLocaleString(),
+                })}
+              </Text>
+            </View>
+            <Text style={styles.bibleProgressPercent}>
+              {bibleReadingProgress.percent < 1 && bibleReadingProgress.percent > 0
+                ? '<1%'
+                : `${Math.floor(bibleReadingProgress.percent)}%`}
+            </Text>
+          </View>
+
+          <View style={[styles.bibleProgressTrack, { backgroundColor: colorTheme.paperBackground }]}>
+            <View
+              style={[
+                styles.bibleProgressFill,
+                {
+                  backgroundColor: colorTheme.tint,
+                  width: `${Math.min(100, Math.max(0, bibleReadingProgress.percent))}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.84}
+          onPress={() => setBibleReadingImagesEnabled(!bibleReadingImagesEnabled)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: bibleReadingImagesEnabled }}
+          style={[
+            styles.bibleReadingImagesCard,
+            {
+              backgroundColor: colorTheme.cardBackground,
+              borderColor: colorTheme.border,
+            },
+          ]}>
+          <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+            <Ionicons name="images-outline" size={22} color="#5B514D" />
+          </View>
+          <View style={styles.accountHeaderText}>
+            <Text style={styles.accountTitle}>{t('settingsBibleReadingImages')}</Text>
+            <Text style={styles.accountHint}>{t('settingsBibleReadingImagesHint')}</Text>
+          </View>
+          <Switch
+            value={bibleReadingImagesEnabled}
+            onValueChange={setBibleReadingImagesEnabled}
+            trackColor={{ false: '#E8DCD4', true: colorTheme.tint }}
+            thumbColor="#FFFDF9"
+            ios_backgroundColor="#E8DCD4"
+          />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('settingsAccount')}</Text>
@@ -383,14 +738,16 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.accountHeaderText}>
-              <Text style={styles.accountTitle}>{accountSession ? accountSession.email : 'Cloud Save'}</Text>
-              <Text style={styles.accountHint}>Save your journal with a secret phrase.</Text>
+              <Text style={styles.accountTitle}>
+                {accountSession ? accountSession.email : t('settingsCloudSave')}
+              </Text>
+              <Text style={styles.accountHint}>{t('settingsPhraseHint')}</Text>
             </View>
 
             <TouchableOpacity
-              accessibilityLabel="Cloud Save Log"
+              accessibilityLabel={t('settingsSyncLogTitle')}
               activeOpacity={0.86}
-              disabled={isSyncBusy || !accountSession}
+              disabled={isCloudSaveBusy || !accountSession}
               onPress={handleShowSyncLog}
               style={[styles.iconOnlyButton, { borderColor: colorTheme.border }]}>
               <Ionicons name="list-outline" size={18} color="#5B514D" />
@@ -398,13 +755,16 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Username</Text>
+            <Text style={styles.inputLabel}>{t('settingsUsername')}</Text>
             <View style={styles.usernameRow}>
               <TextInput
                 value={cloudUsername}
-                onChangeText={(value) => setCloudUsername(cleanUsername(value))}
+                onChangeText={(value) => {
+                  void persistCloudUsername(value, { fallbackIfEmpty: false });
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!isCloudSaveBusy}
                 placeholder="GraceBloom123"
                 placeholderTextColor="#A99D96"
                 style={[
@@ -417,10 +777,12 @@ export default function SettingsScreen() {
                 ]}
               />
               <TouchableOpacity
-                accessibilityLabel="Make a new username"
+                accessibilityLabel={t('settingsUsernameShuffle')}
                 activeOpacity={0.86}
-                disabled={isSyncBusy}
-                onPress={() => setCloudUsername(makePrettyUsername())}
+                disabled={isCloudSaveBusy}
+                onPress={() => {
+                  void persistCloudUsername(makePrettyUsername());
+                }}
                 style={[styles.shuffleButton, { borderColor: colorTheme.border }]}>
                 <Ionicons name="sparkles-outline" size={17} color="#5B514D" />
               </TouchableOpacity>
@@ -428,18 +790,20 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.phraseWarningText}>
-            {"Don't lose the phrase! It can't be recovered."}
+            {t('settingsPhraseWarning')}
           </Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Secret Phrase</Text>
+            <Text style={styles.inputLabel}>{t('settingsSecretPhrase')}</Text>
             <TextInput
               value={privateSyncPhrase}
               onChangeText={setPrivateSyncPhrase}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry={!isPasswordVisible}
-              placeholder="Enter Secret Phrase"
+              returnKeyType="go"
+              onSubmitEditing={handleCloudConnectAndSync}
+              placeholder={t('settingsPhrasePlaceholder')}
               placeholderTextColor="#A99D96"
               style={[
                 styles.textInput,
@@ -460,11 +824,13 @@ export default function SettingsScreen() {
               size={16}
               color="#5B514D"
             />
-            <Text style={styles.secondaryButtonText}>{isPasswordVisible ? 'Hide phrase' : 'Show phrase'}</Text>
+            <Text style={styles.secondaryButtonText}>
+              {isPasswordVisible ? t('settingsPhraseHide') : t('settingsPhraseShow')}
+            </Text>
           </TouchableOpacity>
 
           {syncError ? <Text style={styles.errorText}>{syncError}</Text> : null}
-          {isSyncBusy && syncMessage ? (
+          {isCloudSaveBusy && syncMessage ? (
             <View style={styles.busyRow}>
               <ActivityIndicator size="small" color="#5F8F73" />
               <Text style={styles.busyText}>{syncMessage}</Text>
@@ -475,20 +841,20 @@ export default function SettingsScreen() {
 
           <TouchableOpacity
             activeOpacity={0.88}
-            disabled={isSyncBusy}
+            disabled={isCloudSaveBusy}
             onPress={handleCloudConnectAndSync}
             style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
             <Ionicons name={accountSession ? 'sync-outline' : 'link-outline'} size={17} color="#FFFFFF" />
             <Text style={styles.primaryButtonText}>
-              {accountSession ? 'Sync Now' : 'Connect'}
+              {accountSession ? t('settingsSyncNow') : t('settingsSyncConnect')}
             </Text>
           </TouchableOpacity>
 
           {isSyncLogVisible ? (
             <View style={[styles.syncLogCard, { borderColor: colorTheme.border }]}>
-              <Text style={styles.syncLogTitle}>Cloud Save Log</Text>
+              <Text style={styles.syncLogTitle}>{t('settingsSyncLogTitle')}</Text>
               {syncLogEvents.length === 0 ? (
-                <Text style={styles.syncLogEmpty}>No uploads or downloads yet.</Text>
+                <Text style={styles.syncLogEmpty}>{t('settingsSyncLogEmpty')}</Text>
               ) : (
                 syncLogEvents.map((event) => (
                   <View key={event.id} style={styles.syncLogRow}>
@@ -498,8 +864,13 @@ export default function SettingsScreen() {
                       color="#5B514D"
                     />
                     <Text style={styles.syncLogText}>
-                      {event.type === 'pull' ? 'Download' : 'Upload'} • {event.itemCount}{' '}
-                      item{event.itemCount === 1 ? '' : 's'} •{' '}
+                      {event.type === 'pull' ? t('settingsSyncDownload') : t('settingsSyncUpload')} •{' '}
+                      {t(
+                        event.itemCount === 1
+                          ? 'settingsSyncItemCount'
+                          : 'settingsSyncItemCountPlural',
+                        { count: event.itemCount }
+                      )} •{' '}
                       {new Date(event.createdAt).toLocaleString()}
                     </Text>
                   </View>
@@ -524,9 +895,9 @@ export default function SettingsScreen() {
                     borderColor: colorTheme.border,
                   },
                 ]}>
-                <Text style={styles.conflictTitle}>Pick the version you want</Text>
+                <Text style={styles.conflictTitle}>{t('settingsConflictPickTitle')}</Text>
                 <Text style={styles.conflictSubtitle}>
-                  This was saved on more than one device.
+                  {t('settingsConflictSubtitle')}
                 </Text>
 
                 {conflict.versions.map((version) => (
@@ -540,10 +911,10 @@ export default function SettingsScreen() {
                     </View>
                     <TouchableOpacity
                       activeOpacity={0.86}
-                      disabled={isSyncBusy}
+                      disabled={isCloudSaveBusy}
                       onPress={() => void handleKeepConflictVersion(conflict, version)}
                       style={[styles.smallChoiceButton, { borderColor: colorTheme.border }]}>
-                      <Text style={styles.smallChoiceButtonText}>Pick</Text>
+                      <Text style={styles.smallChoiceButtonText}>{t('settingsConflictPick')}</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -551,11 +922,11 @@ export default function SettingsScreen() {
                 {canSaveBoth ? (
                   <TouchableOpacity
                     activeOpacity={0.88}
-                    disabled={isSyncBusy}
+                    disabled={isCloudSaveBusy}
                     onPress={() => void handleSaveBothConflictVersions(conflict)}
                     style={[styles.secondaryButton, { borderColor: colorTheme.border }]}>
                     <Ionicons name="copy-outline" size={17} color="#5B514D" />
-                    <Text style={styles.secondaryButtonText}>Keep Both</Text>
+                    <Text style={styles.secondaryButtonText}>{t('settingsConflictKeepBoth')}</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -574,7 +945,7 @@ export default function SettingsScreen() {
               }}
               style={[styles.dangerButton, { borderColor: colorTheme.border }]}>
               <Ionicons name="unlink-outline" size={17} color="#B85F62" />
-              <Text style={styles.dangerButtonText}>Disconnect this device</Text>
+              <Text style={styles.dangerButtonText}>{t('settingsDisconnect')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -653,7 +1024,7 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Data safety</Text>
+        <Text style={styles.sectionTitle}>{t('settingsDataSafety')}</Text>
 
         <View
           style={[
@@ -668,9 +1039,9 @@ export default function SettingsScreen() {
               <Ionicons name="shield-checkmark-outline" size={22} color="#5B514D" />
             </View>
             <View style={styles.accountHeaderText}>
-              <Text style={styles.accountTitle}>Journal backup</Text>
+              <Text style={styles.accountTitle}>{t('settingsJournalBackupTitle')}</Text>
               <Text style={styles.accountHint}>
-                Export entries before changing devices or clearing local data.
+                {t('settingsJournalBackupHint')}
               </Text>
             </View>
           </View>
@@ -683,7 +1054,7 @@ export default function SettingsScreen() {
             onPress={handleExportJournalData}
             style={[styles.primaryButton, { backgroundColor: colorTheme.tint }]}>
             <Ionicons name="download-outline" size={17} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>Export journal data</Text>
+            <Text style={styles.primaryButtonText}>{t('settingsExportJournalData')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -691,7 +1062,7 @@ export default function SettingsScreen() {
             onPress={handleResetJournalData}
             style={[styles.dangerButton, { borderColor: colorTheme.border }]}>
             <Ionicons name="trash-outline" size={17} color="#B85F62" />
-            <Text style={styles.dangerButtonText}>Reset journal data</Text>
+            <Text style={styles.dangerButtonText}>{t('settingsResetJournalData')}</Text>
           </TouchableOpacity>
 
           {exportText ? (
@@ -711,6 +1082,81 @@ export default function SettingsScreen() {
           ) : null}
         </View>
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('settingsAboutTitle')}</Text>
+
+        <View
+          style={[
+            styles.aboutCard,
+            {
+              backgroundColor: colorTheme.cardBackground,
+              borderColor: colorTheme.border,
+            },
+          ]}>
+          <View style={styles.aboutHeaderRow}>
+            <Image
+              source={FAITH_CANVAS_ICON}
+              accessibilityLabel={t('settingsAboutImageLabel')}
+              style={styles.aboutLogo}
+            />
+
+            <View style={styles.accountHeaderText}>
+              <Text style={styles.accountTitle}>{t('settingsAboutAppName')}</Text>
+              <Text style={styles.accountHint}>{t('settingsAboutVersion')}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.privacySummary, { backgroundColor: colorTheme.paperBackground }]}>
+            <View style={styles.privacySummaryRow}>
+              <Ionicons name="phone-portrait-outline" size={18} color="#5B514D" />
+              <Text style={styles.privacySummaryText}>{t('settingsPrivacyLocal')}</Text>
+            </View>
+            <View style={styles.privacySummaryRow}>
+              <Ionicons name="cloud-outline" size={18} color="#5B514D" />
+              <Text style={styles.privacySummaryText}>{t('settingsPrivacyCloud')}</Text>
+            </View>
+            <View style={styles.privacySummaryRow}>
+              <Ionicons name="heart-outline" size={18} color="#5B514D" />
+              <Text style={styles.privacySummaryText}>{t('settingsPrivacyNoAds')}</Text>
+            </View>
+          </View>
+
+          <View style={styles.legalLinkGrid}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => void openFaithCanvasLink(FAITH_CANVAS_LINKS.privacy)}
+              style={[styles.legalLinkButton, { borderColor: colorTheme.border }]}>
+              <Ionicons name="document-text-outline" size={18} color="#5B514D" />
+              <Text style={styles.legalLinkText}>{t('settingsPrivacyPolicy')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => void openFaithCanvasLink(FAITH_CANVAS_LINKS.safety)}
+              style={[styles.legalLinkButton, { borderColor: colorTheme.border }]}>
+              <Ionicons name="shield-checkmark-outline" size={18} color="#5B514D" />
+              <Text style={styles.legalLinkText}>{t('settingsChildSafety')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => void openFaithCanvasLink(FAITH_CANVAS_LINKS.support)}
+              style={[styles.legalLinkButton, { borderColor: colorTheme.border }]}>
+              <Ionicons name="help-circle-outline" size={18} color="#5B514D" />
+              <Text style={styles.legalLinkText}>{t('settingsSupport')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => void openFaithCanvasLink(FAITH_CANVAS_LINKS.email)}
+            style={[styles.secondaryButton, styles.supportEmailButton, { borderColor: colorTheme.border }]}>
+            <Ionicons name="mail-outline" size={17} color="#5B514D" />
+            <Text style={styles.secondaryButtonText}>{t('settingsSupportEmail')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -724,6 +1170,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'web' ? 20 : 28,
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
+  },
+  tabletContent: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingTop: Platform.OS === 'web' ? 24 : 34,
   },
   title: {
     fontSize: 28,
@@ -782,8 +1233,62 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  bibleProgressCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  bibleProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  bibleProgressPercent: {
+    color: '#1F1F1F',
+    fontSize: 22,
+    fontWeight: '800',
+    marginLeft: 12,
+  },
+  bibleProgressTrack: {
+    height: 12,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  bibleProgressFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  bibleReadingImagesCard: {
+    minHeight: 76,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   dataCard: {
     borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  aboutCard: {
+    borderRadius: 24,
     borderWidth: 1.5,
     padding: 16,
     shadowColor: '#000',
@@ -796,6 +1301,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 14,
+  },
+  aboutHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  aboutLogo: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    marginRight: 12,
+  },
+  privacySummary: {
+    borderRadius: 18,
+    padding: 12,
+    gap: 10,
+  },
+  privacySummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  privacySummaryText: {
+    flex: 1,
+    color: '#5B514D',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  legalLinkGrid: {
+    gap: 10,
+    marginTop: 14,
+  },
+  legalLinkButton: {
+    minHeight: 46,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  legalLinkText: {
+    color: '#5B514D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  supportEmailButton: {
+    marginTop: 12,
   },
   accountHeader: {
     flexDirection: 'row',

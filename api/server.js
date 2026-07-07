@@ -51,6 +51,18 @@ function normalizeUsername(value) {
   return username;
 }
 
+function requireUsername(value) {
+  const username = normalizeUsername(value);
+
+  if (!username) {
+    const error = new Error('Username is required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return username;
+}
+
 async function assertUsernameAvailable(connection, username, userId) {
   if (!username) {
     return;
@@ -160,11 +172,15 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
 
   try {
     const recoveryId = requireString(req.body.recoveryId, 'recoveryId');
+    const legacyRecoveryId =
+      typeof req.body.legacyRecoveryId === 'string' && req.body.legacyRecoveryId.trim()
+        ? req.body.legacyRecoveryId.trim()
+        : null;
     const authSecret = requireString(req.body.authSecret, 'authSecret');
     const deviceSecret = requireString(req.body.deviceSecret, 'deviceSecret');
     const deviceName =
       typeof req.body.deviceName === 'string' ? req.body.deviceName.slice(0, 120) : null;
-    const preferredUsername = normalizeUsername(req.body.preferredUsername);
+    const preferredUsername = requireUsername(req.body.preferredUsername);
     const authHash = sha256(authSecret);
     const deviceSecretHash = sha256(deviceSecret);
     const userId = randomId();
@@ -173,31 +189,41 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
 
     await connection.beginTransaction();
 
-    const [existingUsers] = await connection.query(
-      'SELECT id, username, sync_phrase_auth_hash FROM users WHERE recovery_id = ? AND disabled_at IS NULL',
-      [recoveryId]
+    const [usernameMatches] = await connection.query(
+      'SELECT id, username, recovery_id, sync_phrase_auth_hash FROM users WHERE username = ? AND disabled_at IS NULL LIMIT 1',
+      [preferredUsername]
     );
 
     let resolvedUserId = userId;
     let resolvedUsername = preferredUsername;
+    let existing = usernameMatches[0];
 
-    if (existingUsers.length > 0) {
-      const existing = existingUsers[0];
+    if (!existing) {
+      const recoveryIds = [recoveryId, legacyRecoveryId].filter(Boolean);
+      const [existingUsers] = await connection.query(
+        `SELECT id, username, recovery_id, sync_phrase_auth_hash
+         FROM users
+         WHERE recovery_id IN (?) AND disabled_at IS NULL
+         LIMIT 1`,
+        [recoveryIds]
+      );
+      existing = existingUsers[0];
+    }
+
+    if (existing) {
       if (existing.sync_phrase_auth_hash !== authHash) {
         await connection.rollback();
-        return res.status(401).json({ error: 'Private Sync Phrase did not match.' });
+        return res.status(401).json({ error: 'Username and Secret Phrase did not match.' });
       }
       resolvedUserId = existing.id;
       await assertUsernameAvailable(connection, preferredUsername, resolvedUserId);
-      if (preferredUsername) {
-        await connection.query('UPDATE users SET username = ? WHERE id = ?', [
-          preferredUsername,
-          resolvedUserId,
-        ]);
-      }
+      await connection.query('UPDATE users SET username = ?, recovery_id = ? WHERE id = ?', [
+        preferredUsername,
+        recoveryId,
+        resolvedUserId,
+      ]);
       resolvedUsername = preferredUsername || existing.username;
     } else {
-      await assertUsernameAvailable(connection, preferredUsername, resolvedUserId);
       await connection.query(
         `INSERT INTO users (id, recovery_id, username, sync_phrase_auth_hash, kdf_salt)
          VALUES (?, ?, ?, ?, ?)`,
@@ -225,6 +251,54 @@ app.post('/v1/sync/bootstrap', async (req, res, next) => {
       status: 'connected',
       message: 'Connected',
     });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
+
+app.get('/v1/sync/username-availability', getAuthedDevice, async (req, res, next) => {
+  try {
+    const { userId } = req.syncAuth;
+    const username = requireUsername(req.query.username);
+    const [rows] = await pool.query(
+      'SELECT id FROM users WHERE username = ? AND id <> ? AND disabled_at IS NULL LIMIT 1',
+      [username, userId]
+    );
+
+    res.json({ username, available: rows.length === 0 });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/v1/sync/account', getAuthedDevice, async (req, res, next) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const { userId } = req.syncAuth;
+    const username = requireUsername(req.body.username);
+    const recoveryId =
+      typeof req.body.recoveryId === 'string' && req.body.recoveryId.trim()
+        ? req.body.recoveryId.trim()
+        : null;
+
+    await connection.beginTransaction();
+    await assertUsernameAvailable(connection, username, userId);
+    if (recoveryId) {
+      await connection.query('UPDATE users SET username = ?, recovery_id = ? WHERE id = ?', [
+        username,
+        recoveryId,
+        userId,
+      ]);
+    } else {
+      await connection.query('UPDATE users SET username = ? WHERE id = ?', [username, userId]);
+    }
+    await connection.commit();
+
+    res.json({ username });
   } catch (error) {
     await connection.rollback();
     next(error);

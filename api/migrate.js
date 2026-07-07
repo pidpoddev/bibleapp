@@ -25,6 +25,26 @@ async function main() {
     await pool.query('ALTER TABLE users ADD COLUMN username VARCHAR(40) NULL UNIQUE AFTER recovery_id');
   }
 
+  await pool.query(`
+    ALTER TABLE encrypted_items
+    MODIFY item_type ENUM(
+      'account_session',
+      'app_settings',
+      'bible_reading_progress',
+      'daily_mood',
+      'journal_index',
+      'journal_entry',
+      'studio_journal_entry',
+      'verse_state_map',
+      'verse_design_index',
+      'verse_design_timestamps',
+      'saved_designs',
+      'saved_designs_backup',
+      'legacy_saved_designs',
+      'shop_entitlements'
+    ) NOT NULL
+  `);
+
   await pool.end();
   console.log(`Applied ${statements.length} schema statements.`);
 }

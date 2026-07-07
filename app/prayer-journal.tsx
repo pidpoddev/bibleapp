@@ -42,6 +42,10 @@ import {
   getShopStickerDisplaySize,
   TEST_UNLOCKED_STICKER_PACKS,
 } from '@/utils/shop-stickers';
+import {
+  PRAYER_SECTION_KEYS,
+  localizeJournalSections,
+} from '@/utils/journal-localization';
 import { formatEntryDateTime } from '@/utils/date-time';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 
@@ -149,7 +153,7 @@ function getLatestWebSections(sections: PrayerSection[]) {
     return sections;
   }
 
-  const values = Array.from(document.querySelectorAll('textarea[placeholder="Write here..."]'))
+  const values = Array.from(document.querySelectorAll('textarea'))
     .map((textarea) => (textarea as HTMLTextAreaElement).value);
 
   if (values.length < sections.length) {
@@ -167,6 +171,7 @@ type PrayerSectionFieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   onFocusField: () => void;
+  placeholder: string;
   cardBackground: string;
   accentColor: string;
 };
@@ -176,6 +181,7 @@ const PrayerSectionField = memo(function PrayerSectionField({
   value,
   onChangeText,
   onFocusField,
+  placeholder,
   cardBackground,
   accentColor,
 }: PrayerSectionFieldProps) {
@@ -211,7 +217,7 @@ const PrayerSectionField = memo(function PrayerSectionField({
         </Text>
         <TextInput
           multiline
-          placeholder="Write here..."
+          placeholder={placeholder}
           placeholderTextColor="#A79B92"
           scrollEnabled={false}
           blurOnSubmit={false}
@@ -676,7 +682,7 @@ export default function PrayerJournalScreen() {
   const addNoteSection = () => {
     recordUndoSnapshot();
     const updatedSections = [
-      { id: generateId(), label: 'Note', text: '' },
+      { id: generateId(), label: t('editorNote'), text: '' },
       ...sections,
     ];
     sectionsRef.current = updatedSections;
@@ -855,7 +861,7 @@ export default function PrayerJournalScreen() {
     if (!canvasRef.current) {
       return;
     }
-    const permission = await MediaLibrary.requestPermissionsAsync();
+    const permission = await MediaLibrary.requestPermissionsAsync(true, ["photo"]);
     if (!permission.granted) {
       return;
     }
@@ -870,6 +876,10 @@ export default function PrayerJournalScreen() {
   const handleCloudSaved = (result: { conflictCount: number }) => {
     showSaveConfirmation(result.conflictCount > 0 ? 'Cloud saved, review sync' : 'Saved to cloud');
   };
+  const localizedSections = useMemo(
+    () => localizeJournalSections(sections, PRAYER_SECTION_KEYS, t),
+    [sections, t]
+  );
 
   return (
     <KeyboardAvoidingView
@@ -897,7 +907,9 @@ export default function PrayerJournalScreen() {
             {...(Platform.OS === 'web'
               ? { onMouseDown: captureSectionsBeforeAction, onPointerDown: captureSectionsBeforeAction }
               : null)}>
-            <Text style={styles.favoriteButtonText}>{isFavorite ? '❤️ Saved to Favorites' : '🤍 Save to Favorites'}</Text>
+            <Text style={styles.favoriteButtonText}>
+              {isFavorite ? `❤️ ${t('editorSavedToFavorites')}` : `🤍 ${t('editorSaveToFavorites')}`}
+            </Text>
           </TouchableOpacity>
 
           <ScrollView
@@ -923,7 +935,7 @@ export default function PrayerJournalScreen() {
                   : null,
               ]}>
               <Image source={JOURNAL_TOOLBAR_ICONS.text} resizeMode="contain" style={styles.toolbarImageIcon} />
-              <Text style={styles.toolbarLabel}>Text</Text>
+              <Text style={styles.toolbarLabel}>{t('editorText')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -944,7 +956,7 @@ export default function PrayerJournalScreen() {
                   : null,
               ]}>
               <Image source={JOURNAL_TOOLBAR_ICONS.decor} resizeMode="contain" style={styles.toolbarImageIcon} />
-              <Text style={styles.toolbarLabel}>Decor</Text>
+              <Text style={styles.toolbarLabel}>{t('editorDecor')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -965,7 +977,7 @@ export default function PrayerJournalScreen() {
                   : null,
               ]}>
               <Image source={JOURNAL_TOOLBAR_ICONS.canvas} resizeMode="contain" style={styles.toolbarImageIcon} />
-              <Text style={styles.toolbarLabel}>Canvas</Text>
+              <Text style={styles.toolbarLabel}>{t('editorCanvas')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -973,7 +985,7 @@ export default function PrayerJournalScreen() {
               onPress={addNoteSection}
               style={[styles.toolbarButton, { backgroundColor: colorTheme.toolbarBackground }]}>
               <Image source={JOURNAL_TOOLBAR_ICONS.note} resizeMode="contain" style={styles.toolbarImageIcon} />
-              <Text style={styles.toolbarLabel}>Note</Text>
+              <Text style={styles.toolbarLabel}>{t('editorNote')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -992,7 +1004,7 @@ export default function PrayerJournalScreen() {
                   : null,
               ]}>
               <Image source={JOURNAL_TOOLBAR_ICONS.more} resizeMode="contain" style={styles.toolbarImageIcon} />
-              <Text style={styles.toolbarLabel}>More</Text>
+              <Text style={styles.toolbarLabel}>{t('editorMore')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1005,7 +1017,7 @@ export default function PrayerJournalScreen() {
                 undoHistory.length === 0 ? styles.toolbarButtonDisabled : null,
               ]}>
               <Ionicons name="arrow-undo-outline" size={22} color="#7A6F66" />
-              <Text style={styles.toolbarLabel}>Undo</Text>
+              <Text style={styles.toolbarLabel}>{t('actionUndo')}</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -1018,8 +1030,8 @@ export default function PrayerJournalScreen() {
                   borderColor: colorTheme.border,
                 },
               ]}>
-              <Text style={styles.trayTitle}>Decor</Text>
-              <Text style={styles.traySectionTitle}>Quick Stickers</Text>
+              <Text style={styles.trayTitle}>{t('editorDecor')}</Text>
+              <Text style={styles.traySectionTitle}>{t('editorQuickStickers')}</Text>
               <View style={styles.stickerTrayRow}>
                 {STICKER_CHOICES.map((choice) => (
                   <TouchableOpacity
@@ -1079,8 +1091,8 @@ export default function PrayerJournalScreen() {
                   borderColor: colorTheme.border,
                 },
               ]}>
-              <Text style={styles.trayTitle}>Canvas</Text>
-              <Text style={styles.traySectionTitle}>Basic</Text>
+              <Text style={styles.trayTitle}>{t('editorCanvas')}</Text>
+              <Text style={styles.traySectionTitle}>{t('editorBasic')}</Text>
               <View style={styles.backgroundOptionRow}>
                 <TouchableOpacity
                   activeOpacity={0.85}
@@ -1095,7 +1107,7 @@ export default function PrayerJournalScreen() {
                         ]
                       : null,
                   ]}>
-                  <Text style={styles.backgroundChipText}>Lined</Text>
+                  <Text style={styles.backgroundChipText}>{t('editorLined')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1111,7 +1123,7 @@ export default function PrayerJournalScreen() {
                         ]
                       : null,
                   ]}>
-                  <Text style={styles.backgroundChipText}>Plain</Text>
+                  <Text style={styles.backgroundChipText}>{t('editorPlain')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -1171,7 +1183,7 @@ export default function PrayerJournalScreen() {
                   borderColor: colorTheme.border,
                 },
               ]}>
-              <Text style={styles.trayTitle}>Text style</Text>
+              <Text style={styles.trayTitle}>{t('editorText')}</Text>
               <View style={styles.highlightDropdownRow}>
                 {['#FFF3A3', '#FFD2E1', '#CFE7FF'].map((color) => (
                   <TouchableOpacity
@@ -1195,7 +1207,7 @@ export default function PrayerJournalScreen() {
             <View style={styles.moreActionPanel}>
               <TouchableOpacity activeOpacity={0.85} onPress={saveJournalImage} style={styles.moreActionChip}>
                 <Ionicons name="download-outline" size={16} color="#5B514D" />
-                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Save image</Text>
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionSaveImage')}</Text>
               </TouchableOpacity>
               <EncryptedCloudSaveAction
                 buttonStyle={styles.moreActionChip}
@@ -1205,11 +1217,11 @@ export default function PrayerJournalScreen() {
               />
               <TouchableOpacity activeOpacity={0.85} onPress={shareJournalImage} style={styles.moreActionChip}>
                 <Ionicons name="share-outline" size={16} color="#5B514D" />
-                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Share</Text>
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionShare')}</Text>
               </TouchableOpacity>
               <TouchableOpacity activeOpacity={0.85} onPress={resetPrayerJournal} style={styles.moreActionChip}>
                 <Ionicons name="arrow-redo-outline" size={16} color="#5B514D" />
-                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>Start over</Text>
+                <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.moreActionText}>{t('actionStartOver')}</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -1240,13 +1252,14 @@ export default function PrayerJournalScreen() {
                     setSectionsHeight(event.nativeEvent.layout.height);
                   }}
                   style={styles.sectionsContent}>
-                  {sections.map((section, index) => (
+                  {localizedSections.map((section, index) => (
                     <PrayerSectionField
                       key={section.id}
                       label={section.label}
                       value={section.text}
                       onFocusField={clearStickerSelection}
                       onChangeText={(text) => updateSection(index, text)}
+                      placeholder={t('editorWriteHere')}
                       cardBackground={colorTheme.cardBackground}
                       accentColor={sectionAccent}
                     />
@@ -1284,13 +1297,14 @@ export default function PrayerJournalScreen() {
                     setSectionsHeight(event.nativeEvent.layout.height);
                   }}
                   style={styles.sectionsContent}>
-                  {sections.map((section, index) => (
+                  {localizedSections.map((section, index) => (
                     <PrayerSectionField
                       key={section.id}
                       label={section.label}
                       value={section.text}
                       onFocusField={clearStickerSelection}
                       onChangeText={(text) => updateSection(index, text)}
+                      placeholder={t('editorWriteHere')}
                       cardBackground={colorTheme.cardBackground}
                       accentColor={colorTheme.accent}
                     />

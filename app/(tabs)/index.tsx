@@ -12,12 +12,16 @@ import {
   View,
 } from 'react-native';
 
-import { useAppSettings } from '@/utils/app-settings';
+import { useAppSettings, type TranslationKey } from '@/utils/app-settings';
+import { getJournalEntryStorageKey } from '@/utils/journal-storage';
 import {
   getDailyInspirationVerse,
   getNextLocalMidnightDelay,
 } from '@/utils/daily-inspiration-verses';
+import bibleData, { getBookDisplayName, type BibleLanguageKey } from '@/utils/bible-data';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { FocusedScreenView } from '@/components/focused-screen-view';
+import { useResponsiveLayout } from '@/utils/responsive-layout';
 
 const TYPE = {
   eyebrow: 11,
@@ -40,6 +44,7 @@ type HomeJournalEntry = {
   preview?: string;
   updatedAt: number;
   isFavorite?: boolean;
+  editor?: 'classic' | 'studio';
   book?: string;
   chapter?: number;
   verse?: number;
@@ -47,11 +52,21 @@ type HomeJournalEntry = {
 
 type MoodOption = {
   key: string;
+  lane: 'help' | 'share';
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
   suggestion: string;
+  actionLabel: string;
   route: HomeJournalEntryType;
+  verses: HeartCheckVerse[];
+};
+
+type HeartCheckVerse = {
+  book: string;
+  chapter: number;
+  verse: number;
+  reference: string;
 };
 
 type WeeklyMoodSummary = {
@@ -60,15 +75,234 @@ type WeeklyMoodSummary = {
   tint: string;
 };
 
+const REFERENCE_BOOK_PREFIXES = bibleData
+  .flatMap((bookEntry) => [
+    { displayName: bookEntry.book, canonicalName: bookEntry.book },
+    ...(bookEntry.book === 'Psalms'
+      ? [{ displayName: 'Psalm', canonicalName: bookEntry.book }]
+      : []),
+  ])
+  .sort((left, right) => right.displayName.length - left.displayName.length);
+
 const MOOD_OPTIONS: MoodOption[] = [
-  { key: 'grateful', label: 'Grateful', icon: 'heart-outline', tint: '#B66D7A', suggestion: 'Save what God did today.', route: 'prayer' },
-  { key: 'anxious', label: 'Anxious', icon: 'leaf-outline', tint: '#6F8C7A', suggestion: 'Write a prayer before you carry it alone.', route: 'prayer' },
-  { key: 'confused', label: 'Confused', icon: 'book-outline', tint: '#6C7FA8', suggestion: 'Slow down with a Bible Study note.', route: 'bible-study' },
-  { key: 'peaceful', label: 'Peaceful', icon: 'flower-outline', tint: '#6E9B8A', suggestion: 'Capture what feels calm and steady today.', route: 'daily-devotional' },
-  { key: 'sad', label: 'Sad', icon: 'rainy-outline', tint: '#7A86A8', suggestion: 'Write an honest prayer. God can hold this with you.', route: 'prayer' },
-  { key: 'tired', label: 'Tired', icon: 'moon-outline', tint: '#8A669C', suggestion: 'Keep it simple with a devotional.', route: 'daily-devotional' },
-  { key: 'happy', label: 'Happy', icon: 'sparkles-outline', tint: '#9B7A59', suggestion: 'Turn today into verse art.', route: 'journal-studio' },
+  {
+    key: 'angry',
+    lane: 'help',
+    label: 'Angry at someone',
+    icon: 'flame-outline',
+    tint: '#B35B4D',
+    suggestion: 'Start with a verse that helps you slow down before you respond.',
+    actionLabel: 'Open forgiveness verse',
+    route: 'bible-study',
+    verses: [
+      { book: 'Ephesians', chapter: 4, verse: 32, reference: 'Ephesians 4:32' },
+      { book: 'James', chapter: 1, verse: 19, reference: 'James 1:19' },
+      { book: 'Romans', chapter: 12, verse: 18, reference: 'Romans 12:18' },
+      { book: 'Matthew', chapter: 5, verse: 9, reference: 'Matthew 5:9' },
+    ],
+  },
+  {
+    key: 'sad',
+    lane: 'help',
+    label: 'Sad',
+    icon: 'rainy-outline',
+    tint: '#667DA8',
+    suggestion: 'Open a comfort verse and pray honestly through sadness.',
+    actionLabel: 'Open comfort verse',
+    route: 'prayer',
+    verses: [
+      { book: 'Psalms', chapter: 34, verse: 18, reference: 'Psalm 34:18' },
+      { book: 'Matthew', chapter: 5, verse: 4, reference: 'Matthew 5:4' },
+      { book: 'Psalms', chapter: 147, verse: 3, reference: 'Psalm 147:3' },
+      { book: 'John', chapter: 11, verse: 35, reference: 'John 11:35' },
+    ],
+  },
+  {
+    key: 'anxious',
+    lane: 'help',
+    label: 'Anxious',
+    icon: 'leaf-outline',
+    tint: '#5F8A72',
+    suggestion: 'Open a peace verse and give the worry to God one step at a time.',
+    actionLabel: 'Open peace verse',
+    route: 'prayer',
+    verses: [
+      { book: 'Philippians', chapter: 4, verse: 6, reference: 'Philippians 4:6' },
+      { book: '1 Peter', chapter: 5, verse: 7, reference: '1 Peter 5:7' },
+      { book: 'Matthew', chapter: 6, verse: 34, reference: 'Matthew 6:34' },
+      { book: 'Isaiah', chapter: 41, verse: 10, reference: 'Isaiah 41:10' },
+    ],
+  },
+  {
+    key: 'forgiving',
+    lane: 'help',
+    label: 'Need to forgive',
+    icon: 'hand-left-outline',
+    tint: '#8D6E63',
+    suggestion: 'Open a forgiveness verse without pretending the hurt did not matter.',
+    actionLabel: 'Open forgiveness study',
+    route: 'bible-study',
+    verses: [
+      { book: 'Colossians', chapter: 3, verse: 13, reference: 'Colossians 3:13' },
+      { book: 'Matthew', chapter: 6, verse: 14, reference: 'Matthew 6:14' },
+      { book: 'Luke', chapter: 6, verse: 31, reference: 'Luke 6:31' },
+      { book: 'Romans', chapter: 12, verse: 21, reference: 'Romans 12:21' },
+    ],
+  },
+  {
+    key: 'grateful',
+    lane: 'help',
+    label: 'Grateful',
+    icon: 'heart-outline',
+    tint: '#B66D7A',
+    suggestion: 'Open a gratitude verse and remember what God has already done.',
+    actionLabel: 'Save gratitude verse',
+    route: 'journal-studio',
+    verses: [
+      { book: '1 Thessalonians', chapter: 5, verse: 18, reference: '1 Thessalonians 5:18' },
+      { book: 'Psalms', chapter: 107, verse: 1, reference: 'Psalm 107:1' },
+      { book: 'Philippians', chapter: 1, verse: 3, reference: 'Philippians 1:3' },
+      { book: 'James', chapter: 1, verse: 17, reference: 'James 1:17' },
+    ],
+  },
+  {
+    key: 'encouraged',
+    lane: 'share',
+    label: 'Encourage someone',
+    icon: 'sparkles-outline',
+    tint: '#9B7A59',
+    suggestion: 'Make a verse that points someone toward love and good works.',
+    actionLabel: 'Make encouragement art',
+    route: 'journal-studio',
+    verses: [
+      { book: 'Hebrews', chapter: 10, verse: 24, reference: 'Hebrews 10:24' },
+      { book: '1 Thessalonians', chapter: 5, verse: 11, reference: '1 Thessalonians 5:11' },
+      { book: 'Proverbs', chapter: 12, verse: 25, reference: 'Proverbs 12:25' },
+      { book: 'Romans', chapter: 15, verse: 2, reference: 'Romans 15:2' },
+    ],
+  },
+  {
+    key: 'peaceful',
+    lane: 'share',
+    label: 'Share peace',
+    icon: 'flower-outline',
+    tint: '#6E9B8A',
+    suggestion: 'Make a calming verse for someone who needs peace.',
+    actionLabel: 'Make peace verse',
+    route: 'journal-studio',
+    verses: [
+      { book: 'John', chapter: 14, verse: 27, reference: 'John 14:27' },
+      { book: 'Numbers', chapter: 6, verse: 24, reference: 'Numbers 6:24' },
+      { book: 'Romans', chapter: 15, verse: 13, reference: 'Romans 15:13' },
+      { book: '2 Thessalonians', chapter: 3, verse: 16, reference: '2 Thessalonians 3:16' },
+    ],
+  },
+  {
+    key: 'comfort-someone',
+    lane: 'share',
+    label: 'Comfort someone',
+    icon: 'people-outline',
+    tint: '#6C7FA8',
+    suggestion: 'Make a comfort verse for someone who is hurting.',
+    actionLabel: 'Make comfort verse',
+    route: 'journal-studio',
+    verses: [
+      { book: '2 Corinthians', chapter: 1, verse: 4, reference: '2 Corinthians 1:4' },
+      { book: 'Psalms', chapter: 23, verse: 4, reference: 'Psalm 23:4' },
+      { book: 'Romans', chapter: 12, verse: 15, reference: 'Romans 12:15' },
+      { book: 'Psalms', chapter: 147, verse: 3, reference: 'Psalm 147:3' },
+    ],
+  },
+  {
+    key: 'give-courage',
+    lane: 'share',
+    label: 'Give courage',
+    icon: 'shield-checkmark-outline',
+    tint: '#5F8A72',
+    suggestion: 'Make a courage verse for someone who needs to feel less alone.',
+    actionLabel: 'Make courage verse',
+    route: 'journal-studio',
+    verses: [
+      { book: 'Joshua', chapter: 1, verse: 9, reference: 'Joshua 1:9' },
+      { book: 'Deuteronomy', chapter: 31, verse: 6, reference: 'Deuteronomy 31:6' },
+      { book: 'Psalms', chapter: 31, verse: 24, reference: 'Psalm 31:24' },
+      { book: 'Isaiah', chapter: 41, verse: 10, reference: 'Isaiah 41:10' },
+    ],
+  },
+  {
+    key: 'direction',
+    lane: 'help',
+    label: 'Need direction',
+    icon: 'compass-outline',
+    tint: '#6C7FA8',
+    suggestion: 'Open a guidance verse when you need help trusting the next step.',
+    actionLabel: 'Open guidance verse',
+    route: 'bible-study',
+    verses: [
+      { book: 'Proverbs', chapter: 3, verse: 5, reference: 'Proverbs 3:5' },
+      { book: 'James', chapter: 1, verse: 5, reference: 'James 1:5' },
+      { book: 'Psalms', chapter: 32, verse: 8, reference: 'Psalm 32:8' },
+      { book: 'Isaiah', chapter: 41, verse: 10, reference: 'Isaiah 41:10' },
+    ],
+  },
 ];
+const HELP_MOOD_OPTIONS = MOOD_OPTIONS.filter((option) => option.lane === 'help');
+const SHARE_MOOD_OPTIONS = MOOD_OPTIONS.filter((option) => option.lane === 'share');
+const MOOD_TRANSLATION_KEYS: Record<
+  string,
+  { label: TranslationKey; suggestion: TranslationKey; action: TranslationKey }
+> = {
+  angry: {
+    label: 'moodAngry',
+    suggestion: 'moodAngrySuggestion',
+    action: 'moodOpenForgivenessVerse',
+  },
+  sad: {
+    label: 'moodSad',
+    suggestion: 'moodSadSuggestion',
+    action: 'moodOpenComfortVerse',
+  },
+  anxious: {
+    label: 'moodAnxious',
+    suggestion: 'moodAnxiousSuggestion',
+    action: 'moodOpenPeaceVerse',
+  },
+  forgiving: {
+    label: 'moodForgiving',
+    suggestion: 'moodForgivingSuggestion',
+    action: 'moodOpenForgivenessStudy',
+  },
+  grateful: {
+    label: 'moodGrateful',
+    suggestion: 'moodGratefulSuggestion',
+    action: 'moodSaveGratitudeVerse',
+  },
+  encouraged: {
+    label: 'moodEncouraged',
+    suggestion: 'moodEncouragedSuggestion',
+    action: 'moodMakeEncouragementArt',
+  },
+  peaceful: {
+    label: 'moodPeaceful',
+    suggestion: 'moodPeacefulSuggestion',
+    action: 'moodMakePeaceVerse',
+  },
+  'comfort-someone': {
+    label: 'moodComfortSomeone',
+    suggestion: 'moodComfortSomeoneSuggestion',
+    action: 'moodMakeComfortVerse',
+  },
+  'give-courage': {
+    label: 'moodGiveCourage',
+    suggestion: 'moodGiveCourageSuggestion',
+    action: 'moodMakeCourageVerse',
+  },
+  direction: {
+    label: 'moodDirection',
+    suggestion: 'moodDirectionSuggestion',
+    action: 'moodOpenGuidanceVerse',
+  },
+};
 
 function safeParseJournalIndex(value: string | null): HomeJournalEntry[] {
   if (!value) {
@@ -110,11 +344,59 @@ function parseEntryDate(entry: HomeJournalEntry) {
   return Number.isNaN(updatedDate.getTime()) ? new Date() : updatedDate;
 }
 
-function formatRecentEntryDate(date: Date) {
-  return date.toLocaleDateString(undefined, {
+function getDateLocale(language: BibleLanguageKey) {
+  return language === 'es' ? 'es' : undefined;
+}
+
+function formatRecentEntryDate(date: Date, language: BibleLanguageKey) {
+  return date.toLocaleDateString(getDateLocale(language), {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function formatLocalizedVerseReference(
+  book: string,
+  chapter: number,
+  verse: number,
+  language: BibleLanguageKey
+) {
+  const bookName = language === 'en' && book === 'Psalms' ? 'Psalm' : getBookDisplayName(book, language);
+
+  return `${bookName} ${chapter}:${verse}`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function localizeReferencePreview(preview: string | undefined, language: BibleLanguageKey) {
+  if (!preview) {
+    return '';
+  }
+
+  for (const { displayName, canonicalName } of REFERENCE_BOOK_PREFIXES) {
+    const referencePattern = new RegExp(`^${escapeRegExp(displayName)}\\s+(\\d+):(\\d+)\\b`);
+    const match = preview.match(referencePattern);
+
+    if (!match) {
+      continue;
+    }
+
+    const chapter = Number(match[1]);
+    const verse = Number(match[2]);
+
+    if (!Number.isFinite(chapter) || !Number.isFinite(verse)) {
+      return preview;
+    }
+
+    return preview.replace(
+      match[0],
+      formatLocalizedVerseReference(canonicalName, chapter, verse, language)
+    );
+  }
+
+  return preview;
 }
 
 function getLocalDayKey(date: Date) {
@@ -122,6 +404,15 @@ function getLocalDayKey(date: Date) {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function getDailyHeartCheckVerse(option: MoodOption, date: Date) {
+  const dayKey = getLocalDayKey(date);
+  const seed = `${option.key}:${dayKey}`.split('').reduce((total, char) => {
+    return total + char.charCodeAt(0);
+  }, 0);
+
+  return option.verses[seed % option.verses.length] ?? option.verses[0];
 }
 
 function getMoodStorageKey(date: Date) {
@@ -164,20 +455,20 @@ function getMostUsedMoodSummary(values: (string | null)[]): WeeklyMoodSummary {
     : { label: 'Not yet', icon: 'ellipse-outline', tint: '#8D7C70' };
 }
 
-function getEntryTypeLabel(type: HomeJournalEntryType) {
+function getEntryTypeLabel(type: HomeJournalEntryType, t: (key: TranslationKey) => string) {
   switch (type) {
     case 'prayer':
-      return 'Prayer Journal';
+      return t('prayerJournal');
     case 'bible-study':
-      return 'Bible Study';
+      return t('bibleStudy');
     case 'church-day':
-      return 'Church Day';
+      return t('churchDay');
     case 'daily-devotional':
-      return 'Daily Devotional';
+      return t('dailyDevotional');
     case 'journal-studio':
-      return 'Studio';
+      return t('tabStudio');
     default:
-      return 'Journal';
+      return t('tabJournal');
   }
 }
 
@@ -254,6 +545,37 @@ function replaceStudioPreviewReference(entry: HomeJournalEntry, reference: strin
   };
 }
 
+function dedupeJournalEntries(entries: HomeJournalEntry[]) {
+  const uniqueById = new Map<string, HomeJournalEntry>();
+
+  [...entries]
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .forEach((entry) => {
+    uniqueById.set(`${entry.type}:${entry.id}`, entry);
+    });
+
+  const studioPreviewKeys = new Set<string>();
+
+  return Array.from(uniqueById.values()).filter((entry) => {
+    if (entry.type !== 'journal-studio' && entry.editor !== 'studio') {
+      return true;
+    }
+
+    const previewKey = entry.preview?.trim().toLowerCase();
+    if (!previewKey) {
+      return true;
+    }
+
+    const dedupeKey = `${getLocalDayKey(parseEntryDate(entry))}:${previewKey}`;
+    if (studioPreviewKeys.has(dedupeKey)) {
+      return false;
+    }
+
+    studioPreviewKeys.add(dedupeKey);
+    return true;
+  });
+}
+
 function hasVisibleJournalContent(entry: HomeJournalEntry) {
   return Boolean(
     entry.preview?.trim() ||
@@ -264,11 +586,13 @@ function hasVisibleJournalContent(entry: HomeJournalEntry) {
 async function hydrateStudioJournalEntries(entries: HomeJournalEntry[]) {
   const hydratedEntries = await Promise.all(
     entries.map(async (entry) => {
-      if (entry.type !== 'journal-studio') {
+      if (entry.type !== 'journal-studio' && entry.editor !== 'studio') {
         return entry;
       }
 
-      const storedReference = await AsyncStorage.getItem(`journal_studio_${entry.id}`).then(
+      const storedReference = await AsyncStorage.getItem(
+        getJournalEntryStorageKey({ id: entry.id, type: entry.type })
+      ).then(
         getStudioReferenceFromPayload
       );
 
@@ -290,6 +614,7 @@ async function hydrateStudioJournalEntries(entries: HomeJournalEntry[]) {
 export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, language, t } = useAppSettings();
+  const layout = useResponsiveLayout();
   const [today, setToday] = useState(() => new Date());
   const [journalEntries, setJournalEntries] = useState<HomeJournalEntry[]>([]);
   const [selectedMoodKey, setSelectedMoodKey] = useState<string | null>(null);
@@ -300,10 +625,47 @@ export default function HomeScreen() {
     () => getDailyInspirationVerse(today, language.key),
     [language.key, today]
   );
+  const dailyVerseReference = useMemo(
+    () => formatLocalizedVerseReference(dailyVerse.book, dailyVerse.chapter, dailyVerse.verse, language.key),
+    [dailyVerse.book, dailyVerse.chapter, dailyVerse.verse, language.key]
+  );
   const todayKey = useMemo(() => getLocalDayKey(today), [today]);
   const selectedMood = useMemo(
     () => MOOD_OPTIONS.find((mood) => mood.key === selectedMoodKey) ?? null,
     [selectedMoodKey]
+  );
+  const selectedMoodVerse = useMemo(
+    () => (selectedMood ? getDailyHeartCheckVerse(selectedMood, today) : null),
+    [selectedMood, today]
+  );
+  const selectedMoodVerseReference = selectedMoodVerse
+    ? formatLocalizedVerseReference(
+        selectedMoodVerse.book,
+        selectedMoodVerse.chapter,
+        selectedMoodVerse.verse,
+        language.key
+      )
+    : null;
+  const getMoodLabel = useCallback(
+    (mood: MoodOption) => {
+      const key = MOOD_TRANSLATION_KEYS[mood.key]?.label;
+      return key ? t(key) : mood.label;
+    },
+    [t]
+  );
+  const getMoodSuggestion = useCallback(
+    (mood: MoodOption) => {
+      const key = MOOD_TRANSLATION_KEYS[mood.key]?.suggestion;
+      return key ? t(key) : mood.suggestion;
+    },
+    [t]
+  );
+  const getMoodActionLabel = useCallback(
+    (mood: MoodOption) => {
+      const key = MOOD_TRANSLATION_KEYS[mood.key]?.action;
+      return key ? t(key) : mood.actionLabel;
+    },
+    [t]
   );
   const sortedJournalEntries = useMemo(
     () => [...journalEntries].sort((left, right) => right.updatedAt - left.updatedAt),
@@ -353,7 +715,9 @@ export default function HomeScreen() {
     ]);
     const weeklyMoods = await AsyncStorage.multiGet(moodKeys);
 
-    const visibleEntries = (await hydrateStudioJournalEntries(safeParseJournalIndex(journalData)))
+    const visibleEntries = dedupeJournalEntries(
+      await hydrateStudioJournalEntries(safeParseJournalIndex(journalData))
+    )
       .filter(hasVisibleJournalContent);
 
     setJournalEntries(visibleEntries);
@@ -386,15 +750,12 @@ export default function HomeScreen() {
     return () => subscription.remove();
   }, [loadHomeJournalState]);
 
-  const openRoute = (pathname: string) => {
-    router.push(pathname as never);
-  };
-
   const openBlankStudio = () => {
     router.push({
       pathname: '/studio',
       params: {
         blankStudioToken: String(Date.now()),
+        saveTarget: 'journal-studio',
         openSelectedVerse: 'false',
         selectedBook: '',
         selectedChapter: '',
@@ -406,12 +767,21 @@ export default function HomeScreen() {
 
   const openPrayerJournal = () => {
     router.push({
-      pathname: '/prayer-journal',
-      params: { newEntryToken: String(Date.now()) },
+      pathname: '/studio',
+      params: { blankStudioToken: String(Date.now()), saveTarget: 'prayer' },
     });
   };
 
+  const openBreathe = () => {
+    router.push('/breathe');
+  };
+
   const openJournalEntry = (entry: HomeJournalEntry) => {
+    if (entry.editor === 'studio' || entry.type === 'journal-studio') {
+      router.push({ pathname: '/studio', params: { entryId: entry.id, entryType: entry.type, saveTarget: entry.type } });
+      return;
+    }
+
     if (entry.type === 'prayer') {
       router.push({ pathname: '/prayer-journal', params: { entryId: entry.id } });
       return;
@@ -431,27 +801,23 @@ export default function HomeScreen() {
       router.push({ pathname: '/daily-devotional-journal', params: { entryId: entry.id } });
       return;
     }
-
-    router.push({ pathname: '/studio', params: { entryId: entry.id } });
   };
 
   const openSuggestedJournal = (mood: MoodOption) => {
-    if (mood.route === 'prayer') {
-      openPrayerJournal();
-      return;
-    }
+    const heartCheckVerse = getDailyHeartCheckVerse(mood, today);
 
-    if (mood.route === 'bible-study') {
-      router.push({ pathname: '/bible-study-journal', params: { newEntryToken: String(Date.now()) } });
-      return;
-    }
-
-    if (mood.route === 'daily-devotional') {
-      router.push({ pathname: '/daily-devotional-journal', params: { newEntryToken: String(Date.now()) } });
-      return;
-    }
-
-    openTodayVerse();
+    router.push({
+      pathname: '/studio',
+      params: {
+        blankStudioToken: String(Date.now()),
+        saveTarget: mood.route,
+        openSelectedVerse: 'true',
+        selectedBook: heartCheckVerse.book,
+        selectedChapter: String(heartCheckVerse.chapter),
+        selectedVerse: String(heartCheckVerse.verse),
+        selectionToken: String(Date.now()),
+      },
+    });
   };
 
   const selectMood = async (mood: MoodOption) => {
@@ -464,6 +830,7 @@ export default function HomeScreen() {
       pathname: '/studio',
       params: {
         blankStudioToken: '',
+        saveTarget: 'journal-studio',
         openSelectedVerse: 'true',
         selectedBook: dailyVerse.book,
         selectedChapter: String(dailyVerse.chapter),
@@ -473,12 +840,273 @@ export default function HomeScreen() {
     });
   };
 
+  const openBibleStudy = () => {
+    router.push({
+      pathname: '/studio',
+      params: { blankStudioToken: String(Date.now()), saveTarget: 'bible-study' },
+    });
+  };
+
+  const openDailyDevotional = () => {
+    router.push({
+      pathname: '/studio',
+      params: {
+        blankStudioToken: String(Date.now()),
+        saveTarget: 'daily-devotional',
+        openSelectedVerse: 'false',
+        selectedBook: '',
+        selectedChapter: '',
+        selectedVerse: '',
+        selectionToken: '',
+      },
+    });
+  };
+
+  const openChurchDay = () => {
+    router.push({
+      pathname: '/studio',
+      params: {
+        blankStudioToken: String(Date.now()),
+        saveTarget: 'church-day',
+        openSelectedVerse: 'false',
+        selectedBook: '',
+        selectedChapter: '',
+        selectedVerse: '',
+        selectionToken: '',
+      },
+    });
+  };
+
+  const primaryActions = [
+    { label: t('homeQuickPrayer'), icon: 'heart-outline' as const, tint: '#A75E6C', onPress: openPrayerJournal },
+    { label: t('bibleStudy'), icon: 'book-outline' as const, tint: '#536D9A', onPress: openBibleStudy },
+    { label: t('homeQuickDevotional'), icon: 'sunny-outline' as const, tint: '#A97940', onPress: openDailyDevotional },
+    { label: t('churchDay'), icon: 'sparkles-outline' as const, tint: '#667DA8', onPress: openChurchDay },
+    { label: t('tabStudio'), icon: 'color-wand-outline' as const, tint: '#7A668F', onPress: openBlankStudio },
+    { label: t('tabBible'), icon: 'library-outline' as const, tint: '#647569', onPress: () => router.push('/bible') },
+  ];
+
   return (
-    <ScrollView
-      style={[styles.screen, { backgroundColor: colorTheme.screenBackground }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
-      <View style={[styles.welcome, { borderColor: colorTheme.border }]}>
+    <FocusedScreenView style={[styles.screen, { backgroundColor: colorTheme.screenBackground }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          layout.isTablet
+            ? [
+                styles.tabletContent,
+                {
+                  maxWidth: layout.contentMaxWidth,
+                  paddingHorizontal: layout.pagePaddingHorizontal,
+                },
+              ]
+            : null,
+        ]}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.homeMockTopBar}>
+          <View>
+            <Text style={styles.homeMockDate}>
+              {today.toLocaleDateString(getDateLocale(language.key), {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </Text>
+            <Text style={styles.homeMockTitle}>Faith Canvas</Text>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => router.push('/settings')}
+            accessibilityLabel={t('settingsTitle')}
+            style={[styles.homeMockSettingsButton, { backgroundColor: colorTheme.toolbarBackground }]}>
+            <Ionicons name="settings-outline" size={19} color="#5B514D" />
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={[
+            styles.homeMockHero,
+            layout.isTablet ? styles.tabletHomeHero : null,
+            { borderColor: colorTheme.border },
+          ]}>
+          <View style={styles.homeMockHeroHeader}>
+            <View style={[styles.homeMockIconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name="book-outline" size={18} color="#6C5F59" />
+            </View>
+            <Text style={styles.homeMockEyebrow}>{t('homeVerseLabel')}</Text>
+          </View>
+          <Text numberOfLines={4} style={styles.homeMockVerseText}>{dailyVerse.text}</Text>
+          <Text style={styles.homeMockReference}>{dailyVerseReference}</Text>
+          <View style={styles.homeMockHeroActions}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={openTodayVerse}
+              style={[styles.homeMockPrimaryButton, { backgroundColor: colorTheme.tint }]}>
+              <Ionicons name="color-wand-outline" size={17} color="#FFFDF9" />
+              <Text style={styles.homeMockPrimaryButtonText}>{t('homeOpenInStudio')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={openDailyDevotional}
+              style={[styles.homeMockSecondaryButton, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Text style={styles.homeMockSecondaryButtonText}>{t('homeReflect')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.homeMockStatusRow}>
+          <View style={[styles.homeMockStatusPill, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+            <Ionicons name="flame-outline" size={16} color="#A75E6C" />
+            <Text numberOfLines={1} style={styles.homeMockStatusText}>
+              {gentleStreak > 0
+                ? t(gentleStreak === 1 ? 'homeDayStreak' : 'homeDayStreakPlural', {
+                    count: gentleStreak,
+                  })
+                : t('homeStartToday')}
+            </Text>
+          </View>
+          <View style={[styles.homeMockStatusPill, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+            <Ionicons name={todayEntryCount > 0 ? 'checkmark-circle-outline' : 'ellipse-outline'} size={16} color="#6F8C7A" />
+            <Text numberOfLines={1} style={styles.homeMockStatusText}>
+              {todayEntryCount > 0
+                ? t('homeTodayCount', { count: todayEntryCount })
+                : t('homeNoEntryYet')}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.homeMockActionGrid, layout.isTablet ? styles.tabletHomeActionGrid : null]}>
+          {primaryActions.map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              activeOpacity={0.88}
+              onPress={action.onPress}
+              style={[
+                styles.homeMockActionTile,
+                layout.isTablet ? styles.tabletHomeActionTile : null,
+                { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border },
+              ]}>
+              <View style={[styles.homeMockActionIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Ionicons name={action.icon} size={19} color={action.tint} />
+              </View>
+              <Text numberOfLines={1} style={styles.homeMockActionLabel}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View
+          style={[
+            styles.homeMockMoodPanel,
+            layout.isTablet ? styles.tabletHomeMoodPanel : null,
+            { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border },
+          ]}>
+          <View style={styles.homeMockPanelHeader}>
+            <Text style={styles.homeMockPanelTitle}>{t('homeWordsFromGod')}</Text>
+            <Text style={styles.homeMockPanelHint}>
+              {selectedMoodVerseReference ?? t('homePickWhatFits')}
+            </Text>
+          </View>
+          <Text style={styles.homeMockMoodIntro}>
+            {t('homeWordsIntro')}
+          </Text>
+          {[
+            { title: t('homeForMe'), options: HELP_MOOD_OPTIONS },
+            { title: t('homeHelpSomeone'), options: SHARE_MOOD_OPTIONS },
+          ].map((group) => (
+            <View key={group.title} style={styles.homeMockMoodGroup}>
+              <Text style={styles.homeMockMoodGroupTitle}>{group.title}</Text>
+              <View style={styles.homeMockMoodWrap}>
+                {group.options.map((mood) => (
+                  <TouchableOpacity
+                    key={mood.key}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      void selectMood(mood);
+                    }}
+                    style={[
+                      styles.homeMockMoodChip,
+                      { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border },
+                      selectedMoodKey === mood.key ? { borderColor: mood.tint, borderWidth: 2 } : null,
+                    ]}>
+                    <Ionicons name={mood.icon} size={14} color={mood.tint} />
+                    <Text numberOfLines={1} style={styles.homeMockMoodChipText}>
+                      {getMoodLabel(mood)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+          {selectedMood ? (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => openSuggestedJournal(selectedMood)}
+              style={styles.homeMockSuggestion}>
+              <View style={styles.homeMockSuggestionCopy}>
+                <Text numberOfLines={2} style={styles.homeMockSuggestionText}>
+                  {getMoodSuggestion(selectedMood)}
+                </Text>
+                <Text style={styles.homeMockSuggestionAction}>
+                  {getMoodActionLabel(selectedMood)}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {latestTodayEntry ? (
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => openJournalEntry(latestTodayEntry)}
+            style={[styles.homeMockContinueCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+            <View style={[styles.homeMockIconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name={getEntryTypeIcon(latestTodayEntry.type)} size={18} color="#7A6F66" />
+            </View>
+            <View style={styles.homeMockContinueText}>
+              <Text style={styles.homeMockEyebrow}>{t('homeContinueToday')}</Text>
+              <Text numberOfLines={1} style={styles.homeMockContinueTitle}>
+                {getEntryTypeLabel(latestTodayEntry.type, t)}
+              </Text>
+              <Text numberOfLines={1} style={styles.homeMockContinuePreview}>
+                {localizeReferencePreview(latestTodayEntry.preview, language.key) || t('homeKeepWriting')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
+          </TouchableOpacity>
+        ) : null}
+
+        {recentContinueEntries.length > 0 ? (
+          <View style={[styles.homeMockRecentPanel, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
+            <View style={styles.homeMockPanelHeader}>
+              <Text style={styles.homeMockPanelTitle}>{t('homeRecentWork')}</Text>
+              <Text style={styles.homeMockPanelHint}>
+                {t('homeThisWeek', { count: weekSummary.entryCount })}
+              </Text>
+            </View>
+            {recentContinueEntries.map((entry) => (
+              <TouchableOpacity
+                key={`${entry.type}-${entry.id}`}
+                activeOpacity={0.88}
+                onPress={() => openJournalEntry(entry)}
+                style={styles.homeMockRecentRow}>
+                <Ionicons name={getEntryTypeIcon(entry.type)} size={17} color="#7A6F66" />
+                <View style={styles.homeMockRecentText}>
+                  <Text numberOfLines={1} style={styles.homeMockRecentTitle}>
+                    {getEntryTypeLabel(entry.type, t)}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.homeMockRecentPreview}>
+                    {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
+                  </Text>
+                </View>
+                <Text style={styles.homeMockRecentDate}>{formatRecentEntryDate(parseEntryDate(entry), language.key)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        {false ? (
+          <>
+        <View style={[styles.welcome, { borderColor: colorTheme.border }]}>
         <View style={styles.welcomeTopRow}>
           <View style={styles.welcomeTodayGroup}>
             <View style={[styles.sunBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
@@ -499,7 +1127,7 @@ export default function HomeScreen() {
         <View style={styles.softPrompts}>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={openBlankStudio}
+            onPress={openBreathe}
             style={styles.softPrompt}>
             <Ionicons name="leaf-outline" size={15} color="#6F8C7A" />
             <Text style={styles.softPromptText}>{t('homePromptBreathe')}</Text>
@@ -513,7 +1141,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={openBlankStudio}
+            onPress={openTodayVerse}
             style={styles.softPrompt}>
             <Ionicons name="sparkles-outline" size={15} color="#7C73A6" />
             <Text style={styles.softPromptText}>{t('homePromptCreate')}</Text>
@@ -544,18 +1172,18 @@ export default function HomeScreen() {
       {latestTodayEntry ? (
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={() => openJournalEntry(latestTodayEntry)}
+          onPress={() => openJournalEntry(latestTodayEntry!)}
           style={[styles.continueCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
           <View style={[styles.iconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
-            <Ionicons name={getEntryTypeIcon(latestTodayEntry.type)} size={18} color="#7A6F66" />
+            <Ionicons name={getEntryTypeIcon(latestTodayEntry!.type)} size={18} color="#7A6F66" />
           </View>
           <View style={styles.continueText}>
             <Text style={styles.continueLabel}>Continue today</Text>
             <Text numberOfLines={1} style={styles.continueTitle}>
-              {getEntryTypeLabel(latestTodayEntry.type)}
+              {getEntryTypeLabel(latestTodayEntry!.type, t)}
             </Text>
             <Text numberOfLines={1} style={styles.continuePreview}>
-              {latestTodayEntry.preview || 'Open to keep writing...'}
+              {localizeReferencePreview(latestTodayEntry!.preview, language.key) || t('homeKeepWriting')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
@@ -582,13 +1210,13 @@ export default function HomeScreen() {
               <Ionicons name={getEntryTypeIcon(entry.type)} size={17} color="#7A6F66" />
               <View style={styles.recentEntryText}>
                 <Text numberOfLines={1} style={styles.recentEntryTitle}>
-                  {getEntryTypeLabel(entry.type)}
+                  {getEntryTypeLabel(entry.type, t)}
                 </Text>
                 <Text numberOfLines={1} style={styles.recentEntryPreview}>
-                  {entry.preview || 'Open to keep writing...'}
+                  {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
                 </Text>
               </View>
-              <Text style={styles.recentEntryDate}>{formatRecentEntryDate(parseEntryDate(entry))}</Text>
+              <Text style={styles.recentEntryDate}>{formatRecentEntryDate(parseEntryDate(entry), language.key)}</Text>
               <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
             </TouchableOpacity>
           ))}
@@ -600,9 +1228,9 @@ export default function HomeScreen() {
           <View style={[styles.iconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
             <Ionicons name="chatbubble-ellipses-outline" size={18} color="#7A6F66" />
           </View>
-          <Text style={styles.cardLabel}>Heart check</Text>
+          <Text style={styles.cardLabel}>Find a verse for...</Text>
         </View>
-        <Text style={styles.moodTitle}>How are you feeling?</Text>
+        <Text style={styles.moodTitle}>What are you walking through?</Text>
         <View style={styles.moodChipRow}>
           {MOOD_OPTIONS.map((mood) => (
             <TouchableOpacity
@@ -624,9 +1252,11 @@ export default function HomeScreen() {
         {selectedMood ? (
           <TouchableOpacity
             activeOpacity={0.88}
-            onPress={() => openSuggestedJournal(selectedMood)}
+            onPress={() => openSuggestedJournal(selectedMood!)}
             style={styles.moodSuggestion}>
-            <Text style={styles.moodSuggestionText}>{selectedMood.suggestion}</Text>
+            <Text style={styles.moodSuggestionText}>
+              {selectedMood!.suggestion} {selectedMood!.actionLabel}
+            </Text>
             <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
           </TouchableOpacity>
         ) : null}
@@ -641,7 +1271,7 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.verseText}>{dailyVerse.text}</Text>
         <View style={styles.referenceRow}>
-          <Text style={styles.reference}>{dailyVerse.reference}</Text>
+          <Text style={styles.reference}>{dailyVerseReference}</Text>
         </View>
         <TouchableOpacity
           activeOpacity={0.88}
@@ -684,7 +1314,20 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => openRoute('/daily-devotional-journal')}
+          onPress={() =>
+            router.push({
+              pathname: '/studio',
+              params: {
+                blankStudioToken: String(Date.now()),
+                saveTarget: 'daily-devotional',
+                openSelectedVerse: 'false',
+                selectedBook: '',
+                selectedChapter: '',
+                selectedVerse: '',
+                selectionToken: '',
+              },
+            })
+          }
           style={[styles.comfortCard, styles.questionCard, { borderColor: colorTheme.border }]}>
           <Ionicons name="chatbubble-ellipses-outline" size={21} color="#6F8C7A" />
           <Text style={styles.comfortTitle}>{t('homeQuestionTitle')}</Text>
@@ -725,7 +1368,20 @@ export default function HomeScreen() {
 
       <TouchableOpacity
         activeOpacity={0.88}
-        onPress={() => openRoute('/church-day-journal')}
+        onPress={() =>
+          router.push({
+            pathname: '/studio',
+            params: {
+              blankStudioToken: String(Date.now()),
+              saveTarget: 'church-day',
+              openSelectedVerse: 'false',
+              selectedBook: '',
+              selectedChapter: '',
+              selectedVerse: '',
+              selectionToken: '',
+            },
+          })
+        }
         style={[styles.churchNote, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
         <View style={[styles.churchIcon, { backgroundColor: '#EEF3FF' }]}>
           <Ionicons name="sparkles-outline" size={19} color="#6C7FA8" />
@@ -764,7 +1420,10 @@ export default function HomeScreen() {
           </View>
         </View>
       </View>
-    </ScrollView>
+          </>
+        ) : null}
+      </ScrollView>
+    </FocusedScreenView>
   );
 }
 
@@ -776,6 +1435,310 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'web' ? 26 : 58,
     paddingHorizontal: 18,
     paddingBottom: Platform.OS === 'web' ? 34 : 112,
+  },
+  tabletContent: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingTop: Platform.OS === 'web' ? 30 : 62,
+    paddingBottom: Platform.OS === 'web' ? 42 : 130,
+  },
+  homeMockTopBar: {
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  homeMockDate: {
+    color: '#7A6F66',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  homeMockTitle: {
+    marginTop: 2,
+    color: '#1F1F1F',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+  },
+  homeMockSettingsButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeMockHero: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 18,
+    marginBottom: 10,
+    backgroundColor: '#F7F0E8',
+  },
+  tabletHomeHero: {
+    padding: 22,
+  },
+  homeMockHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 12,
+  },
+  homeMockIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeMockEyebrow: {
+    color: '#8D7C70',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  homeMockVerseText: {
+    color: '#1F1F1F',
+    fontSize: 19,
+    lineHeight: 27,
+    fontWeight: '700',
+  },
+  homeMockReference: {
+    marginTop: 10,
+    color: '#6F635C',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeMockHeroActions: {
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  homeMockPrimaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  homeMockPrimaryButtonText: {
+    color: '#FFFDF9',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeMockSecondaryButton: {
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeMockSecondaryButtonText: {
+    color: '#5B514D',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeMockStatusRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  homeMockStatusPill: {
+    flex: 1,
+    minHeight: 38,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  homeMockStatusText: {
+    flex: 1,
+    color: '#4A403C',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeMockActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  tabletHomeActionGrid: {
+    gap: 10,
+  },
+  homeMockActionTile: {
+    width: '31.8%',
+    minHeight: 86,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 9,
+    justifyContent: 'space-between',
+  },
+  tabletHomeActionTile: {
+    width: '32.25%',
+    minHeight: 104,
+    padding: 12,
+  },
+  homeMockActionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeMockActionLabel: {
+    color: '#1F1F1F',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeMockMoodPanel: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 13,
+    marginBottom: 10,
+  },
+  tabletHomeMoodPanel: {
+    padding: 18,
+  },
+  homeMockPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  homeMockPanelTitle: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  homeMockPanelHint: {
+    color: '#8D7C70',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  homeMockMoodIntro: {
+    color: '#665C57',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  homeMockMoodGroup: {
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  homeMockMoodGroupTitle: {
+    color: '#7A6F66',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginBottom: 7,
+    textTransform: 'uppercase',
+  },
+  homeMockMoodWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  homeMockMoodChip: {
+    minHeight: 34,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  homeMockMoodChipText: {
+    color: '#4A403C',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeMockSuggestion: {
+    marginTop: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8F5F2',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  homeMockSuggestionCopy: {
+    flex: 1,
+  },
+  homeMockSuggestionText: {
+    color: '#4A403C',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  homeMockSuggestionAction: {
+    marginTop: 4,
+    color: '#7A6F66',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeMockContinueCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 13,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  homeMockContinueText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  homeMockContinueTitle: {
+    marginTop: 3,
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  homeMockContinuePreview: {
+    marginTop: 2,
+    color: '#665C57',
+    fontSize: 12,
+  },
+  homeMockRecentPanel: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 13,
+  },
+  homeMockRecentRow: {
+    minHeight: 45,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.07)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  homeMockRecentText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  homeMockRecentTitle: {
+    color: '#1F1F1F',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeMockRecentPreview: {
+    marginTop: 1,
+    color: '#665C57',
+    fontSize: 12,
+  },
+  homeMockRecentDate: {
+    color: '#8D7C70',
+    fontSize: 11,
+    fontWeight: '800',
   },
   welcome: {
     backgroundColor: '#FFF3F2',

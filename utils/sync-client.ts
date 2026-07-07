@@ -5,17 +5,24 @@ import { randomBytes } from '@noble/ciphers/utils.js';
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
+import {
+  BIBLE_READING_PROGRESS_STORAGE_KEY,
+  SHOP_OWNED_PACKS_STORAGE_KEY,
+} from '@/utils/storage-keys';
+
 const SYNC_SESSION_STORAGE_KEY = 'private_sync_session_v1';
 const SYNC_VERSION_STORAGE_KEY = 'private_sync_versions_v1';
 const SYNC_LAST_PULL_STORAGE_KEY = 'private_sync_last_pull_v1';
 const SYNC_API_URL = 'https://pidpod.com';
+const SYNC_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_SYNC_ITEM_CHARS = 512 * 1024;
-const KDF_ITERATIONS = 210_000;
+const KDF_ITERATIONS = 60_000;
 const KDF_SALT = 'BibleApp Private Sync Phrase v1';
 
 export type SyncItemType =
   | 'account_session'
   | 'app_settings'
+  | 'bible_reading_progress'
   | 'daily_mood'
   | 'journal_index'
   | 'journal_entry'
@@ -47,6 +54,14 @@ type SyncStoredVersion = {
 };
 
 type SyncStoredVersions = Record<string, SyncStoredVersion | string>;
+
+type PhraseMaterial = {
+  recoveryId: string;
+  legacyRecoveryId: string;
+  authSecret: string;
+  encryptionKey: Uint8Array;
+  phraseFingerprint: string;
+};
 
 type LocalSyncRecord = {
   clientItemId: string;
@@ -148,13 +163,20 @@ export type SyncLog = {
 const SYNCABLE_EXACT_KEYS: Record<string, SyncItemType> = {
   account_session_v1: 'account_session',
   app_settings_v1: 'app_settings',
+  [BIBLE_READING_PROGRESS_STORAGE_KEY]: 'bible_reading_progress',
   journal_index: 'journal_index',
   studio_favorites_v2: 'saved_designs',
   studio_favorites_backup_v1: 'saved_designs_backup',
   favorites: 'legacy_saved_designs',
   verse_design_index_v1: 'verse_design_index',
   verse_design_timestamps_v1: 'verse_design_timestamps',
+  [SHOP_OWNED_PACKS_STORAGE_KEY]: 'shop_entitlements',
 };
+
+let cachedPhraseMaterial: {
+  normalizedPhrase: string;
+  material: PhraseMaterial;
+} | null = null;
 
 function utf8ToBytes(value: string) {
   const bytes: number[] = [];
@@ -298,8 +320,27 @@ function normalizePhrase(phrase: string) {
   return phrase.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-async function derivePhraseMaterial(phrase: string) {
+function normalizeSyncUsername(username?: string | null) {
+  return (username ?? '').trim().replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').toLowerCase();
+}
+
+function getPhraseScope(username?: string | null) {
+  const normalizedUsername = normalizeSyncUsername(username);
+
+  return normalizedUsername ? `username:${normalizedUsername}` : null;
+}
+
+async function derivePhraseMaterial(
+  phrase: string,
+  username?: string | null
+): Promise<PhraseMaterial> {
   const normalizedPhrase = normalizePhrase(phrase);
+  const phraseScope = getPhraseScope(username);
+  const cacheKey = `${phraseScope || 'legacy'}|${normalizedPhrase}`;
+  if (cachedPhraseMaterial?.normalizedPhrase === cacheKey) {
+    return cachedPhraseMaterial.material;
+  }
+
   const derived = await pbkdf2Async(sha256, normalizedPhrase, KDF_SALT, {
     c: KDF_ITERATIONS,
     dkLen: 96,
@@ -308,17 +349,36 @@ async function derivePhraseMaterial(phrase: string) {
   const recoveryKey = derived.slice(0, 32);
   const authKey = derived.slice(32, 64);
   const encryptionKey = derived.slice(64, 96);
+  const legacyRecoveryId = bytesToHex(
+    sha256(new Uint8Array([...recoveryKey, ...utf8ToBytes('recovery')]))
+  );
 
-  return {
-    recoveryId: bytesToHex(sha256(new Uint8Array([...recoveryKey, ...utf8ToBytes('recovery')]))),
+  const material = {
+    recoveryId: phraseScope
+      ? bytesToHex(
+          sha256(new Uint8Array([...recoveryKey, ...utf8ToBytes(`${phraseScope}:recovery`)]))
+        )
+      : legacyRecoveryId,
+    legacyRecoveryId,
     authSecret: bytesToHex(sha256(new Uint8Array([...authKey, ...utf8ToBytes('auth')]))),
     encryptionKey,
     phraseFingerprint: bytesToHex(sha256(encryptionKey)).slice(0, 16),
   };
+
+  cachedPhraseMaterial = {
+    normalizedPhrase: cacheKey,
+    material,
+  };
+
+  return material;
 }
 
 function getDeviceName() {
-  const platform = typeof navigator !== 'undefined' ? navigator.userAgent : 'Bible App device';
+  const platform =
+    typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string'
+      ? navigator.userAgent
+      : 'Faith Canvas device';
+
   return platform.slice(0, 120);
 }
 
@@ -361,6 +421,12 @@ async function requestJson<T>(
   init: RequestInit,
   session?: SyncSession
 ): Promise<T> {
+  const controller =
+    typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout =
+    controller !== null
+      ? setTimeout(() => controller.abort(), SYNC_REQUEST_TIMEOUT_MS)
+      : null;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init.headers as Record<string, string> | undefined),
@@ -372,21 +438,34 @@ async function requestJson<T>(
     headers['x-sync-device-secret'] = session.deviceSecret;
   }
 
-  const response = await fetch(`${SYNC_API_URL}${path}`, {
-    ...init,
-    headers,
-  });
-  const payload = (await response.json().catch(() => ({}))) as { error?: string };
+  try {
+    const response = await fetch(`${SYNC_API_URL}${path}`, {
+      ...init,
+      headers,
+      signal: controller?.signal,
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
 
-  if (!response.ok) {
-    throw new Error(payload.error || 'Sync request failed.');
+    if (!response.ok) {
+      throw new Error(payload.error || 'Sync request failed.');
+    }
+
+    return payload as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Cloud Save request timed out.');
+    }
+
+    throw error;
+  } finally {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
   }
-
-  return payload as T;
 }
 
 export async function connectPrivateSyncPhrase(phrase: string, preferredUsername?: string) {
-  const material = await derivePhraseMaterial(phrase);
+  const material = await derivePhraseMaterial(phrase, preferredUsername);
   const deviceSecret = generateDeviceSecret();
   const response = await requestJson<{
     userId: string;
@@ -400,6 +479,7 @@ export async function connectPrivateSyncPhrase(phrase: string, preferredUsername
       method: 'POST',
       body: JSON.stringify({
         recoveryId: material.recoveryId,
+        legacyRecoveryId: material.legacyRecoveryId,
         authSecret: material.authSecret,
         deviceSecret,
         deviceName: getDeviceName(),
@@ -423,6 +503,43 @@ export async function connectPrivateSyncPhrase(phrase: string, preferredUsername
     status: response.status || 'connected',
     message: response.message || 'Connected',
   };
+}
+
+export async function checkSyncUsernameAvailability(username: string) {
+  const session = await getSyncSession();
+  if (!session) {
+    throw new Error('Connect Cloud Save first.');
+  }
+
+  return requestJson<{ username: string; available: boolean }>(
+    `/v1/sync/username-availability?username=${encodeURIComponent(username)}`,
+    { method: 'GET' },
+    session
+  );
+}
+
+export async function updateSyncUsername(username: string, phrase: string) {
+  const session = await getSyncSession();
+  if (!session) {
+    throw new Error('Connect Cloud Save first.');
+  }
+
+  const material = await derivePhraseMaterial(phrase, username);
+  if (material.phraseFingerprint !== session.phraseFingerprint) {
+    throw new Error('Private Sync Phrase does not match this device.');
+  }
+
+  const response = await requestJson<{ username: string }>(
+    '/v1/sync/account',
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ username, recoveryId: material.recoveryId }),
+    },
+    session
+  );
+  const nextSession = { ...session, username: response.username, recoveryId: material.recoveryId };
+  await AsyncStorage.setItem(SYNC_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+  return nextSession;
 }
 
 function getItemTypeForStorageKey(key: string): SyncItemType | null {
@@ -608,7 +725,7 @@ export async function pushEncryptedSync(phrase: string) {
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase);
+  const material = await derivePhraseMaterial(phrase, session.username);
   if (material.phraseFingerprint !== session.phraseFingerprint) {
     throw new Error('Private Sync Phrase does not match this device.');
   }
@@ -663,7 +780,7 @@ export async function pullEncryptedSync(phrase: string, options: { full?: boolea
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase);
+  const material = await derivePhraseMaterial(phrase, session.username);
   if (material.phraseFingerprint !== session.phraseFingerprint) {
     throw new Error('Private Sync Phrase does not match this device.');
   }
@@ -888,7 +1005,7 @@ export async function getEncryptedSyncConflicts(phrase: string) {
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase);
+  const material = await derivePhraseMaterial(phrase, session.username);
   if (material.phraseFingerprint !== session.phraseFingerprint) {
     throw new Error('Private Sync Phrase does not match this device.');
   }
@@ -1006,6 +1123,7 @@ export async function saveBothEncryptedSyncConflictVersions(
 }
 
 export async function disconnectPrivateSync() {
+  cachedPhraseMaterial = null;
   await AsyncStorage.multiRemove([
     SYNC_SESSION_STORAGE_KEY,
     SYNC_VERSION_STORAGE_KEY,

@@ -47,11 +47,14 @@ function RootNavigator() {
         screenOptions={{
           contentStyle: { backgroundColor: colorTheme.screenBackground },
           headerBackTitle: 'Back',
+          headerTintColor: '#5B514D',
+          headerTitleStyle: { color: '#1F1F1F', fontWeight: '700' },
           headerStyle: { backgroundColor: colorTheme.screenBackground },
           headerShadowVisible: false,
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="bible-books" options={{ title: t('tabBible') }} />
+        <Stack.Screen name="breathe" options={{ title: t('breatheTitle') }} />
         <Stack.Screen name="bible-study-journal" options={{ title: t('bibleStudy') }} />
         <Stack.Screen name="church-day-journal" options={{ title: t('churchDay') }} />
         <Stack.Screen
@@ -73,7 +76,6 @@ function RootNavigator() {
           name="settings"
           options={{ title: t('settingsTitle'), presentation: 'card' }}
         />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

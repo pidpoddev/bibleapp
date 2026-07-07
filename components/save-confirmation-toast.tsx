@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -30,10 +30,19 @@ export function SaveConfirmationToast({
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isRendered, setIsRendered] = useState(visibleKey > 0);
 
   useEffect(() => {
     if (visibleKey <= 0) {
       return;
+    }
+
+    setIsRendered(true);
+
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
     }
 
     opacity.stopAnimation();
@@ -82,7 +91,24 @@ export function SaveConfirmationToast({
         }),
       ]),
     ]).start();
+
+    hideTimeoutRef.current = setTimeout(() => {
+      setIsRendered(false);
+      hideTimeoutRef.current = null;
+    }, 1300);
   }, [opacity, scale, translateY, visibleKey]);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  if (!isRendered) {
+    return null;
+  }
 
   return (
     <Animated.View

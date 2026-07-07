@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2300" viewBox="0 0 1800 2300">
+  <defs>
+    <style>
+      .bg { fill: #fbf4e7; }
+      .card { fill: #fffaf1; stroke: #ead9bd; stroke-width: 2; }
+      .label { fill: #553f2a; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: .04em; }
+      .note { fill: #755f48; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 20px; }
+      .title { fill: #392819; font-family: Georgia, serif; font-size: 64px; font-weight: 700; }
+      .subtitle { fill: #785e43; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 26px; }
+      .small { fill: #7b684f; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 18px; letter-spacing: .03em; }
+      .wordmark { fill: #3d2b1c; font-family: Georgia, serif; font-size: 42px; font-weight: 700; }
+      .wordmark-play { fill: #3d2b1c; font-family: Trebuchet MS, Avenir Next, Arial, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -.02em; }
+      .mono { fill: #111111; stroke: #111111; }
+      .mono-fill { fill: #111111; }
+      .cream { fill: #fff7e8; }
+      .honey { fill: #f4b548; }
+      .coral { fill: #e98672; }
+      .sage { fill: #88a77d; }
+      .sky { fill: #8bbdd0; }
+      .ink { fill: #3d2b1c; }
+      .line { fill: none; stroke: #3d2b1c; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+      .line-soft { fill: none; stroke: #6d4b2f; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+      .line-white { fill: none; stroke: #fff7e8; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .bw-line { fill: none; stroke: #111111; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+
+    <!-- Option 1: Sunrise Canvas mark -->
+    <g id="mark-sunrise">
+      <rect x="0" y="0" width="92" height="92" rx="24" class="honey"/>
+      <path d="M19 59 C30 52, 41 52, 46 61 C51 52, 62 52, 73 59 L73 71 C61 65, 52 66, 46 75 C40 66, 31 65, 19 71 Z" class="cream"/>
+      <path d="M46 20 V44 M35 32 H57" class="line-white"/>
+      <path d="M23 49 C32 39, 60 39, 69 49" fill="none" stroke="#e98672" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="46" cy="32" r="7" fill="#fff7e8"/>
+    </g>
+
+    <!-- Option 2: Grace Frame mark -->
+    <g id="mark-frame">
+      <rect x="0" y="0" width="92" height="92" rx="24" class="sage"/>
+      <rect x="19" y="17" width="54" height="58" rx="9" class="cream"/>
+      <path d="M46 28 V61 M34 42 H58" fill="none" stroke="#88a77d" stroke-width="8" stroke-linecap="round"/>
+      <path d="M25 67 C36 61, 57 61, 68 67" fill="none" stroke="#e98672" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="66" cy="23" r="6" class="honey"/>
+    </g>
+
+    <!-- Option 3: Faith Doodles mark -->
+    <g id="mark-doodles">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#ffe1d6"/>
+      <path d="M24 62 C33 53, 40 53, 46 62 C52 53, 59 53, 68 62" class="line-soft"/>
+      <path d="M46 23 V50 M36 35 H56" fill="none" stroke="#3d2b1c" stroke-width="7" stroke-linecap="round"/>
+      <path d="M27 31 C23 23, 34 19, 37 27 C40 19, 51 23, 47 31 C44 38, 37 42, 37 42 C37 42, 30 38, 27 31 Z" fill="#e98672"/>
+      <path d="M61 58 L75 72" fill="none" stroke="#8bbdd0" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="75" cy="72" r="4" class="sky"/>
+    </g>
+
+    <!-- Option 4: Porchlight Canvas mark -->
+    <g id="mark-porchlight">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#8bbdd0"/>
+      <path d="M25 38 H67 L60 74 H32 Z" class="cream"/>
+      <path d="M34 38 C35 25, 57 25, 58 38" fill="none" stroke="#3d2b1c" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 43 V63 M37 53 H55" fill="none" stroke="#f4b548" stroke-width="6" stroke-linecap="round"/>
+      <path d="M25 76 H67" fill="none" stroke="#3d2b1c" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="46" cy="54" r="18" fill="#f4b548" opacity=".35"/>
+    </g>
+
+    <!-- Option 5: Living Canvas mark -->
+    <g id="mark-leaf">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#fff7e8"/>
+      <rect x="18" y="18" width="56" height="56" rx="12" fill="#88a77d"/>
+      <path d="M29 58 C39 47, 53 48, 63 58 L63 67 C52 61, 40 61, 29 67 Z" fill="#fff7e8"/>
+      <path d="M46 25 V49 M36 37 H56" fill="none" stroke="#fff7e8" stroke-width="7" stroke-linecap="round"/>
+      <path d="M58 28 C71 24, 73 39, 61 43 C57 37, 56 32, 58 28 Z" fill="#f4b548"/>
+      <path d="M58 42 C53 50, 48 57, 45 64" fill="none" stroke="#3d2b1c" stroke-width="4" stroke-linecap="round"/>
+    </g>
+
+    <g id="bw-mark">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+      <path d="M19 59 C30 52, 41 52, 46 61 C51 52, 62 52, 73 59 L73 71 C61 65, 52 66, 46 75 C40 66, 31 65, 19 71 Z" fill="#111111"/>
+      <path d="M46 20 V44 M35 32 H57" fill="none" stroke="#111111" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+
+  <rect width="1800" height="2300" class="bg"/>
+  <text x="90" y="105" class="title">Faith Canvas Logo Directions</text>
+  <text x="92" y="150" class="subtitle">Five selectable brand systems shown as app icon, horizontal lockup, square badge, and black/white mark.</text>
+
+  <g transform="translate(90 210)">
+    <text x="0" y="0" class="small">APP ICON</text>
+    <text x="310" y="0" class="small">HORIZONTAL</text>
+    <text x="760" y="0" class="small">SQUARE</text>
+    <text x="1040" y="0" class="small">BLACK / WHITE</text>
+    <text x="1320" y="0" class="small">DESIGN READ</text>
+  </g>
+
+  <!-- Row 1 -->
+  <g transform="translate(70 245)">
+    <rect width="1660" height="360" rx="30" class="card"/>
+    <text x="30" y="55" class="label">01  SUNRISE CANVAS</text>
+    <g transform="translate(45 95) scale(2.1)"><use href="#mark-sunrise"/></g>
+    <g transform="translate(350 112)">
+      <use href="#mark-sunrise" transform="scale(.78)"/>
+      <text x="88" y="48" class="wordmark">Faith Canvas</text>
+      <text x="90" y="80" class="note">Bible journaling + verse art</text>
+    </g>
+    <g transform="translate(800 96)">
+      <rect width="150" height="150" rx="28" fill="#fff7e8" stroke="#f4b548" stroke-width="6"/>
+      <use href="#mark-sunrise" transform="translate(29 24)"/>
+      <text x="28" y="132" class="small">FAITH</text>
+    </g>
+    <g transform="translate(1080 96)">
+      <use href="#bw-mark" transform="scale(1.6)"/>
+    </g>
+    <text x="1320" y="118" class="note">Most app-icon ready. Warm, bright, spiritual without feeling heavy.</text>
+    <text x="1320" y="152" class="note">Best for: polished launch, App Store, parents + kids.</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g transform="translate(70 635)">
+    <rect width="1660" height="360" rx="30" class="card"/>
+    <text x="30" y="55" class="label">02  GRACE FRAME</text>
+    <g transform="translate(45 95) scale(2.1)"><use href="#mark-frame"/></g>
+    <g transform="translate(350 112)">
+      <use href="#mark-frame" transform="scale(.78)"/>
+      <text x="88" y="48" class="wordmark">Faith Canvas</text>
+      <text x="90" y="80" class="note">Create, pray, remember</text>
+    </g>
+    <g transform="translate(800 96)">
+      <rect width="150" height="150" rx="28" fill="#88a77d"/>
+      <rect x="40" y="32" width="70" height="82" rx="12" class="cream"/>
+      <path d="M75 46 V92 M59 68 H91" fill="none" stroke="#88a77d" stroke-width="10" stroke-linecap="round"/>
+      <text x="37" y="138" class="small" fill="#fff7e8">GRACE</text>
+    </g>
+    <g transform="translate(1080 96)">
+      <rect width="148" height="148" rx="26" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+      <rect x="41" y="31" width="66" height="78" rx="11" fill="#111111"/>
+      <path d="M74 47 V91 M58 69 H90" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+    </g>
+    <text x="1320" y="118" class="note">Simple, confident, clean. More “brand” than playful.</text>
+    <text x="1320" y="152" class="note">Best for: long-term product polish, less kid-specific.</text>
+  </g>
+
+  <!-- Row 3 -->
+  <g transform="translate(70 1025)">
+    <rect width="1660" height="360" rx="30" class="card"/>
+    <text x="30" y="55" class="label">03  FAITH DOODLES</text>
+    <g transform="translate(45 95) scale(2.1)"><use href="#mark-doodles"/></g>
+    <g transform="translate(350 112)">
+      <use href="#mark-doodles" transform="scale(.78)"/>
+      <text x="88" y="48" class="wordmark-play">Faith Canvas</text>
+      <text x="90" y="80" class="note">Verses, prayers, doodles</text>
+    </g>
+    <g transform="translate(800 96)">
+      <rect width="150" height="150" rx="28" fill="#ffe1d6"/>
+      <path d="M42 93 C57 78, 69 78, 79 93 C89 78, 101 78, 116 93" fill="none" stroke="#3d2b1c" stroke-width="9" stroke-linecap="round"/>
+      <path d="M78 39 V82 M60 59 H96" fill="none" stroke="#3d2b1c" stroke-width="10" stroke-linecap="round"/>
+      <path d="M44 47 C38 34, 57 28, 62 43 C67 28, 86 34, 80 47 C74 60, 62 67, 62 67 C62 67, 50 60, 44 47 Z" fill="#e98672"/>
+      <text x="42" y="137" class="small">DOODLE</text>
+    </g>
+    <g transform="translate(1080 96)">
+      <rect width="148" height="148" rx="26" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+      <path d="M42 93 C57 78, 69 78, 79 93 C89 78, 101 78, 116 93" fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round"/>
+      <path d="M78 39 V82 M60 59 H96" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/>
+      <path d="M44 47 C38 34, 57 28, 62 43 C67 28, 86 34, 80 47 C74 60, 62 67, 62 67 C62 67, 50 60, 44 47 Z" fill="#111111"/>
+    </g>
+    <text x="1320" y="118" class="note">Most fun and 12-year-old friendly. More creative journal energy.</text>
+    <text x="1320" y="152" class="note">Best for: stickers, verse art, playful onboarding.</text>
+  </g>
+
+  <!-- Row 4 -->
+  <g transform="translate(70 1415)">
+    <rect width="1660" height="360" rx="30" class="card"/>
+    <text x="30" y="55" class="label">04  PORCHLIGHT PRAYER</text>
+    <g transform="translate(45 95) scale(2.1)"><use href="#mark-porchlight"/></g>
+    <g transform="translate(350 112)">
+      <use href="#mark-porchlight" transform="scale(.78)"/>
+      <text x="88" y="48" class="wordmark">Faith Canvas</text>
+      <text x="90" y="80" class="note">A quiet place to pray</text>
+    </g>
+    <g transform="translate(800 96)">
+      <rect width="150" height="150" rx="28" fill="#8bbdd0"/>
+      <path d="M44 58 H106 L96 116 H54 Z" class="cream"/>
+      <path d="M56 58 C57 37, 93 37, 94 58" fill="none" stroke="#3d2b1c" stroke-width="8" stroke-linecap="round"/>
+      <path d="M75 66 V96 M60 81 H90" fill="none" stroke="#f4b548" stroke-width="9" stroke-linecap="round"/>
+      <text x="44" y="138" class="small" fill="#fff7e8">LIGHT</text>
+    </g>
+    <g transform="translate(1080 96)">
+      <rect width="148" height="148" rx="26" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+      <path d="M44 58 H106 L96 116 H54 Z" fill="#111111"/>
+      <path d="M56 58 C57 37, 93 37, 94 58" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+      <path d="M75 66 V96 M60 81 H90" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+    </g>
+    <text x="1320" y="118" class="note">Southern warmth without saying “y’all.” Gentle and safe.</text>
+    <text x="1320" y="152" class="note">Best for: devotional calm, prayer-first positioning.</text>
+  </g>
+
+  <!-- Row 5 -->
+  <g transform="translate(70 1805)">
+    <rect width="1660" height="360" rx="30" class="card"/>
+    <text x="30" y="55" class="label">05  LIVING VERSE</text>
+    <g transform="translate(45 95) scale(2.1)"><use href="#mark-leaf"/></g>
+    <g transform="translate(350 112)">
+      <use href="#mark-leaf" transform="scale(.78)"/>
+      <text x="88" y="48" class="wordmark">Faith Canvas</text>
+      <text x="90" y="80" class="note">Grow faith one verse at a time</text>
+    </g>
+    <g transform="translate(800 96)">
+      <rect width="150" height="150" rx="28" fill="#fff7e8" stroke="#88a77d" stroke-width="6"/>
+      <rect x="37" y="31" width="76" height="76" rx="16" fill="#88a77d"/>
+      <path d="M52 90 C65 75, 85 77, 99 90 L99 103 C84 95, 66 95, 52 103 Z" fill="#fff7e8"/>
+      <path d="M75 42 V72 M59 57 H91" fill="none" stroke="#fff7e8" stroke-width="10" stroke-linecap="round"/>
+      <path d="M92 43 C110 37, 114 58, 96 64 C90 56, 89 49, 92 43 Z" fill="#f4b548"/>
+      <text x="45" y="137" class="small">GROW</text>
+    </g>
+    <g transform="translate(1080 96)">
+      <rect width="148" height="148" rx="26" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+      <rect x="37" y="31" width="76" height="76" rx="16" fill="#111111"/>
+      <path d="M52 90 C65 75, 85 77, 99 90 L99 103 C84 95, 66 95, 52 103 Z" fill="#ffffff"/>
+      <path d="M75 42 V72 M59 57 H91" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+      <path d="M92 43 C110 37, 114 58, 96 64 C90 56, 89 49, 92 43 Z" fill="#111111"/>
+    </g>
+    <text x="1320" y="118" class="note">Softest and most nature-inspired. Feels thoughtful, not loud.</text>
+    <text x="1320" y="152" class="note">Best for: growth, daily rhythm, long-term spiritual journey.</text>
+  </g>
+
+  <text x="90" y="2225" class="subtitle">Recommendation: start with 01 for launch polish, 03 for kid delight, or combine 01’s icon discipline with 03’s playful wordmark.</text>
+</svg>

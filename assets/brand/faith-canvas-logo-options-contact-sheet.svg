@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1600" viewBox="0 0 2400 1600">
+  <defs>
+    <style>
+      .bg { fill: #fbf4e7; }
+      .card { fill: #fffaf1; stroke: #ead9bd; stroke-width: 2; }
+      .title { fill: #392819; font-family: Georgia, serif; font-size: 60px; font-weight: 700; }
+      .subtitle { fill: #785e43; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 24px; }
+      .label { fill: #553f2a; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 23px; font-weight: 800; letter-spacing: .04em; }
+      .note { fill: #755f48; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 18px; }
+      .small { fill: #7b684f; font-family: Avenir Next, Trebuchet MS, Arial, sans-serif; font-size: 16px; letter-spacing: .03em; }
+      .wordmark { fill: #3d2b1c; font-family: Georgia, serif; font-size: 36px; font-weight: 700; }
+      .wordmark-play { fill: #3d2b1c; font-family: Trebuchet MS, Avenir Next, Arial, sans-serif; font-size: 35px; font-weight: 800; letter-spacing: -.02em; }
+      .cream { fill: #fff7e8; }
+      .honey { fill: #f4b548; }
+      .coral { fill: #e98672; }
+      .sage { fill: #88a77d; }
+      .sky { fill: #8bbdd0; }
+      .ink { fill: #3d2b1c; }
+      .line-soft { fill: none; stroke: #6d4b2f; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+      .line-white { fill: none; stroke: #fff7e8; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+
+    <g id="sunrise">
+      <rect x="0" y="0" width="92" height="92" rx="24" class="honey"/>
+      <path d="M19 59 C30 52, 41 52, 46 61 C51 52, 62 52, 73 59 L73 71 C61 65, 52 66, 46 75 C40 66, 31 65, 19 71 Z" class="cream"/>
+      <path d="M46 20 V44 M35 32 H57" class="line-white"/>
+      <path d="M23 49 C32 39, 60 39, 69 49" fill="none" stroke="#e98672" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="46" cy="32" r="7" fill="#fff7e8"/>
+    </g>
+    <g id="frame">
+      <rect x="0" y="0" width="92" height="92" rx="24" class="sage"/>
+      <rect x="19" y="17" width="54" height="58" rx="9" class="cream"/>
+      <path d="M46 28 V61 M34 42 H58" fill="none" stroke="#88a77d" stroke-width="8" stroke-linecap="round"/>
+      <path d="M25 67 C36 61, 57 61, 68 67" fill="none" stroke="#e98672" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="66" cy="23" r="6" class="honey"/>
+    </g>
+    <g id="doodles">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#ffe1d6"/>
+      <path d="M24 62 C33 53, 40 53, 46 62 C52 53, 59 53, 68 62" class="line-soft"/>
+      <path d="M46 23 V50 M36 35 H56" fill="none" stroke="#3d2b1c" stroke-width="7" stroke-linecap="round"/>
+      <path d="M27 31 C23 23, 34 19, 37 27 C40 19, 51 23, 47 31 C44 38, 37 42, 37 42 C37 42, 30 38, 27 31 Z" fill="#e98672"/>
+      <path d="M61 58 L75 72" fill="none" stroke="#8bbdd0" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="75" cy="72" r="4" class="sky"/>
+    </g>
+    <g id="porch">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#8bbdd0"/>
+      <path d="M25 38 H67 L60 74 H32 Z" class="cream"/>
+      <path d="M34 38 C35 25, 57 25, 58 38" fill="none" stroke="#3d2b1c" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 43 V63 M37 53 H55" fill="none" stroke="#f4b548" stroke-width="6" stroke-linecap="round"/>
+      <path d="M25 76 H67" fill="none" stroke="#3d2b1c" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="46" cy="54" r="18" fill="#f4b548" opacity=".35"/>
+    </g>
+    <g id="leaf">
+      <rect x="0" y="0" width="92" height="92" rx="24" fill="#fff7e8"/>
+      <rect x="18" y="18" width="56" height="56" rx="12" fill="#88a77d"/>
+      <path d="M29 58 C39 47, 53 48, 63 58 L63 67 C52 61, 40 61, 29 67 Z" fill="#fff7e8"/>
+      <path d="M46 25 V49 M36 37 H56" fill="none" stroke="#fff7e8" stroke-width="7" stroke-linecap="round"/>
+      <path d="M58 28 C71 24, 73 39, 61 43 C57 37, 56 32, 58 28 Z" fill="#f4b548"/>
+      <path d="M58 42 C53 50, 48 57, 45 64" fill="none" stroke="#3d2b1c" stroke-width="4" stroke-linecap="round"/>
+    </g>
+  </defs>
+
+  <rect width="2400" height="1600" class="bg"/>
+  <text x="70" y="92" class="title">Faith Canvas Logo Options</text>
+  <text x="72" y="132" class="subtitle">Five directions shown in app icon, horizontal lockup, square badge, and black/white format.</text>
+
+  <!-- column headers -->
+  <text x="85" y="185" class="small">APP ICON</text>
+  <text x="315" y="185" class="small">HORIZONTAL</text>
+  <text x="790" y="185" class="small">SQUARE</text>
+  <text x="1010" y="185" class="small">BLACK / WHITE</text>
+  <text x="1245" y="185" class="small">DESIGNER READ</text>
+
+  <!-- helper: repeated row baseline 220 + 270n -->
+  <g transform="translate(70 210)">
+    <rect width="2260" height="235" rx="26" class="card"/>
+    <text x="25" y="44" class="label">01  SUNRISE CANVAS</text>
+    <use href="#sunrise" x="45" y="70" transform="scale(1.45)"/>
+    <use href="#sunrise" x="230" y="75" transform="scale(.9)"/>
+    <text x="335" y="122" class="wordmark">Faith Canvas</text>
+    <text x="337" y="153" class="note">Bible journaling + verse art</text>
+    <rect x="720" y="58" width="130" height="130" rx="28" fill="#fff7e8" stroke="#f4b548" stroke-width="5"/>
+    <use href="#sunrise" x="755" y="79" transform="scale(.72)"/>
+    <text x="755" y="177" class="small">FAITH</text>
+    <rect x="950" y="58" width="130" height="130" rx="28" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+    <path d="M982 141 C998 132, 1014 132, 1025 145 C1036 132, 1053 132, 1068 141 L1068 156 C1049 148, 1036 149, 1025 163 C1014 149, 1001 148, 982 156 Z" fill="#111111"/>
+    <path d="M1025 78 V116 M1005 97 H1045" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/>
+    <text x="1185" y="98" class="note">Most app-icon ready. Warm, bright, and spiritually clear.</text>
+    <text x="1185" y="132" class="note">Best if we want a polished launch mark that works for parents and kids.</text>
+  </g>
+
+  <g transform="translate(70 475)">
+    <rect width="2260" height="235" rx="26" class="card"/>
+    <text x="25" y="44" class="label">02  GRACE FRAME</text>
+    <use href="#frame" x="45" y="70" transform="scale(1.45)"/>
+    <use href="#frame" x="230" y="75" transform="scale(.9)"/>
+    <text x="335" y="122" class="wordmark">Faith Canvas</text>
+    <text x="337" y="153" class="note">Create, pray, remember</text>
+    <rect x="720" y="58" width="130" height="130" rx="28" fill="#88a77d"/>
+    <rect x="762" y="90" width="46" height="60" rx="9" class="cream"/>
+    <path d="M785 98 V141 M770 120 H800" fill="none" stroke="#88a77d" stroke-width="9" stroke-linecap="round"/>
+    <text x="752" y="177" class="small" fill="#fff7e8">GRACE</text>
+    <rect x="950" y="58" width="130" height="130" rx="28" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+    <rect x="995" y="90" width="42" height="60" rx="8" fill="#111111"/>
+    <path d="M1016 99 V140 M1001 120 H1031" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+    <text x="1185" y="98" class="note">Clean and confident. More brand-system than playful journal.</text>
+    <text x="1185" y="132" class="note">Best if we want a mature product that can grow beyond kids.</text>
+  </g>
+
+  <g transform="translate(70 740)">
+    <rect width="2260" height="235" rx="26" class="card"/>
+    <text x="25" y="44" class="label">03  FAITH DOODLES</text>
+    <use href="#doodles" x="45" y="70" transform="scale(1.45)"/>
+    <use href="#doodles" x="230" y="75" transform="scale(.9)"/>
+    <text x="335" y="122" class="wordmark-play">Faith Canvas</text>
+    <text x="337" y="153" class="note">Verses, prayers, doodles</text>
+    <rect x="720" y="58" width="130" height="130" rx="28" fill="#ffe1d6"/>
+    <path d="M760 139 C773 127, 784 127, 794 140 C804 127, 815 127, 828 139" fill="none" stroke="#3d2b1c" stroke-width="8" stroke-linecap="round"/>
+    <path d="M794 89 V128 M779 108 H809" fill="none" stroke="#3d2b1c" stroke-width="9" stroke-linecap="round"/>
+    <path d="M751 95 C746 83, 763 78, 768 91 C773 78, 790 83, 785 95 C780 108, 768 114, 768 114 C768 114, 756 108, 751 95 Z" fill="#e98672"/>
+    <text x="750" y="177" class="small">DOODLE</text>
+    <rect x="950" y="58" width="130" height="130" rx="28" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+    <path d="M990 139 C1003 127, 1014 127, 1024 140 C1034 127, 1045 127, 1058 139" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+    <path d="M1024 89 V128 M1009 108 H1039" fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round"/>
+    <path d="M981 95 C976 83, 993 78, 998 91 C1003 78, 1020 83, 1015 95 C1010 108, 998 114, 998 114 C998 114, 986 108, 981 95 Z" fill="#111111"/>
+    <text x="1185" y="98" class="note">Most kid-friendly and fun. Feels creative, sticker-ready, and warm.</text>
+    <text x="1185" y="132" class="note">Best if we want “Faith Canvas” to still feel like a playful journaling app.</text>
+  </g>
+
+  <g transform="translate(70 1005)">
+    <rect width="2260" height="235" rx="26" class="card"/>
+    <text x="25" y="44" class="label">04  PORCHLIGHT PRAYER</text>
+    <use href="#porch" x="45" y="70" transform="scale(1.45)"/>
+    <use href="#porch" x="230" y="75" transform="scale(.9)"/>
+    <text x="335" y="122" class="wordmark">Faith Canvas</text>
+    <text x="337" y="153" class="note">A quiet place to pray</text>
+    <rect x="720" y="58" width="130" height="130" rx="28" fill="#8bbdd0"/>
+    <path d="M760 101 H810 L802 158 H768 Z" class="cream"/>
+    <path d="M769 101 C771 82, 799 82, 801 101" fill="none" stroke="#3d2b1c" stroke-width="7" stroke-linecap="round"/>
+    <path d="M785 109 V145 M770 128 H800" fill="none" stroke="#f4b548" stroke-width="8" stroke-linecap="round"/>
+    <text x="760" y="177" class="small" fill="#fff7e8">LIGHT</text>
+    <rect x="950" y="58" width="130" height="130" rx="28" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+    <path d="M990 101 H1040 L1032 158 H998 Z" fill="#111111"/>
+    <path d="M999 101 C1001 82, 1029 82, 1031 101" fill="none" stroke="#111111" stroke-width="7" stroke-linecap="round"/>
+    <path d="M1015 109 V145 M1000 128 H1030" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+    <text x="1185" y="98" class="note">Southern warmth without leaning into a joke. Calm and comforting.</text>
+    <text x="1185" y="132" class="note">Best if we want the app to feel like a safe devotional corner.</text>
+  </g>
+
+  <g transform="translate(70 1270)">
+    <rect width="2260" height="235" rx="26" class="card"/>
+    <text x="25" y="44" class="label">05  LIVING VERSE</text>
+    <use href="#leaf" x="45" y="70" transform="scale(1.45)"/>
+    <use href="#leaf" x="230" y="75" transform="scale(.9)"/>
+    <text x="335" y="122" class="wordmark">Faith Canvas</text>
+    <text x="337" y="153" class="note">Grow faith one verse at a time</text>
+    <rect x="720" y="58" width="130" height="130" rx="28" fill="#fff7e8" stroke="#88a77d" stroke-width="5"/>
+    <rect x="762" y="88" width="50" height="50" rx="11" fill="#88a77d"/>
+    <path d="M770 139 C781 127, 795 129, 804 139 L804 149 C794 143, 781 143, 770 149 Z" fill="#fff7e8"/>
+    <path d="M787 94 V126 M775 110 H799" fill="none" stroke="#fff7e8" stroke-width="7" stroke-linecap="round"/>
+    <path d="M802 95 C815 90, 818 106, 806 111 C802 105, 800 99, 802 95 Z" fill="#f4b548"/>
+    <text x="762" y="177" class="small">GROW</text>
+    <rect x="950" y="58" width="130" height="130" rx="28" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+    <rect x="992" y="88" width="50" height="50" rx="11" fill="#111111"/>
+    <path d="M1000 139 C1011 127, 1025 129, 1034 139 L1034 149 C1024 143, 1011 143, 1000 149 Z" fill="#ffffff"/>
+    <path d="M1017 94 V126 M1005 110 H1029" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+    <path d="M1032 95 C1045 90, 1048 106, 1036 111 C1032 105, 1030 99, 1032 95 Z" fill="#111111"/>
+    <text x="1185" y="98" class="note">Softest and most nature-inspired. Thoughtful, gentle, less trendy.</text>
+    <text x="1185" y="132" class="note">Best if we want daily growth and spiritual journey as the main promise.</text>
+  </g>
+
+  <text x="72" y="1562" class="subtitle">Designer recommendation: choose 01 for the primary app icon, 03 for kid delight, or merge 01’s icon structure with 03’s playful warmth.</text>
+</svg>

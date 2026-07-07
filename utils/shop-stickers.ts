@@ -15,10 +15,8 @@ export type ShopStickerPack = {
   subtitle: string;
   category: string;
   tag: string;
-  price: string;
-  productId: string;
   stickers: ShopSticker[];
-  isTestUnlocked?: boolean;
+  isIncluded?: boolean;
 };
 
 export const FLORAL_FAITH_STICKERS: ShopSticker[] = [
@@ -441,28 +439,23 @@ export const SHOP_STICKER_PACKS: ShopStickerPack[] = [
     title: 'Floral Faith Stickers',
     subtitle: '21 floral word stickers for decorating verse cards and journal pages',
     category: 'Stickers',
-    tag: 'Test Pack',
-    price: 'Free test',
-    productId: 'floral_faith_stickers',
+    tag: 'Included',
     stickers: FLORAL_FAITH_STICKERS,
-    isTestUnlocked: true,
+    isIncluded: true,
   },
   {
     id: 'scripture-verse-label-stickers',
     title: 'Scripture Verse Label Stickers',
     subtitle: '30 scripture label stickers for verse cards, Bible notes, and journals',
     category: 'Stickers',
-    tag: 'New',
-    price: '$0.99',
-    productId: 'scripture_verse_label_stickers',
+    tag: 'Included',
     stickers: SCRIPTURE_VERSE_LABEL_STICKERS,
-    isTestUnlocked: true,
+    isIncluded: true,
   },
 ];
 
-export const TEST_UNLOCKED_STICKER_PACKS = SHOP_STICKER_PACKS.filter(
-  (pack) => pack.isTestUnlocked
-);
+export const INCLUDED_STICKER_PACKS = SHOP_STICKER_PACKS.filter((pack) => pack.isIncluded);
+export const TEST_UNLOCKED_STICKER_PACKS = INCLUDED_STICKER_PACKS;
 
 export const SHOP_STICKERS = [
   ...FLORAL_FAITH_STICKERS,

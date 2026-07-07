@@ -38,6 +38,7 @@ api/logs/*.jsonl
 *.tsbuildinfo
 
 app-example
+backup/
 
 # generated native folders
 /ios

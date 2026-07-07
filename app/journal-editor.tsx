@@ -5,20 +5,20 @@ import { useAppSettings } from '@/utils/app-settings';
 export default function JournalScreen() {
   const { template } = useLocalSearchParams<{ template?: string }>();
   const router = useRouter();
-  const { colorTheme } = useAppSettings();
+  const { colorTheme, t } = useAppSettings();
 
   const templateLabel =
     template === 'prayer'
-      ? 'Prayer Journal'
+      ? t('prayerJournal')
       : template === 'bible-study'
-        ? 'Bible Study'
+        ? t('bibleStudy')
         : template === 'daily-devotional'
-          ? 'Daily Devotional'
-          : 'Blank Journal';
+          ? t('dailyDevotional')
+          : t('journalBlank');
 
   return (
     <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
-      <Text style={styles.title}>Journal ✍️</Text>
+      <Text style={styles.title}>{t('journalTitle')}</Text>
 
       <Text style={styles.subtitle}>
         {templateLabel}
@@ -38,7 +38,7 @@ export default function JournalScreen() {
           }
         }}
         style={[styles.button, { backgroundColor: colorTheme.toolbarBackground }]}>
-        <Text style={styles.buttonText}>+ New Page</Text>
+        <Text style={styles.buttonText}>{t('journalNewPage')}</Text>
       </TouchableOpacity>
     </View>
   );

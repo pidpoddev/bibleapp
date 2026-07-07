@@ -1,16 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
-import { useAppSettings } from '@/utils/app-settings';
-import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { useAppSettings, type AppLanguageKey } from '@/utils/app-settings';
+import {
+  JOURNAL_INDEX_KEY,
+  LEGACY_SAVED_DESIGNS_STORAGE_KEY,
+  SAVED_DESIGNS_BACKUP_STORAGE_KEY,
+  SAVED_DESIGNS_STORAGE_KEY,
+} from '@/utils/storage-keys';
+import { FocusedScreenView } from '@/components/focused-screen-view';
 import {
   getHydratedJournalEntries,
   getJournalEntryStorageKey,
   type HydratedJournalEntry,
 } from '@/utils/journal-storage';
+import { useResponsiveLayout } from '@/utils/responsive-layout';
 
 const FAVORITES_ICON = require('../../assets/images/toolbar-icons/favorites-tab.png');
 const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
@@ -26,6 +33,7 @@ type JournalFavorite = {
   preview: string;
   updatedAt: number;
   isFavorite?: boolean;
+  editor?: 'classic' | 'studio';
 };
 
 type UnifiedFavorite = {
@@ -36,6 +44,7 @@ type UnifiedFavorite = {
   preview: string;
   updatedAt: number;
   entryId: string;
+  editor?: 'classic' | 'studio';
   searchableText: string;
 };
 
@@ -52,13 +61,17 @@ function safeParseArray<T>(value: string | null): T[] {
   }
 }
 
-function formatSavedAt(value: string | number) {
+function getDateLocale(language: AppLanguageKey) {
+  return language === 'es' ? 'es' : undefined;
+}
+
+function formatSavedAt(value: string | number, language: AppLanguageKey) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return '';
   }
 
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(getDateLocale(language), {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -90,19 +103,67 @@ function hasVisibleFavoriteContent(entry: HydratedJournalEntry) {
   );
 }
 
+function getStudioDesignKey(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null;
+    }
+
+    const design = (parsed as { design?: unknown }).design;
+    if (typeof design !== 'object' || design === null) {
+      return null;
+    }
+
+    const key = (design as { key?: unknown }).key;
+    return typeof key === 'string' && key.length > 0 ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+async function removeSavedStudioDesign(designKey: string | null) {
+  if (!designKey) {
+    return;
+  }
+
+  await Promise.all(
+    [
+      SAVED_DESIGNS_STORAGE_KEY,
+      SAVED_DESIGNS_BACKUP_STORAGE_KEY,
+      LEGACY_SAVED_DESIGNS_STORAGE_KEY,
+    ].map(async (storageKey) => {
+      const savedValue = await AsyncStorage.getItem(storageKey);
+      const savedDesigns = safeParseArray<{ key?: unknown }>(savedValue);
+
+      if (savedDesigns.length === 0) {
+        return;
+      }
+
+      const nextDesigns = savedDesigns.filter((design) => design.key !== designKey);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(nextDesigns));
+    })
+  );
+}
+
 export default function FavoritesScreen() {
   const router = useRouter();
-  const { colorTheme, t } = useAppSettings();
+  const { colorTheme, language, t } = useAppSettings();
+  const layout = useResponsiveLayout();
   const [favorites, setFavorites] = useState<UnifiedFavorite[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   const journalTypeMap = useMemo(
     () => ({
-      prayer: { title: t('prayerJournal'), subtitle: 'Prayer Journal' },
-      'bible-study': { title: t('bibleStudy'), subtitle: 'Bible Study' },
-      'church-day': { title: t('churchDay'), subtitle: 'Church Day' },
-      'daily-devotional': { title: t('dailyDevotional'), subtitle: 'Daily Devotional' },
-      'journal-studio': { title: t('tabStudio'), subtitle: 'Journal Studio' },
+      prayer: { title: t('prayerJournal'), subtitle: t('prayerJournal') },
+      'bible-study': { title: t('bibleStudy'), subtitle: t('bibleStudy') },
+      'church-day': { title: t('churchDay'), subtitle: t('churchDay') },
+      'daily-devotional': { title: t('dailyDevotional'), subtitle: t('dailyDevotional') },
+      'journal-studio': { title: t('tabStudio'), subtitle: t('tabStudio') },
     }),
     [t]
   );
@@ -126,11 +187,12 @@ export default function FavoritesScreen() {
           preview: entry.preview ?? '',
           updatedAt: entry.updatedAt,
           entryId: entry.id,
+          editor: entry.editor,
           searchableText: [
             entry.searchableText,
             journalTypeMap[entry.type].title,
             journalTypeMap[entry.type].subtitle,
-            formatSavedAt(entry.updatedAt),
+            formatSavedAt(entry.updatedAt, language.key),
           ]
             .join(' ')
             .toLowerCase(),
@@ -145,7 +207,7 @@ export default function FavoritesScreen() {
       console.warn('Failed to load favorites', error);
       setFavorites([]);
     }
-  }, [journalTypeMap]);
+  }, [journalTypeMap, language.key]);
 
   const visibleFavorites = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -167,17 +229,51 @@ export default function FavoritesScreen() {
     async (item: UnifiedFavorite) => {
       const journalData = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
       const journalEntries = safeParseArray<JournalFavorite>(journalData);
-      const nextJournalEntries = journalEntries.filter((entry) => entry.id !== item.entryId);
-      await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextJournalEntries));
+      const entryStorageKey = getJournalEntryStorageKey({ id: item.entryId, type: item.type });
+      const entryValue = await AsyncStorage.getItem(entryStorageKey);
+      const nextJournalEntries = journalEntries.filter(
+        (entry) => !(entry.id === item.entryId && entry.type === item.type)
+      );
 
-      await AsyncStorage.removeItem(getJournalEntryStorageKey({ id: item.entryId, type: item.type }));
+      await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextJournalEntries));
+      await AsyncStorage.removeItem(entryStorageKey);
+
+      if (item.editor === 'studio' || item.type === 'journal-studio') {
+        await removeSavedStudioDesign(getStudioDesignKey(entryValue));
+      }
 
       setFavorites((current) => current.filter((favorite) => favorite.id !== item.id));
     },
     []
   );
 
+  const requestDeleteFavorite = useCallback(
+    (item: UnifiedFavorite) => {
+      const deleteNow = () => {
+        void deleteFavorite(item);
+      };
+
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        if (window.confirm(t('favoritesDeleteMessage'))) {
+          deleteNow();
+        }
+        return;
+      }
+
+      Alert.alert(t('favoritesDeleteTitle'), t('favoritesDeleteMessage'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: deleteNow },
+      ]);
+    },
+    [deleteFavorite, t]
+  );
+
   const openFavorite = (item: UnifiedFavorite) => {
+    if (item.editor === 'studio' || item.type === 'journal-studio') {
+      router.push({ pathname: '/studio', params: { entryId: item.entryId, entryType: item.type, saveTarget: item.type } });
+      return;
+    }
+
     if (item.type === 'prayer') {
       router.push({ pathname: '/prayer-journal', params: { entryId: item.entryId } });
       return;
@@ -197,14 +293,23 @@ export default function FavoritesScreen() {
       router.push({ pathname: '/daily-devotional-journal', params: { entryId: item.entryId } });
       return;
     }
-
-    if (item.type === 'journal-studio') {
-      router.push({ pathname: '/studio', params: { entryId: item.entryId } });
-    }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
+    <FocusedScreenView
+      style={[
+        styles.container,
+        layout.isTablet
+          ? [
+              styles.tabletContainer,
+              {
+                maxWidth: layout.contentMaxWidth,
+                paddingHorizontal: layout.pagePaddingHorizontal,
+              },
+            ]
+          : null,
+        { backgroundColor: colorTheme.screenBackground },
+      ]}>
       <View style={[styles.heroCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
         <View style={styles.titleRow}>
           <Image source={FAVORITES_ICON} resizeMode="contain" style={styles.titleIcon} />
@@ -222,7 +327,7 @@ export default function FavoritesScreen() {
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search saved entries"
+          placeholder={t('favoritesSearchPlaceholder')}
           placeholderTextColor="#A99D96"
           autoCapitalize="none"
           autoCorrect={false}
@@ -232,7 +337,7 @@ export default function FavoritesScreen() {
           <Pressable
             onPress={() => setSearchQuery('')}
             accessibilityRole="button"
-            accessibilityLabel="Clear saved-entry search"
+            accessibilityLabel={t('favoritesClearSearch')}
             style={styles.clearSearchButton}>
             <Ionicons name="close-circle" size={18} color="#8D7C70" />
           </Pressable>
@@ -244,18 +349,22 @@ export default function FavoritesScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
+          layout.isTablet ? styles.tabletListContent : null,
           favorites.length === 0 ? styles.emptyListContent : null,
         ]}
+        numColumns={layout.isTablet ? 2 : 1}
+        key={layout.isTablet ? 'tablet-favorites' : 'phone-favorites'}
+        columnWrapperStyle={layout.isTablet ? styles.tabletColumnWrapper : undefined}
         renderItem={({ item }) => {
           const badge = getTypeBadge(item.type);
           const renderDeleteAction = () => (
             <RectButton
               style={styles.deleteAction}
               onPress={() => {
-                void deleteFavorite(item);
+                requestDeleteFavorite(item);
               }}>
               <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.deleteActionText}>Delete</Text>
+              <Text style={styles.deleteActionText}>{t('delete')}</Text>
             </RectButton>
           );
 
@@ -266,7 +375,11 @@ export default function FavoritesScreen() {
               rightThreshold={38}>
               <Pressable
                 onPress={() => openFavorite(item)}
-                style={[styles.card, { backgroundColor: badge.soft, borderColor: colorTheme.border }]}>
+                style={[
+                  styles.card,
+                  layout.isTablet ? styles.tabletCard : null,
+                  { backgroundColor: badge.soft, borderColor: colorTheme.border },
+                ]}>
                 <View style={styles.cardTopRow}>
                   <View
                     style={[
@@ -284,8 +397,19 @@ export default function FavoritesScreen() {
                       <Text style={styles.cardType}>{item.subtitle}</Text>
                       <Ionicons name={badge.icon} size={16} color={badge.tint} />
                     </View>
-                    <Text style={styles.cardDate}>{formatSavedAt(item.updatedAt)}</Text>
+                    <Text style={styles.cardDate}>{formatSavedAt(item.updatedAt, language.key)}</Text>
                   </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('favoritesDeleteAccessibility')}
+                    hitSlop={8}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      requestDeleteFavorite(item);
+                    }}
+                    style={styles.cardDeleteButton}>
+                    <Ionicons name="trash-outline" size={17} color="#B85F62" />
+                  </Pressable>
                   <Ionicons name="chevron-forward" size={18} color={badge.tint} />
                 </View>
                 <Text numberOfLines={1} style={styles.cardTitle}>{item.title}</Text>
@@ -297,16 +421,16 @@ export default function FavoritesScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>
-              {favorites.length > 0 ? 'No saved entries found' : t('favoritesEmptyTitle')}
+              {favorites.length > 0 ? t('favoritesNoSearchResultsTitle') : t('favoritesEmptyTitle')}
             </Text>
             <Text style={styles.emptyText}>
-              {favorites.length > 0 ? 'Try a different word, phrase, reference, or journal type.' : t('favoritesEmptyText')}
+              {favorites.length > 0 ? t('favoritesNoSearchResultsText') : t('favoritesEmptyText')}
             </Text>
           </View>
         }
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </FocusedScreenView>
   );
 }
 
@@ -316,6 +440,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDF9',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'web' ? 20 : 68,
+  },
+  tabletContainer: {
+    width: '100%',
+    alignSelf: 'center',
   },
   searchBox: {
     minHeight: 46,
@@ -371,6 +499,12 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
   },
+  tabletListContent: {
+    gap: 12,
+  },
+  tabletColumnWrapper: {
+    gap: 12,
+  },
   emptyListContent: {
     flexGrow: 1,
   },
@@ -384,6 +518,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
+  },
+  tabletCard: {
+    flex: 1,
+    minHeight: 150,
+    marginBottom: 0,
   },
   deleteAction: {
     width: 88,
@@ -441,6 +580,16 @@ const styles = StyleSheet.create({
     color: '#968B84',
     marginTop: 3,
   },
+  cardDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.62)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    marginRight: 4,
+  },
   cardTitle: {
     fontSize: 15,
     lineHeight: 20,
@@ -458,6 +607,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    alignSelf: 'center',
+    maxWidth: 460,
   },
   emptyTitle: {
     fontSize: 18,

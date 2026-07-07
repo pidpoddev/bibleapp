@@ -13,6 +13,9 @@ export type StickerData = {
 export type NoteData = {
   id: string;
   text: string;
+  label?: string;
+  placeholder?: string;
+  styleKey?: string;
   x: number;
   y: number;
   width: number;
@@ -28,15 +31,33 @@ export type VerseCardData = {
   text: string;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
+  autoSize?: boolean;
   scale: number;
   rotation: number;
   cardColorKey?: string;
+  zIndex: number;
+};
+
+export type DrawingPointData = {
+  x: number;
+  y: number;
+};
+
+export type DrawingStrokeData = {
+  id: string;
+  color: string;
+  width: number;
+  points: DrawingPointData[];
+  zIndex: number;
 };
 
 export type VerseEditorState = {
   verseCards: VerseCardData[];
   stickers: StickerData[];
   notes: NoteData[];
+  drawingStrokes: DrawingStrokeData[];
   backgroundKey: string | null;
   selectedFont: string;
   fontSize: number;
@@ -49,6 +70,7 @@ export const DEFAULT_VERSE_EDITOR_STATE: VerseEditorState = {
   verseCards: [],
   stickers: [],
   notes: [],
+  drawingStrokes: [],
   backgroundKey: null,
   selectedFont: 'Playwrite',
   fontSize: 14,
@@ -98,6 +120,29 @@ function isNoteData(value: unknown): value is NoteData {
   );
 }
 
+function isDrawingStrokeData(value: unknown): value is DrawingStrokeData {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.color === 'string' &&
+    typeof candidate.width === 'number' &&
+    typeof candidate.zIndex === 'number' &&
+    Array.isArray(candidate.points) &&
+    candidate.points.every(
+      (point) =>
+        typeof point === 'object' &&
+        point !== null &&
+        typeof (point as Record<string, unknown>).x === 'number' &&
+        typeof (point as Record<string, unknown>).y === 'number'
+    )
+  );
+}
+
 function isVerseEditorState(value: unknown): value is VerseEditorState {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -112,6 +157,9 @@ function isVerseEditorState(value: unknown): value is VerseEditorState {
     candidate.stickers.every(isStickerData) &&
     Array.isArray(candidate.notes) &&
     candidate.notes.every(isNoteData) &&
+    (typeof candidate.drawingStrokes === 'undefined' ||
+      (Array.isArray(candidate.drawingStrokes) &&
+        candidate.drawingStrokes.every(isDrawingStrokeData))) &&
     (candidate.backgroundKey === null ||
       typeof candidate.backgroundKey === 'string' ||
       typeof candidate.backgroundKey === 'undefined') &&
@@ -158,7 +206,7 @@ function normalizeVerseEditorState(
       ? candidate.noteText.trim()
       : '';
   const normalizedVerseCards = Array.isArray(candidate.verseCards)
-    ? candidate.verseCards.reduce<VerseCardData[]>((accumulator, verseCard) => {
+    ? candidate.verseCards.reduce<VerseCardData[]>((accumulator, verseCard, index) => {
         if (typeof verseCard !== 'object' || verseCard === null) {
           return accumulator;
         }
@@ -180,12 +228,28 @@ function normalizeVerseEditorState(
             text: normalizedVerseCard.text,
             x: normalizedVerseCard.x,
             y: normalizedVerseCard.y,
+            width:
+              typeof normalizedVerseCard.width === 'number'
+                ? normalizedVerseCard.width
+                : undefined,
+            height:
+              typeof normalizedVerseCard.height === 'number'
+                ? normalizedVerseCard.height
+                : undefined,
+            autoSize:
+              typeof normalizedVerseCard.autoSize === 'boolean'
+                ? normalizedVerseCard.autoSize
+                : undefined,
             scale: normalizedVerseCard.scale,
             rotation: normalizedVerseCard.rotation,
             cardColorKey:
               typeof normalizedVerseCard.cardColorKey === 'string'
                 ? normalizedVerseCard.cardColorKey
                 : undefined,
+            zIndex:
+              typeof normalizedVerseCard.zIndex === 'number'
+                ? normalizedVerseCard.zIndex
+                : index + 1,
           });
         }
 
@@ -244,6 +308,18 @@ function normalizeVerseEditorState(
           accumulator.push({
             id: normalizedNote.id,
             text: normalizedNote.text,
+            label:
+              typeof normalizedNote.label === 'string'
+                ? normalizedNote.label
+                : undefined,
+            placeholder:
+              typeof normalizedNote.placeholder === 'string'
+                ? normalizedNote.placeholder
+                : undefined,
+            styleKey:
+              typeof normalizedNote.styleKey === 'string'
+                ? normalizedNote.styleKey
+                : undefined,
             x: normalizedNote.x,
             y: normalizedNote.y,
             width:
@@ -268,6 +344,7 @@ function normalizeVerseEditorState(
           {
             id: 'legacy-note',
             text: legacyNoteText,
+            styleKey: 'butter',
             x: 32,
             y: 220,
             width: 170,
@@ -276,6 +353,44 @@ function normalizeVerseEditorState(
           },
         ]
       : defaults.notes;
+  const normalizedDrawingStrokes = Array.isArray(candidate.drawingStrokes)
+    ? candidate.drawingStrokes.reduce<DrawingStrokeData[]>((accumulator, stroke, index) => {
+        if (typeof stroke !== 'object' || stroke === null) {
+          return accumulator;
+        }
+
+        const normalizedStroke = stroke as Partial<DrawingStrokeData>;
+        const points = Array.isArray(normalizedStroke.points)
+          ? normalizedStroke.points.filter(
+              (point): point is DrawingPointData =>
+                typeof point === 'object' &&
+                point !== null &&
+                typeof (point as Partial<DrawingPointData>).x === 'number' &&
+                typeof (point as Partial<DrawingPointData>).y === 'number'
+            )
+          : [];
+
+        if (
+          typeof normalizedStroke.id === 'string' &&
+          typeof normalizedStroke.color === 'string' &&
+          typeof normalizedStroke.width === 'number' &&
+          points.length > 0
+        ) {
+          accumulator.push({
+            id: normalizedStroke.id,
+            color: normalizedStroke.color,
+            width: normalizedStroke.width,
+            points,
+            zIndex:
+              typeof normalizedStroke.zIndex === 'number'
+                ? normalizedStroke.zIndex
+                : index,
+          });
+        }
+
+        return accumulator;
+      }, [])
+    : defaults.drawingStrokes;
 
   const normalizedHighlightedWords = Array.isArray(highlightedWordsValue)
     ? highlightedWordsValue.reduce<Record<string, HighlightColor>>((accumulator, index) => {
@@ -301,6 +416,7 @@ function normalizeVerseEditorState(
     verseCards: normalizedVerseCards,
     stickers: normalizedStickers,
     notes: normalizedNotes,
+    drawingStrokes: normalizedDrawingStrokes,
     backgroundKey:
       typeof candidate.backgroundKey === 'string'
         ? candidate.backgroundKey

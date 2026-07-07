@@ -39,6 +39,13 @@ const spanishBibleData = bibleEs as SpanishBibleData;
 const englishBookNumberMap = new Map(
   bibleData.map((entry, index) => [entry.book, index + 1] as const)
 );
+const spanishBookNameMap = new Map(
+  bibleData.map((entry, index) => {
+    const bookNumber = index + 1;
+    const spanishBook = spanishBibleData.verses.find((verse) => verse.book === bookNumber);
+    return [entry.book, spanishBook?.book_name ?? entry.book] as const;
+  })
+);
 const spanishVerseTextMap = new Map(
   spanishBibleData.verses.map((entry) => [
     `${entry.book}-${entry.chapter}-${entry.verse}`,
@@ -56,6 +63,10 @@ function findChapter(book: string, chapter: number) {
 
 export function getBooks() {
   return bibleData.map((entry) => entry.book);
+}
+
+export function getBookDisplayName(book: string, language: BibleLanguageKey = 'en') {
+  return language === 'es' ? spanishBookNameMap.get(book) ?? book : book;
 }
 
 export function getChapters(book: string) {

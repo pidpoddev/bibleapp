@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS encrypted_items (
   item_type ENUM(
     'account_session',
     'app_settings',
+    'bible_reading_progress',
     'daily_mood',
     'journal_index',
     'journal_entry',

@@ -4,8 +4,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
-import { useAppSettings } from '@/utils/app-settings';
+import { useAppSettings, type AppLanguageKey, type TranslationKey } from '@/utils/app-settings';
+import { getJournalEntryStorageKey } from '@/utils/journal-storage';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { FocusedScreenView } from '@/components/focused-screen-view';
+import { useResponsiveLayout } from '@/utils/responsive-layout';
 
 type JournalTemplate = {
   key: 'prayer' | 'bible-study' | 'church-day' | 'daily-devotional' | 'journal-studio';
@@ -27,6 +30,7 @@ type JournalLogEntry = {
   preview?: string;
   updatedAt: number;
   isFavorite?: boolean;
+  editor?: 'classic' | 'studio';
   book?: string;
   chapter?: number;
   verse?: number;
@@ -44,6 +48,10 @@ type WeeklyMoodSummary = {
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
 };
+type JournalTranslator = (
+  key: TranslationKey,
+  params?: Record<string, string | number>
+) => string;
 
 const PRAYER_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-prayer.png');
 const BIBLE_STUDY_JOURNAL_ICON = require('../../assets/images/toolbar-icons/journal-bible-study.png');
@@ -58,6 +66,15 @@ const MOOD_LABELS: Record<string, WeeklyMoodSummary> = {
   sad: { label: 'Sad', icon: 'rainy-outline', tint: '#7A86A8' },
   tired: { label: 'Tired', icon: 'moon-outline', tint: '#8A669C' },
   happy: { label: 'Happy', icon: 'sparkles-outline', tint: '#9B7A59' },
+};
+const JOURNAL_MOOD_TRANSLATION_KEYS: Record<string, TranslationKey> = {
+  grateful: 'moodGrateful',
+  anxious: 'moodAnxious',
+  confused: 'moodConfused',
+  peaceful: 'moodPeacefulJournal',
+  sad: 'moodSad',
+  tired: 'moodTired',
+  happy: 'moodHappy',
 };
 
 function safeParseJournalIndex(value: string | null): JournalLogEntry[] {
@@ -121,7 +138,24 @@ function getRecentMoodStorageKeys(date: Date) {
   });
 }
 
-function getMostUsedMoodSummary(values: (string | null)[]): WeeklyMoodSummary {
+function getDateLocale(language: AppLanguageKey) {
+  return language === 'es' ? 'es' : undefined;
+}
+
+function getJournalMoodSummary(moodKey: string, t: JournalTranslator): WeeklyMoodSummary | undefined {
+  const mood = MOOD_LABELS[moodKey];
+  if (!mood) {
+    return undefined;
+  }
+
+  const translationKey = JOURNAL_MOOD_TRANSLATION_KEYS[moodKey];
+  return {
+    ...mood,
+    label: translationKey ? t(translationKey) : mood.label,
+  };
+}
+
+function getMostUsedMoodSummary(values: (string | null)[], t: JournalTranslator): WeeklyMoodSummary {
   const counts = new Map<string, number>();
 
   values.forEach((value) => {
@@ -142,13 +176,13 @@ function getMostUsedMoodSummary(values: (string | null)[]): WeeklyMoodSummary {
     }
   });
 
-  return topMoodKey && MOOD_LABELS[topMoodKey]
-    ? MOOD_LABELS[topMoodKey]
-    : { label: 'Not yet', icon: 'ellipse-outline', tint: '#8D7C70' };
+  return topMoodKey
+    ? getJournalMoodSummary(topMoodKey, t) ?? { label: t('journalNotYet'), icon: 'ellipse-outline', tint: '#8D7C70' }
+    : { label: t('journalNotYet'), icon: 'ellipse-outline', tint: '#8D7C70' };
 }
 
-function formatLogDayTitle(date: Date) {
-  return date.toLocaleDateString(undefined, {
+function formatLogDayTitle(date: Date, language: AppLanguageKey) {
+  return date.toLocaleDateString(getDateLocale(language), {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -156,8 +190,8 @@ function formatLogDayTitle(date: Date) {
   });
 }
 
-function formatLogTime(date: Date) {
-  return date.toLocaleTimeString(undefined, {
+function formatLogTime(date: Date, language: AppLanguageKey) {
+  return date.toLocaleTimeString(getDateLocale(language), {
     hour: 'numeric',
     minute: '2-digit',
   });
@@ -230,14 +264,47 @@ function replaceStudioPreviewReference(entry: JournalLogEntry, reference: string
   };
 }
 
+function dedupeJournalEntries(entries: JournalLogEntry[]) {
+  const uniqueById = new Map<string, JournalLogEntry>();
+
+  [...entries]
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .forEach((entry) => {
+    uniqueById.set(`${entry.type}:${entry.id}`, entry);
+    });
+
+  const studioPreviewKeys = new Set<string>();
+
+  return Array.from(uniqueById.values()).filter((entry) => {
+    if (entry.type !== 'journal-studio' && entry.editor !== 'studio') {
+      return true;
+    }
+
+    const previewKey = entry.preview?.trim().toLowerCase();
+    if (!previewKey) {
+      return true;
+    }
+
+    const dedupeKey = `${getLocalDayKey(parseEntryDate(entry))}:${previewKey}`;
+    if (studioPreviewKeys.has(dedupeKey)) {
+      return false;
+    }
+
+    studioPreviewKeys.add(dedupeKey);
+    return true;
+  });
+}
+
 async function hydrateStudioLogEntries(entries: JournalLogEntry[]) {
   const hydratedEntries = await Promise.all(
     entries.map(async (entry) => {
-      if (entry.type !== 'journal-studio') {
+      if (entry.type !== 'journal-studio' && entry.editor !== 'studio') {
         return entry;
       }
 
-      const storedReference = await AsyncStorage.getItem(`journal_studio_${entry.id}`).then(
+      const storedReference = await AsyncStorage.getItem(
+        getJournalEntryStorageKey({ id: entry.id, type: entry.type })
+      ).then(
         getStudioReferenceFromPayload
       );
 
@@ -258,11 +325,12 @@ async function hydrateStudioLogEntries(entries: JournalLogEntry[]) {
 
 export default function JournalScreen() {
   const router = useRouter();
-  const { colorTheme, t } = useAppSettings();
+  const { colorTheme, language, t } = useAppSettings();
+  const layout = useResponsiveLayout();
   const [selectedView, setSelectedView] = useState<'new' | 'logs'>('new');
   const [journalLogs, setJournalLogs] = useState<JournalLogGroup[]>([]);
   const [weeklyMoodSummary, setWeeklyMoodSummary] = useState<WeeklyMoodSummary>(() =>
-    getMostUsedMoodSummary([])
+    getMostUsedMoodSummary([], t)
   );
 
   const templates: JournalTemplate[] = useMemo(() => [
@@ -271,7 +339,7 @@ export default function JournalScreen() {
       emoji: '🙏',
       iconImage: PRAYER_JOURNAL_ICON,
       title: t('prayerJournal'),
-      subtitle: 'Talk to God and write what is on your heart.',
+      subtitle: t('journalPrayerSubtitle'),
       icon: 'heart-outline',
       tint: '#B66D7A',
       soft: '#FCEEF3',
@@ -281,7 +349,7 @@ export default function JournalScreen() {
       emoji: '📖',
       iconImage: BIBLE_STUDY_JOURNAL_ICON,
       title: t('bibleStudy'),
-      subtitle: 'Dig into a verse and capture what you learn.',
+      subtitle: t('journalBibleStudySubtitle'),
       icon: 'book-outline',
       tint: '#6C7FA8',
       soft: '#EEF3FF',
@@ -291,7 +359,7 @@ export default function JournalScreen() {
       emoji: '⛪',
       iconImage: CHURCH_DAY_JOURNAL_ICON,
       title: t('churchDay'),
-      subtitle: 'Save sermon notes, key verses, and reflections.',
+      subtitle: t('journalChurchSubtitle'),
       icon: 'sparkles-outline',
       tint: '#8C7A66',
       soft: '#F7F0E8',
@@ -301,7 +369,7 @@ export default function JournalScreen() {
       emoji: '🌅',
       iconImage: DAILY_DEVOTIONAL_JOURNAL_ICON,
       title: t('dailyDevotional'),
-      subtitle: 'Reflect, apply, ask questions, and pray daily.',
+      subtitle: t('journalDailyDevotionalSubtitle'),
       icon: 'sunny-outline',
       tint: '#9B7A59',
       soft: '#FFF4E8',
@@ -311,7 +379,7 @@ export default function JournalScreen() {
       emoji: '🎨',
       iconImage: STUDIO_JOURNAL_ICON,
       title: t('tabStudio'),
-      subtitle: 'Open creative page with verse cards and stickers.',
+      subtitle: t('journalStudioSubtitle'),
       icon: 'color-wand-outline',
       tint: '#8A669C',
       soft: '#F6EEFB',
@@ -335,7 +403,9 @@ export default function JournalScreen() {
       AsyncStorage.getItem(JOURNAL_INDEX_KEY),
       AsyncStorage.multiGet(getRecentMoodStorageKeys(new Date())),
     ]);
-    const entries = (await hydrateStudioLogEntries(safeParseJournalIndex(data)))
+    const entries = dedupeJournalEntries(
+      await hydrateStudioLogEntries(safeParseJournalIndex(data))
+    )
       .filter((entry) => entry.type in templateMap)
       .filter(hasVisibleJournalContent)
       .sort((left, right) => right.updatedAt - left.updatedAt);
@@ -354,7 +424,7 @@ export default function JournalScreen() {
 
       groupsByDay.set(dayKey, {
         key: dayKey,
-        title: formatLogDayTitle(entryDate),
+        title: formatLogDayTitle(entryDate, language.key),
         entries: [entry],
       });
     });
@@ -365,7 +435,7 @@ export default function JournalScreen() {
     const moodByDay = new Map(
       moodPairs.map(([storageKey, moodKey]) => [
         storageKey.replace('daily_mood_', ''),
-        moodKey && MOOD_LABELS[moodKey] ? MOOD_LABELS[moodKey] : undefined,
+        moodKey ? getJournalMoodSummary(moodKey, t) : undefined,
       ])
     );
 
@@ -375,8 +445,8 @@ export default function JournalScreen() {
         mood: moodByDay.get(group.key),
       }))
     );
-    setWeeklyMoodSummary(getMostUsedMoodSummary(weeklyMoods.map(([, value]) => value)));
-  }, [templateMap]);
+    setWeeklyMoodSummary(getMostUsedMoodSummary(weeklyMoods.map(([, value]) => value), t));
+  }, [language.key, t, templateMap]);
 
   useFocusEffect(
     useCallback(() => {
@@ -411,32 +481,37 @@ export default function JournalScreen() {
     router.push(
       template.key === 'prayer'
         ? {
-            pathname: '/prayer-journal',
-            params: { newEntryToken: Date.now().toString() },
+            pathname: '/studio',
+            params: { blankStudioToken: Date.now().toString(), saveTarget: 'prayer' },
           }
         : template.key === 'bible-study'
           ? {
-              pathname: '/bible-study-journal',
-              params: { newEntryToken: Date.now().toString() },
+              pathname: '/studio',
+              params: { blankStudioToken: Date.now().toString(), saveTarget: 'bible-study' },
             }
           : template.key === 'church-day'
             ? {
-                pathname: '/church-day-journal',
-                params: { newEntryToken: Date.now().toString() },
+                pathname: '/studio',
+                params: { blankStudioToken: Date.now().toString(), saveTarget: 'church-day' },
               }
             : template.key === 'daily-devotional'
               ? {
-                  pathname: '/daily-devotional-journal',
-                  params: { newEntryToken: Date.now().toString() },
+                  pathname: '/studio',
+                  params: { blankStudioToken: Date.now().toString(), saveTarget: 'daily-devotional' },
                 }
               : {
                   pathname: '/studio',
-                  params: { blankStudioToken: Date.now().toString() },
+                  params: { blankStudioToken: Date.now().toString(), saveTarget: 'journal-studio' },
                 }
     );
   };
 
   const openLogEntry = (entry: JournalLogEntry) => {
+    if (entry.editor === 'studio' || entry.type === 'journal-studio') {
+      router.push({ pathname: '/studio', params: { entryId: entry.id, entryType: entry.type, saveTarget: entry.type } });
+      return;
+    }
+
     if (entry.type === 'prayer') {
       router.push({ pathname: '/prayer-journal', params: { entryId: entry.id } });
       return;
@@ -457,9 +532,6 @@ export default function JournalScreen() {
       return;
     }
 
-    if (entry.type === 'journal-studio') {
-      router.push({ pathname: '/studio', params: { entryId: entry.id } });
-    }
   };
 
   const deleteLogEntry = useCallback(async (entryToDelete: JournalLogEntry) => {
@@ -489,9 +561,20 @@ export default function JournalScreen() {
   }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
+    <FocusedScreenView style={[styles.container, { backgroundColor: colorTheme.screenBackground }]}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          layout.isTablet
+            ? [
+                styles.tabletContent,
+                {
+                  maxWidth: layout.contentMaxWidth,
+                  paddingHorizontal: layout.pagePaddingHorizontal,
+                },
+              ]
+            : null,
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.segmentedControl, { backgroundColor: colorTheme.toolbarBackground }]}>
           <TouchableOpacity
@@ -505,7 +588,7 @@ export default function JournalScreen() {
                 ? [styles.segmentButtonActive, { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border }]
                 : null,
             ]}>
-            <Text style={styles.segmentButtonText}>New Entry</Text>
+            <Text style={styles.segmentButtonText}>{t('journalNewEntryTab')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityRole="tab"
@@ -518,12 +601,12 @@ export default function JournalScreen() {
                 ? [styles.segmentButtonActive, { backgroundColor: colorTheme.selectionBackground, borderColor: colorTheme.border }]
                 : null,
             ]}>
-            <Text style={styles.segmentButtonText}>Daily Logs</Text>
+            <Text style={styles.segmentButtonText}>{t('journalDailyLogsTab')}</Text>
           </TouchableOpacity>
         </View>
 
         {selectedView === 'new' ? (
-          <View style={styles.cardStack}>
+          <View style={[styles.cardStack, layout.isTablet ? styles.tabletCardStack : null]}>
             {templates.map((template) => (
               <TouchableOpacity
                 key={template.key}
@@ -531,6 +614,7 @@ export default function JournalScreen() {
                 onPress={() => openTemplate(template)}
                 style={[
                   styles.templateCard,
+                  layout.isTablet ? styles.tabletTemplateCard : null,
                   { backgroundColor: template.soft, borderColor: colorTheme.border },
                 ]}>
                 <View
@@ -564,25 +648,25 @@ export default function JournalScreen() {
                 <View style={[styles.weekReflectionCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
                   <View style={styles.weekReflectionHeader}>
                     <Ionicons name="calendar-clear-outline" size={18} color="#7A6F66" />
-                    <Text style={styles.weekReflectionTitle}>Your week with God</Text>
+                    <Text style={styles.weekReflectionTitle}>{t('journalWeekWithGod')}</Text>
                   </View>
                   <View style={styles.weekReflectionStats}>
                     <View style={styles.weekReflectionStat}>
                       <Text style={styles.weekReflectionValue}>{weeklySummary.activeDays}</Text>
-                      <Text style={styles.weekReflectionLabel}>days</Text>
+                      <Text style={styles.weekReflectionLabel}>{t('journalDays')}</Text>
                     </View>
                     <View style={styles.weekReflectionStat}>
                       <Text style={styles.weekReflectionValue}>{weeklySummary.entryCount}</Text>
-                      <Text style={styles.weekReflectionLabel}>entries</Text>
+                      <Text style={styles.weekReflectionLabel}>{t('journalEntries')}</Text>
                     </View>
                     <View style={styles.weekReflectionStat}>
                       <Text style={styles.weekReflectionValue}>{weeklySummary.favoriteCount}</Text>
-                      <Text style={styles.weekReflectionLabel}>saved</Text>
+                      <Text style={styles.weekReflectionLabel}>{t('journalSaved')}</Text>
                     </View>
                     <View style={styles.weekReflectionStat}>
                       <Ionicons name={weeklyMoodSummary.icon} size={18} color={weeklyMoodSummary.tint} />
                       <Text numberOfLines={1} style={styles.weekReflectionMoodValue}>{weeklyMoodSummary.label}</Text>
-                      <Text style={styles.weekReflectionLabel}>mood</Text>
+                      <Text style={styles.weekReflectionLabel}>{t('journalMood')}</Text>
                     </View>
                   </View>
                 </View>
@@ -592,7 +676,10 @@ export default function JournalScreen() {
                   <View style={styles.scrapbookTapeRight} />
                   <View style={styles.logDayHeader}>
                     <Text style={styles.logDayTitle}>{group.title}</Text>
-                    <Text style={styles.logDayCount}>{group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}</Text>
+                    <Text style={styles.logDayCount}>
+                      {group.entries.length}{' '}
+                      {t(group.entries.length === 1 ? 'journalEntry' : 'journalEntries')}
+                    </Text>
                   </View>
                   {group.mood ? (
                     <View style={styles.logDayMoodRow}>
@@ -611,7 +698,7 @@ export default function JournalScreen() {
                             void deleteLogEntry(entry);
                           }}>
                           <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-                          <Text style={styles.deleteActionText}>Delete</Text>
+                          <Text style={styles.deleteActionText}>{t('actionDelete')}</Text>
                         </RectButton>
                       );
 
@@ -635,10 +722,10 @@ export default function JournalScreen() {
                                 {entry.isFavorite ? <Ionicons name="heart" size={14} color={template.tint} /> : null}
                               </View>
                               <Text style={styles.logEntryPreview} numberOfLines={1}>
-                                {entry.preview || 'Open to keep writing...'}
+                                {entry.preview || t('homeKeepWriting')}
                               </Text>
                             </View>
-                            <Text style={styles.logEntryTime}>{formatLogTime(entryDate)}</Text>
+                            <Text style={styles.logEntryTime}>{formatLogTime(entryDate, language.key)}</Text>
                           </TouchableOpacity>
                         </Swipeable>
                       );
@@ -650,14 +737,14 @@ export default function JournalScreen() {
             ) : (
               <View style={styles.emptyLogs}>
                 <Ionicons name="calendar-clear-outline" size={28} color="#9A8F88" />
-                <Text style={styles.emptyLogsTitle}>No daily logs yet</Text>
-                <Text style={styles.emptyLogsText}>Create a journal entry and it will appear here by date.</Text>
+                <Text style={styles.emptyLogsTitle}>{t('journalEmptyLogsTitle')}</Text>
+                <Text style={styles.emptyLogsText}>{t('journalEmptyLogsText')}</Text>
               </View>
             )}
           </View>
         )}
       </ScrollView>
-    </View>
+    </FocusedScreenView>
   );
 }
 
@@ -670,6 +757,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'web' ? 22 : 72,
     paddingBottom: Platform.OS === 'web' ? 48 : 120,
+  },
+  tabletContent: {
+    width: '100%',
+    alignSelf: 'center',
   },
   segmentedControl: {
     flexDirection: 'row',
@@ -697,6 +788,11 @@ const styles = StyleSheet.create({
   },
   cardStack: {
     gap: 10,
+  },
+  tabletCardStack: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   logsStack: {
     gap: 14,
@@ -906,6 +1002,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  tabletTemplateCard: {
+    width: '49.2%',
+    minHeight: 118,
   },
   iconShell: {
     width: 46,

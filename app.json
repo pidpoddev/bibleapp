@@ -1,27 +1,31 @@
 {
   "expo": {
-    "name": "myBibleApp",
-    "slug": "bibleapp",
+    "name": "Faith Canvas",
+    "slug": "faith-canvas",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/app-icon-pretty-bible.png",
-    "scheme": "mybibleapp",
+    "icon": "./assets/brand/faith-canvas/upload/apple/faith-canvas-app-store-icon-1024.png",
+    "scheme": "faithcanvas",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pidpoddev.bibleapp",
+      "bundleIdentifier": "com.pidpod.faithcanvas",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.pidpoddev.bibleapp",
+      "package": "com.pidpod.faithcanvas",
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFF8ED",
+        "foregroundImage": "./assets/brand/faith-canvas/upload/android/faith-canvas-android-icon-source-1024.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -35,7 +39,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/brand/faith-canvas/upload/apple/faith-canvas-app-store-icon-1024.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -44,11 +48,20 @@
           }
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Faith Canvas only asks for photo library access if you choose to save verse art or journal images to your device.",
+          "savePhotosPermission": "Faith Canvas needs permission to save verse art and journal images to your photo library.",
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ],
       "expo-font",
       "expo-web-browser"
     ],
     "experiments": {
-      "baseUrl": "/bibleapp",
       "typedRoutes": true,
       "reactCompiler": true
     },
@@ -63,7 +76,11 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/e9392c72-1d1e-48f7-a1c4-4916346afecc"
+      "enabled": false,
+      "url": "https://u.expo.dev/e9392c72-1d1e-48f7-a1c4-4916346afecc",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
     }
   }
 }

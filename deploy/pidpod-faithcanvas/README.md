@@ -8,6 +8,7 @@ Static public website package for `https://pidpod.com/faithcanvas/`.
 - `privacy.html` - privacy policy URL for App Store Connect and Google Play Console.
 - `safety.html` - child-safety and parent guidance page.
 - `support.html` - support URL and deletion request instructions.
+- `GOLIVE_COPY.md` - reusable store-review copy, URLs, and privacy/data-safety statements.
 - `styles.css` - standalone styling.
 - `assets/faith-canvas-app-icon.png` - public app icon used by the site.
 
@@ -17,11 +18,13 @@ Static public website package for `https://pidpod.com/faithcanvas/`.
 - Privacy Policy URL: `https://pidpod.com/faithcanvas/privacy.html`
 - Support URL: `https://pidpod.com/faithcanvas/support.html`
 - Child Safety URL: `https://pidpod.com/faithcanvas/safety.html`
+- Legal operator: Bumfuzzle Inc., a Tennessee corporation. PidPod is the applications brand.
 
 ## Launch Review Notes
 
 - Current public contact in the website copy is `support@pidpod.com`.
-- The privacy page assumes no third-party advertising, no public social features, local storage by default, and optional encrypted Cloud Save through PidPod servers.
+- Faith Canvas is identified as provided by PidPod, the applications brand of Bumfuzzle Inc., a Tennessee corporation.
+- The privacy page states no third-party advertising, no public social features, local storage by default, optional encrypted Cloud Save through PidPod servers, and support/deletion through `support@pidpod.com`.
 - Before launch, confirm the live app and store forms match these statements exactly.
 - If Faith Canvas is submitted as a Kids Category or Families-targeted app, confirm final COPPA, Apple Kids Category, and Google Play Families requirements with counsel or a qualified privacy reviewer.
 
