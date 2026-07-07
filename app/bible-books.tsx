@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   runOnJS,
@@ -30,25 +30,20 @@ import {
   makeBibleVerseKey,
   markBibleVerseRead,
 } from '@/utils/bible-reading-progress';
-import { getBookDisplayName, getVerseText, type BibleLanguageKey } from '@/utils/bible-data';
+import {
+  getBibleData,
+  getBookDisplayName,
+  getVerseText,
+  type BibleBook,
+  type BibleLanguageKey,
+  type BibleVersionKey,
+} from '@/utils/bible-data';
 import {
   getGenesisReadingImage,
   type GenesisReadingImage,
 } from '@/utils/genesis-reading-images';
 import { FocusedScreenView } from '@/components/focused-screen-view';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
-import bible from '../assets/bible.json';
-
-type BibleBook = {
-  book: string;
-  chapters: {
-    chapter: number;
-    verses: {
-      verse: number;
-      text: string;
-    }[];
-  }[];
-};
 
 type SearchResult = {
   type: 'verse';
@@ -93,18 +88,28 @@ type ReaderListItem =
       verse: number;
     };
 
-const books = bible as BibleBook[];
-
 const BOOK_ROW_HEIGHT = 66;
 const SECTION_HEADER_HEIGHT = 36;
 const BIBLE_HEADER_ICON = require('../assets/images/toolbar-icons/bible-tab.png');
 
 function normalizeBookName(value: string) {
-  return value.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/\./g, '');
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 function parseReference(input: string) {
-  const regex = /([1-3]?\s?[A-Za-z]+)\s(\d+):(\d+)/;
+  const regex = /([1-3]?\s?[\p{L}.]+)\s(\d+):(\d+)/u;
   const match = input.match(regex);
 
   if (!match) return null;
@@ -116,16 +121,27 @@ function parseReference(input: string) {
   };
 }
 
-function findReferenceResult(input: string, languageKey: BibleLanguageKey): SearchResult | null {
+function findReferenceResult(
+  input: string,
+  languageKey: BibleLanguageKey,
+  versionKey: BibleVersionKey,
+  books: BibleBook[]
+): SearchResult | null {
   const reference = parseReference(input);
 
   if (!reference) {
     return null;
   }
 
-  const matchedBook = books.find(
-    (book) => normalizeBookName(book.book) === normalizeBookName(reference.book)
-  );
+  const normalizedReferenceBook = normalizeBookName(reference.book);
+  const matchedBook = books.find((book) => {
+    const displayName = getBookDisplayName(book.book, languageKey, versionKey);
+
+    return (
+      normalizeBookName(book.book) === normalizedReferenceBook ||
+      normalizeBookName(displayName) === normalizedReferenceBook
+    );
+  });
   const matchedChapter = matchedBook?.chapters.find(
     (chapter) => chapter.chapter === reference.chapter
   );
@@ -146,14 +162,16 @@ function findReferenceResult(input: string, languageKey: BibleLanguageKey): Sear
       matchedBook.book,
       matchedChapter.chapter,
       matchedVerse.verse,
-      languageKey
+      languageKey,
+      versionKey
     ),
   };
 }
 
 export default function BibleBooksScreen() {
   const router = useRouter();
-  const { colorTheme, language, bibleReadingImagesEnabled, t } = useAppSettings();
+  const { colorTheme, language, bibleVersionKey, bibleReadingImagesEnabled, t } =
+    useAppSettings();
   const layout = useResponsiveLayout();
   const sectionListRef = useRef<SectionList<BibleBook> | null>(null);
   const readingListRef = useRef<FlatList<ReaderListItem> | null>(null);
@@ -176,17 +194,54 @@ export default function BibleBooksScreen() {
   const [readerOpenToken, setReaderOpenToken] = useState(0);
   const [isSelectionPanelCollapsed, setIsSelectionPanelCollapsed] = useState(false);
   const panelTranslateY = useSharedValue(0);
+  const books = useMemo(() => getBibleData(bibleVersionKey), [bibleVersionKey]);
   const displayBookName = useCallback(
-    (book: string) => getBookDisplayName(book, language.key),
-    [language.key]
+    (book: string) => getBookDisplayName(book, language.key, bibleVersionKey),
+    [bibleVersionKey, language.key]
   );
   const sections = useMemo(
     () => [
       { title: t('oldTestament'), data: books.slice(0, 39) },
       { title: t('newTestament'), data: books.slice(39) },
     ],
-    [t]
+    [books, t]
   );
+
+  useEffect(() => {
+    if (!selectedBook) {
+      return;
+    }
+
+    const nextSelectedBook = books.find((book) => book.book === selectedBook.book);
+
+    if (!nextSelectedBook) {
+      setSelectedBook(null);
+      setSelectedChapter(null);
+      setSelectedVerse(null);
+      setReaderSelection(null);
+      return;
+    }
+
+    const nextSelectedChapter =
+      nextSelectedBook.chapters.find((chapter) => chapter.chapter === selectedChapter) ??
+      nextSelectedBook.chapters[0];
+    const nextSelectedVerse =
+      nextSelectedChapter?.verses.find((verse) => verse.verse === selectedVerse) ??
+      nextSelectedChapter?.verses[0];
+
+    setSelectedBook(nextSelectedBook);
+    setSelectedChapter(nextSelectedChapter?.chapter ?? null);
+    setSelectedVerse(nextSelectedVerse?.verse ?? null);
+    setReaderSelection((currentSelection) =>
+      currentSelection
+        ? {
+            book: nextSelectedBook.book,
+            chapter: nextSelectedChapter?.chapter ?? currentSelection.chapter,
+            verse: nextSelectedVerse?.verse ?? currentSelection.verse,
+          }
+        : currentSelection
+    );
+  }, [books, selectedBook, selectedChapter, selectedVerse]);
 
   const verseOptions = useMemo(() => {
     if (!selectedBook || selectedChapter === null) {
@@ -199,7 +254,7 @@ export default function BibleBooksScreen() {
   }, [selectedBook, selectedChapter]);
   const readerBook = useMemo(
     () => books.find((book) => book.book === readerSelection?.book) ?? null,
-    [readerSelection?.book]
+    [books, readerSelection?.book]
   );
   const isGenesisImageReader =
     bibleReadingImagesEnabled && readerSelection?.book === 'Genesis' && Boolean(readerBook);
@@ -503,7 +558,12 @@ export default function BibleBooksScreen() {
       return;
     }
 
-    const exactReferenceMatch = findReferenceResult(trimmedQuery, language.key);
+    const exactReferenceMatch = findReferenceResult(
+      trimmedQuery,
+      language.key,
+      bibleVersionKey,
+      books
+    );
 
     if (exactReferenceMatch) {
       const shouldHideReadMatch =
@@ -522,10 +582,17 @@ export default function BibleBooksScreen() {
       return;
     }
 
-    const normalizedQuery = trimmedQuery.toLowerCase();
+    const normalizedQuery = normalizeSearchText(trimmedQuery);
     const normalizedBookQuery = normalizeBookName(trimmedQuery);
     const matchingBooks = books
-      .filter((book) => normalizeBookName(book.book).includes(normalizedBookQuery))
+      .filter((book) => {
+        const displayName = displayBookName(book.book);
+
+        return (
+          normalizeBookName(book.book).includes(normalizedBookQuery) ||
+          normalizeBookName(displayName).includes(normalizedBookQuery)
+        );
+      })
       .filter((book) => !hideRead || getBookReadStats(book).unreadCount > 0)
       .map((book) => ({ type: 'book' as const, book }));
     const nextResults: BibleSearchResult[] = [...matchingBooks];
@@ -537,9 +604,15 @@ export default function BibleBooksScreen() {
             return true;
           }
 
-          const verseText = getVerseText(book.book, chapter.chapter, verse.verse, language.key);
+          const verseText = getVerseText(
+            book.book,
+            chapter.chapter,
+            verse.verse,
+            language.key,
+            bibleVersionKey
+          );
           if (
-            !verseText.toLowerCase().includes(normalizedQuery) ||
+            !normalizeSearchText(verseText).includes(normalizedQuery) ||
             (hideRead && isVerseRead(book.book, chapter.chapter, verse.verse))
           ) {
             return false;
@@ -582,7 +655,12 @@ export default function BibleBooksScreen() {
 
     Keyboard.dismiss();
 
-    const exactReferenceMatch = findReferenceResult(trimmedQuery, language.key);
+    const exactReferenceMatch = findReferenceResult(
+      trimmedQuery,
+      language.key,
+      bibleVersionKey,
+      books
+    );
 
     if (exactReferenceMatch) {
       setSearchResults([exactReferenceMatch]);
@@ -597,7 +675,8 @@ export default function BibleBooksScreen() {
 
     const exactBookMatch = books.find(
       (book) =>
-        normalizeBookName(book.book) === normalizeBookName(trimmedQuery) &&
+        (normalizeBookName(book.book) === normalizeBookName(trimmedQuery) ||
+          normalizeBookName(displayBookName(book.book)) === normalizeBookName(trimmedQuery)) &&
         (!hideRead || getBookReadStats(book).unreadCount > 0)
     );
 
@@ -1083,7 +1162,8 @@ export default function BibleBooksScreen() {
               item.book,
               item.chapter,
               item.verse,
-              language.key
+              language.key,
+              bibleVersionKey
             );
 
             return (

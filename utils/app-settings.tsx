@@ -8,6 +8,14 @@ import {
   type ReactNode,
 } from 'react';
 
+import {
+  getBibleVersionOptions,
+  getDefaultBibleVersionKey,
+  normalizeBibleVersionKey,
+  type BibleVersionKey,
+  type BibleVersionOption,
+} from '@/utils/bible-data';
+
 export type ColorThemeKey =
   | 'default'
   | 'blush'
@@ -80,6 +88,9 @@ const TRANSLATIONS = {
     settingsSyncNow: 'Sync Now',
     settingsDisconnect: 'Disconnect this device',
     settingsBibleReadingTitle: 'Bible Reading',
+    settingsBibleVersionTitle: 'Bible Version',
+    settingsBibleVersionHint: 'Choose the Bible text used for reading, search, and verse art.',
+    settingsBibleVersionAttribution: 'Bible text: {{attribution}}',
     settingsBibleReadingImages: 'Bible Reading Images Beta',
     settingsBibleReadingImagesHint: 'Beta: show gentle Genesis chapter images while reading.',
     settingsBibleProgressTitle: '% of the Bible Read',
@@ -541,6 +552,10 @@ const TRANSLATIONS = {
     settingsSyncNow: 'Sincronizar ahora',
     settingsDisconnect: 'Desconectar este dispositivo',
     settingsBibleReadingTitle: 'Lectura bíblica',
+    settingsBibleVersionTitle: 'Versión de la Biblia',
+    settingsBibleVersionHint:
+      'Elige el texto bíblico usado para lectura, búsqueda y arte de versículos.',
+    settingsBibleVersionAttribution: 'Texto bíblico: {{attribution}}',
     settingsBibleReadingImages: 'Imágenes de lectura bíblica Beta',
     settingsBibleReadingImagesHint:
       'Beta: mostrar imágenes suaves de los capítulos de Génesis al leer.',
@@ -972,9 +987,12 @@ type AppSettingsContextValue = {
   colorThemes: ColorTheme[];
   language: AppLanguage;
   languages: AppLanguage[];
+  bibleVersionKey: BibleVersionKey;
+  bibleVersionOptions: BibleVersionOption[];
   bibleReadingImagesEnabled: boolean;
   setColorThemeKey: (key: ColorThemeKey) => void;
   setLanguageKey: (key: AppLanguageKey) => void;
+  setBibleVersionKey: (key: BibleVersionKey) => void;
   setBibleReadingImagesEnabled: (enabled: boolean) => void;
   t: (key: TranslationKey, params?: TranslationParams) => string;
   isLoaded: boolean;
@@ -1080,6 +1098,7 @@ const DEFAULT_BIBLE_READING_IMAGES_ENABLED = false;
 type StoredAppSettings = {
   colorThemeKey?: ColorThemeKey;
   languageKey?: AppLanguageKey;
+  bibleVersionKeys?: Partial<Record<AppLanguageKey, BibleVersionKey>>;
   bibleReadingImagesEnabled?: boolean;
 };
 
@@ -1125,6 +1144,12 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     useState<ColorThemeKey>(DEFAULT_COLOR_THEME_KEY);
   const [languageKey, setLanguageKeyState] =
     useState<AppLanguageKey>(DEFAULT_LANGUAGE_KEY);
+  const [bibleVersionKeysByLanguage, setBibleVersionKeysByLanguage] = useState<
+    Record<AppLanguageKey, BibleVersionKey>
+  >({
+    en: getDefaultBibleVersionKey('en'),
+    es: getDefaultBibleVersionKey('es'),
+  });
   const [bibleReadingImagesEnabled, setBibleReadingImagesEnabledState] = useState(
     DEFAULT_BIBLE_READING_IMAGES_ENABLED
   );
@@ -1150,6 +1175,13 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
           setLanguageKeyState(parsedSettings.languageKey);
         }
 
+        if (parsedSettings.bibleVersionKeys) {
+          setBibleVersionKeysByLanguage({
+            en: normalizeBibleVersionKey('en', parsedSettings.bibleVersionKeys.en),
+            es: normalizeBibleVersionKey('es', parsedSettings.bibleVersionKeys.es),
+          });
+        }
+
         if (typeof parsedSettings.bibleReadingImagesEnabled === 'boolean') {
           setBibleReadingImagesEnabledState(parsedSettings.bibleReadingImagesEnabled);
         }
@@ -1163,38 +1195,51 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     void loadSettings();
   }, []);
 
-  const setColorThemeKey = (key: ColorThemeKey) => {
-    setColorThemeKeyState(key);
-
+  const persistSettings = (nextSettings: StoredAppSettings) => {
     void AsyncStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ colorThemeKey: key, languageKey, bibleReadingImagesEnabled })
+      JSON.stringify({
+        colorThemeKey,
+        languageKey,
+        bibleVersionKeys: bibleVersionKeysByLanguage,
+        bibleReadingImagesEnabled,
+        ...nextSettings,
+      })
     ).catch((error) => {
       console.log('Error saving app settings:', error);
     });
+  };
+
+  const setColorThemeKey = (key: ColorThemeKey) => {
+    setColorThemeKeyState(key);
+    persistSettings({ colorThemeKey: key });
   };
 
   const setLanguageKey = (key: AppLanguageKey) => {
     setLanguageKeyState(key);
+    persistSettings({ languageKey: key });
+  };
 
-    void AsyncStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({ colorThemeKey, languageKey: key, bibleReadingImagesEnabled })
-    ).catch((error) => {
-      console.log('Error saving app settings:', error);
-    });
+  const setBibleVersionKey = (key: BibleVersionKey) => {
+    const nextVersionKey = normalizeBibleVersionKey(languageKey, key);
+    const nextBibleVersionKeys = {
+      ...bibleVersionKeysByLanguage,
+      [languageKey]: nextVersionKey,
+    };
+
+    setBibleVersionKeysByLanguage(nextBibleVersionKeys);
+    persistSettings({ bibleVersionKeys: nextBibleVersionKeys });
   };
 
   const setBibleReadingImagesEnabled = (enabled: boolean) => {
     setBibleReadingImagesEnabledState(enabled);
-
-    void AsyncStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({ colorThemeKey, languageKey, bibleReadingImagesEnabled: enabled })
-    ).catch((error) => {
-      console.log('Error saving app settings:', error);
-    });
+    persistSettings({ bibleReadingImagesEnabled: enabled });
   };
+
+  const bibleVersionKey = normalizeBibleVersionKey(
+    languageKey,
+    bibleVersionKeysByLanguage[languageKey]
+  );
 
   const value = useMemo<AppSettingsContextValue>(
     () => ({
@@ -1202,14 +1247,17 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       colorThemes: COLOR_THEMES,
       language: getLanguageByKey(languageKey),
       languages: LANGUAGES,
+      bibleVersionKey,
+      bibleVersionOptions: getBibleVersionOptions(languageKey),
       bibleReadingImagesEnabled,
       setColorThemeKey,
       setLanguageKey,
+      setBibleVersionKey,
       setBibleReadingImagesEnabled,
       t: (key, params) => translate(languageKey, key, params),
       isLoaded,
     }),
-    [colorThemeKey, languageKey, bibleReadingImagesEnabled, isLoaded]
+    [colorThemeKey, languageKey, bibleVersionKey, bibleReadingImagesEnabled, isLoaded]
   );
 
   return (

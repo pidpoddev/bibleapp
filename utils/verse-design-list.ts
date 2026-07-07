@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import bible from '@/assets/bible.json';
+import bible from '@/utils/bible-data';
 import {
   SAVED_DESIGNS_STORAGE_KEY,
   VERSE_DESIGN_INDEX_STORAGE_KEY,

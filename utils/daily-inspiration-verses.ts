@@ -1,4 +1,9 @@
-import bibleData, { getVerseText, type BibleLanguageKey } from '@/utils/bible-data';
+import bibleData, {
+  getDefaultBibleVersionKey,
+  getVerseText,
+  type BibleLanguageKey,
+  type BibleVersionKey,
+} from '@/utils/bible-data';
 
 export type DailyInspirationVerse = {
   book: string;
@@ -185,7 +190,8 @@ export function formatVerseReference(book: string, chapter: number, verse: numbe
 
 export function getDailyInspirationVerse(
   date = new Date(),
-  language: BibleLanguageKey = 'en'
+  language: BibleLanguageKey = 'en',
+  versionKey?: BibleVersionKey
 ): DailyInspirationVerse {
   const dayIndex = getLocalDayOfYear(date) % DAILY_VERSE_COUNT;
   const reference = DAILY_VERSE_REFERENCES[dayIndex] ?? {
@@ -194,9 +200,10 @@ export function getDailyInspirationVerse(
     verse: 10,
     score: 0,
   };
+  const resolvedVersionKey = versionKey ?? getDefaultBibleVersionKey(language);
   const localizedText =
-    getVerseText(reference.book, reference.chapter, reference.verse, language) ||
-    getVerseText(reference.book, reference.chapter, reference.verse, 'en');
+    getVerseText(reference.book, reference.chapter, reference.verse, language, resolvedVersionKey) ||
+    getVerseText(reference.book, reference.chapter, reference.verse, 'en', 'bsb');
 
   return {
     book: reference.book,

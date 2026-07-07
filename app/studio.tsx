@@ -56,6 +56,7 @@ import {
   getVerseText,
   getVerses,
   type BibleLanguageKey,
+  type BibleVersionKey,
 } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
@@ -416,8 +417,8 @@ function hasSavedVerseReference(
   );
 }
 
-function getVerseOptions(book: string, chapter: number) {
-  return getVerses(book, chapter).sort((left, right) => left - right);
+function getVerseOptions(book: string, chapter: number, versionKey?: BibleVersionKey) {
+  return getVerses(book, chapter, versionKey).sort((left, right) => left - right);
 }
 
 function normalizeSelectedVerses(verses: number[], fallbackVerse: number) {
@@ -660,11 +661,12 @@ function syncVerseCardsWithSelection(
   nextSelectedVerses: number[],
   book: string,
   chapter: number,
-  language: BibleLanguageKey
+  language: BibleLanguageKey,
+  versionKey?: BibleVersionKey
 ) {
   return nextSelectedVerses.map((verseNumber, index) => {
     const existingCard = currentCards.find((card) => card.verse === verseNumber);
-    const text = getVerseText(book, chapter, verseNumber, language);
+    const text = getVerseText(book, chapter, verseNumber, language, versionKey);
 
     if (existingCard) {
       return {
@@ -1689,7 +1691,7 @@ const TOOLBAR_ICON_OFFSET_Y = {
 } as const;
 
 export default function StudioScreen() {
-  const { colorTheme, language, t } = useAppSettings();
+  const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const layout = useResponsiveLayout();
   const navigation = useNavigation();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -1776,7 +1778,7 @@ export default function StudioScreen() {
   );
   const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState(() =>
-    routeSelectedBookParam && getBooks().includes(routeSelectedBookParam)
+    routeSelectedBookParam && getBooks(bibleVersionKey).includes(routeSelectedBookParam)
       ? routeSelectedBookParam
       : ''
   );
@@ -1849,13 +1851,15 @@ export default function StudioScreen() {
   const [saveConfirmationKey, setSaveConfirmationKey] = useState(0);
   const [undoHistory, setUndoHistory] = useState<VerseEditorState[]>([]);
   const [isFavoriteActive, setIsFavoriteActive] = useState(false);
-  const bookOptions = getBooks();
+  const bookOptions = getBooks(bibleVersionKey);
   const hasBookSelection = selectedBook.length > 0;
   const hasChapterSelection = hasBookSelection && selectedChapter > 0;
   const hasVerseSelection =
     hasChapterSelection && selectedVerse > 0 && selectedVerses.length > 0;
-  const chapterOptions = hasBookSelection ? getChapters(selectedBook) : [];
-  const verseOptions = hasChapterSelection ? getVerseOptions(selectedBook, selectedChapter) : [];
+  const chapterOptions = hasBookSelection ? getChapters(selectedBook, bibleVersionKey) : [];
+  const verseOptions = hasChapterSelection
+    ? getVerseOptions(selectedBook, selectedChapter, bibleVersionKey)
+    : [];
   const verseDropdownLabel =
     !hasVerseSelection
       ? t('commonVerse')
@@ -2284,17 +2288,17 @@ export default function StudioScreen() {
       return;
     }
 
-    if (!getBooks().includes(routeSelectedBookParam)) {
+    if (!getBooks(bibleVersionKey).includes(routeSelectedBookParam)) {
       return;
     }
 
     const nextChapter = routeSelectedChapterParam ?? 0;
     const nextVerse = routeSelectedVerseParam ?? 0;
-    const bookChapters = getChapters(routeSelectedBookParam);
+    const bookChapters = getChapters(routeSelectedBookParam, bibleVersionKey);
 
     if (
       !bookChapters.includes(nextChapter) ||
-      !getVerseOptions(routeSelectedBookParam, nextChapter).includes(nextVerse)
+      !getVerseOptions(routeSelectedBookParam, nextChapter, bibleVersionKey).includes(nextVerse)
     ) {
       return;
     }
@@ -2340,7 +2344,8 @@ export default function StudioScreen() {
                 restoredVerses,
                 d.book,
                 d.chapter,
-                language.key
+                language.key,
+                bibleVersionKey
               )
             );
             setStickers(d.stickers || []);
@@ -2379,7 +2384,8 @@ export default function StudioScreen() {
           nextSelectedVerses,
           routeSelectedBookParam,
           nextChapter,
-          language.key
+          language.key,
+          bibleVersionKey
         ),
         verseLineHeight,
         nextSaveTarget
@@ -2416,6 +2422,7 @@ export default function StudioScreen() {
     });
   }, [
     defaultStudioSaveTarget,
+    bibleVersionKey,
     hasRouteSelectedVerseParams,
     language.key,
     routeDraftEntryIdParam,
@@ -2704,7 +2711,8 @@ export default function StudioScreen() {
             nextSelectedVerses,
             nextBook,
             nextChapter,
-            language.key
+            language.key,
+            bibleVersionKey
           ),
           verseLineHeight,
           selectedSaveTarget
@@ -2714,7 +2722,8 @@ export default function StudioScreen() {
           nextSelectedVerses,
           nextBook,
           nextChapter,
-          language.key
+          language.key,
+          bibleVersionKey
         );
     const nextNotes = shouldArrangeNotesForTemplate
       ? shiftTemplateNotesBelowVerseCards(
@@ -2804,7 +2813,7 @@ export default function StudioScreen() {
             routeSelectedBookParam === selectedBook &&
             routeSelectedChapterParam !== null &&
             routeSelectedVerseParam !== null);
-        const bookChapters = getChapters(selectedBook);
+        const bookChapters = getChapters(selectedBook, bibleVersionKey);
 
         if (!shouldOpenSpecificVerse) {
           const nextChapter =
@@ -2853,7 +2862,7 @@ export default function StudioScreen() {
                 bookChapters.includes(routeSelectedChapterParam)
               ? routeSelectedChapterParam
               : fallbackChapter;
-        const chapterVerses = getVerseOptions(selectedBook, initialChapter);
+        const chapterVerses = getVerseOptions(selectedBook, initialChapter, bibleVersionKey);
         const fallbackVerse =
           selectedBook === DEFAULT_BOOK &&
           initialChapter === DEFAULT_CHAPTER &&
@@ -2896,7 +2905,8 @@ export default function StudioScreen() {
             initialSelectedVerses,
             selectedBook,
             initialChapter,
-            language.key
+            language.key,
+            bibleVersionKey
           )
         );
         setStickers(initialVerseState.stickers);
@@ -2923,6 +2933,7 @@ export default function StudioScreen() {
     };
   }, [
     defaultStudioSaveTarget,
+    bibleVersionKey,
     hasRouteSelectedVerseParams,
     language.key,
     routeDesignParam,
@@ -2950,12 +2961,14 @@ export default function StudioScreen() {
         selectedVerses,
         selectedBook,
         selectedChapter,
-        language.key
+        language.key,
+        bibleVersionKey
       )
     );
   }, [
     hasLoadedState,
     hasVerseSelection,
+    bibleVersionKey,
     language.key,
     selectedBook,
     selectedChapter,
@@ -3457,7 +3470,8 @@ export default function StudioScreen() {
           nextSelectedVerses,
           d.book,
           d.chapter,
-          language.key
+          language.key,
+          bibleVersionKey
         )
       );
     } else {
@@ -3487,6 +3501,7 @@ export default function StudioScreen() {
     setUndoHistory([]);
     setIsFavoriteActive(routeSourceParam === 'favorites');
   }, [
+    bibleVersionKey,
     language.key,
     routeDesignParam,
     routeFavoriteKeyParam,
@@ -3545,7 +3560,8 @@ export default function StudioScreen() {
               nextSelectedVerses,
               d.book,
               d.chapter,
-              language.key
+              language.key,
+              bibleVersionKey
             )
           );
         } else {
@@ -3580,7 +3596,14 @@ export default function StudioScreen() {
     };
 
     void loadStudioEntryById();
-  }, [defaultStudioSaveTarget, language.key, routeDesignParam, routeEntryIdParam, routeEntryTypeParam]);
+  }, [
+    defaultStudioSaveTarget,
+    bibleVersionKey,
+    language.key,
+    routeDesignParam,
+    routeEntryIdParam,
+    routeEntryTypeParam,
+  ]);
 
   const decreaseFontSize = () => {
     if (isStudioLocked) {
@@ -3937,7 +3960,8 @@ export default function StudioScreen() {
           nextSelectedVerses,
           selectedBook,
           selectedChapter,
-          language.key
+          language.key,
+          bibleVersionKey
         )
       );
       setSelectedStickerId(null);
@@ -3986,7 +4010,8 @@ export default function StudioScreen() {
         nextSelectedVerses,
         selectedBook,
         selectedChapter,
-        language.key
+        language.key,
+        bibleVersionKey
       ),
       verseLineHeight,
       selectedSaveTarget
@@ -4103,7 +4128,7 @@ export default function StudioScreen() {
       }));
     }
 
-    const nextChapter = getChapters(book)[0] ?? 0;
+    const nextChapter = getChapters(book, bibleVersionKey)[0] ?? 0;
     const nextEditorState = getBlankEditorStateForReferenceChange();
 
     setSelectedBook(book);

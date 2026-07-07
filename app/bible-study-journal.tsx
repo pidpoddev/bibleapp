@@ -162,7 +162,7 @@ function buildPreview(book: string, chapter: string, verse: string, sections: Bi
 }
 
 export default function BibleStudyJournalScreen() {
-  const { colorTheme, language, t } = useAppSettings();
+  const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{
     entryId?: string;
@@ -190,10 +190,10 @@ export default function BibleStudyJournalScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [undoHistory, setUndoHistory] = useState<BibleStudyUndoSnapshot[]>([]);
 
-  const bookOptions = useMemo(() => getBooks(), []);
-  const chapterOptions = useMemo(() => (book ? getChapters(book).map(String) : []), [book]);
-  const verseOptions = useMemo(() => (book && chapter ? getVerses(book, Number(chapter)).map(String) : []), [book, chapter]);
-  const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key) : ''), [book, chapter, language.key, verse]);
+  const bookOptions = useMemo(() => getBooks(bibleVersionKey), [bibleVersionKey]);
+  const chapterOptions = useMemo(() => (book ? getChapters(book, bibleVersionKey).map(String) : []), [bibleVersionKey, book]);
+  const verseOptions = useMemo(() => (book && chapter ? getVerses(book, Number(chapter), bibleVersionKey).map(String) : []), [bibleVersionKey, book, chapter]);
+  const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key, bibleVersionKey) : ''), [bibleVersionKey, book, chapter, language.key, verse]);
   const selectedBg = getShopBackground(background.startsWith('shop:') ? background.replace('shop:', '') : null);
 
   useEffect(() => {

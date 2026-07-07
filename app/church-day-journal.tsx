@@ -72,7 +72,7 @@ const Field = memo(function Field({ label, value, onChangeText, placeholder, car
 const buildPreview = (book: string, chapter: string, verse: string, sections: ChurchDaySection[]) => `${book && chapter && verse ? `${book} ${chapter}:${verse}` : ''} ${sections.map((s) => s.text.trim()).filter(Boolean).join(' ')}`.trim().slice(0, 80);
 
 export default function ChurchDayJournalScreen() {
-  const { colorTheme, language, t } = useAppSettings();
+  const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const router = useRouter();
   const { entryId, newEntryToken } = useLocalSearchParams<{ entryId?: string; newEntryToken?: string }>();
   const draftEntryId = entryId ?? newEntryToken;
@@ -96,10 +96,10 @@ export default function ChurchDayJournalScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [undoHistory, setUndoHistory] = useState<ChurchDayUndoSnapshot[]>([]);
 
-  const bookOptions = useMemo(() => getBooks(), []);
-  const chapterOptions = useMemo(() => (book ? getChapters(book).map(String) : []), [book]);
-  const verseOptions = useMemo(() => (book && chapter ? getVerses(book, Number(chapter)).map(String) : []), [book, chapter]);
-  const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key) : ''), [book, chapter, verse, language.key]);
+  const bookOptions = useMemo(() => getBooks(bibleVersionKey), [bibleVersionKey]);
+  const chapterOptions = useMemo(() => (book ? getChapters(book, bibleVersionKey).map(String) : []), [bibleVersionKey, book]);
+  const verseOptions = useMemo(() => (book && chapter ? getVerses(book, Number(chapter), bibleVersionKey).map(String) : []), [bibleVersionKey, book, chapter]);
+  const verseText = useMemo(() => (book && chapter && verse ? getVerseText(book, Number(chapter), Number(verse), language.key, bibleVersionKey) : ''), [bibleVersionKey, book, chapter, verse, language.key]);
   const selectedBg = getShopBackground(background.startsWith('shop:') ? background.replace('shop:', '') : null);
 
   useEffect(() => {

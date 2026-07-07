@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import bibleData from '@/utils/bible-data';
+import bibleData, { getBibleData, type BibleVersionKey } from '@/utils/bible-data';
 import { BIBLE_READING_PROGRESS_STORAGE_KEY } from '@/utils/storage-keys';
 
 export type BibleVerseReference = {
@@ -35,8 +35,10 @@ function safeParseReadKeys(value: string | null) {
   }
 }
 
-export function getBibleVerseTotalCount() {
-  return bibleData.reduce((bookTotal, book) => {
+export function getBibleVerseTotalCount(versionKey?: BibleVersionKey) {
+  const selectedBibleData = versionKey ? getBibleData(versionKey) : bibleData;
+
+  return selectedBibleData.reduce((bookTotal, book) => {
     return (
       bookTotal +
       book.chapters.reduce((chapterTotal, chapter) => chapterTotal + chapter.verses.length, 0)
@@ -67,8 +69,10 @@ export async function getBibleReadVerseKeys() {
   );
 }
 
-export async function getBibleReadingProgress(): Promise<BibleReadingProgress> {
-  const totalCount = getBibleVerseTotalCount();
+export async function getBibleReadingProgress(
+  versionKey?: BibleVersionKey
+): Promise<BibleReadingProgress> {
+  const totalCount = getBibleVerseTotalCount(versionKey);
   const readKeys = await getBibleReadVerseKeys();
   const readCount = Math.min(readKeys.size, totalCount);
 

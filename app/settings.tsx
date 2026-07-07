@@ -207,8 +207,11 @@ export default function SettingsScreen() {
     colorThemes,
     language,
     languages,
+    bibleVersionKey,
+    bibleVersionOptions,
     bibleReadingImagesEnabled,
     setColorThemeKey,
+    setBibleVersionKey,
     setBibleReadingImagesEnabled,
     setLanguageKey,
     t,
@@ -236,6 +239,9 @@ export default function SettingsScreen() {
     percent: 0,
   });
   const isCloudSaveBusy = isSyncBusy || isBackgroundSyncing;
+  const selectedBibleVersion = bibleVersionOptions.find(
+    (option) => option.key === bibleVersionKey
+  );
 
   const persistCloudUsername = async (
     value: string,
@@ -305,7 +311,7 @@ export default function SettingsScreen() {
     useCallback(() => {
       let isActive = true;
 
-      void getBibleReadingProgress()
+      void getBibleReadingProgress(bibleVersionKey)
         .then((progress) => {
           if (isActive) {
             setBibleReadingProgress(progress);
@@ -318,7 +324,7 @@ export default function SettingsScreen() {
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [bibleVersionKey])
   );
 
   const refreshPrivateSyncSession = async () => {
@@ -690,6 +696,65 @@ export default function SettingsScreen() {
               ]}
             />
           </View>
+        </View>
+
+        <View
+          style={[
+            styles.bibleVersionCard,
+            {
+              backgroundColor: colorTheme.cardBackground,
+              borderColor: colorTheme.border,
+            },
+          ]}>
+          <View style={styles.bibleProgressHeader}>
+            <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+              <Ionicons name="library-outline" size={22} color="#5B514D" />
+            </View>
+            <View style={styles.accountHeaderText}>
+              <Text style={styles.accountTitle}>{t('settingsBibleVersionTitle')}</Text>
+              <Text style={styles.accountHint}>{t('settingsBibleVersionHint')}</Text>
+            </View>
+          </View>
+
+          {bibleVersionOptions.map((option) => {
+            const isSelected = option.key === bibleVersionKey;
+
+            return (
+              <TouchableOpacity
+                key={option.key}
+                activeOpacity={0.88}
+                onPress={() => setBibleVersionKey(option.key)}
+                style={[
+                  styles.bibleVersionOption,
+                  {
+                    backgroundColor: isSelected
+                      ? colorTheme.toolbarBackground
+                      : colorTheme.paperBackground,
+                    borderColor: isSelected ? colorTheme.tint : colorTheme.border,
+                  },
+                ]}>
+                <View style={[styles.bibleVersionBadge, { borderColor: colorTheme.border }]}>
+                  <Text style={styles.bibleVersionBadgeText}>{option.shortName}</Text>
+                </View>
+                <View style={styles.accountHeaderText}>
+                  <Text style={styles.bibleVersionOptionTitle}>{option.label}</Text>
+                  <Text style={styles.accountHint}>{option.description}</Text>
+                  <Text style={styles.bibleVersionLicense}>{option.licenseLabel}</Text>
+                </View>
+                {isSelected ? (
+                  <Ionicons name="checkmark-circle" size={22} color={colorTheme.tint} />
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+
+          {selectedBibleVersion ? (
+            <Text style={styles.bibleAttributionText}>
+              {t('settingsBibleVersionAttribution', {
+                attribution: selectedBibleVersion.attribution,
+              })}
+            </Text>
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -1263,6 +1328,59 @@ const styles = StyleSheet.create({
   bibleProgressFill: {
     height: '100%',
     borderRadius: 6,
+  },
+  bibleVersionCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  bibleVersionOption: {
+    minHeight: 70,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bibleVersionBadge: {
+    minWidth: 54,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFDF9',
+  },
+  bibleVersionBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#5B514D',
+  },
+  bibleVersionOptionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1F1F1F',
+  },
+  bibleVersionLicense: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8B7870',
+  },
+  bibleAttributionText: {
+    marginTop: 2,
+    color: '#7A6F66',
+    fontSize: 12,
+    lineHeight: 17,
   },
   bibleReadingImagesCard: {
     minHeight: 76,

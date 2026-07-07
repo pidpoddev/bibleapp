@@ -613,7 +613,7 @@ async function hydrateStudioJournalEntries(entries: HomeJournalEntry[]) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { colorTheme, language, t } = useAppSettings();
+  const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const layout = useResponsiveLayout();
   const [today, setToday] = useState(() => new Date());
   const [journalEntries, setJournalEntries] = useState<HomeJournalEntry[]>([]);
@@ -622,8 +622,8 @@ export default function HomeScreen() {
     getMostUsedMoodSummary([])
   );
   const dailyVerse = useMemo(
-    () => getDailyInspirationVerse(today, language.key),
-    [language.key, today]
+    () => getDailyInspirationVerse(today, language.key, bibleVersionKey),
+    [bibleVersionKey, language.key, today]
   );
   const dailyVerseReference = useMemo(
     () => formatLocalizedVerseReference(dailyVerse.book, dailyVerse.chapter, dailyVerse.verse, language.key),
