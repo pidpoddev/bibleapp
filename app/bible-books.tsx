@@ -306,7 +306,9 @@ export default function BibleBooksScreen() {
     }
 
     return (
-      readerBook.chapters.find((entry) => entry.chapter === readerSelection.chapter)?.verses ?? []
+      readerBook.chapters
+        .find((entry) => entry.chapter === readerSelection.chapter)
+        ?.verses.filter((verse) => verse.verse >= readerSelection.verse) ?? []
     ).map((verse) => ({
       type: 'verse',
       key: `${readerBook.book}-${readerSelection.chapter}-${verse.verse}`,

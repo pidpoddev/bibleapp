@@ -2771,7 +2771,7 @@ export default function StudioScreen() {
       setAutoFocusNoteId(null);
       setFocusedNoteId(null);
       setFocusedNoteTarget(null);
-      setOpenToolbarMenu(null);
+      setOpenToolbarMenu(routeOpenToolbarParam);
       setIsBookDropdownOpen(false);
       setIsChapterDropdownOpen(false);
       setIsVerseDropdownOpen(false);
@@ -2939,6 +2939,7 @@ export default function StudioScreen() {
     routeDesignParam,
     routeEntryIdParam,
     routeEntryTypeParam,
+    routeOpenToolbarParam,
     routeOpenSelectedVerseParam,
     routeRestoreToken,
     routeSelectedBookParam,

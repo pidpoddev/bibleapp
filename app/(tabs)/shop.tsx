@@ -236,6 +236,7 @@ export default function ShopScreen() {
   const selectedPack = PACKS.find((pack) => pack.id === selectedPackId) ?? PACKS[0];
   const isSelectedPackIncluded = selectedPack.status === 'included';
   const isSelectedPackOwned = ownedPackIds.has(selectedPack.id);
+  const isSelectedPackAvailable = isSelectedPackIncluded || isSelectedPackOwned;
   const selectedPackHasUsableAssets = Boolean(selectedPack.stickers || selectedPack.backgrounds);
   const packCategoryLabels = {
     all: t('shopCategoryBundle'),
@@ -258,11 +259,15 @@ export default function ShopScreen() {
   }, [selectedPackId]);
 
   const getPackStatusLabel = (pack: ShopPack) => {
+    if (pack.status === 'included') {
+      return t('shopIncluded');
+    }
+
     if (ownedPackIds.has(pack.id)) {
       return t('shopOwned');
     }
 
-    return pack.status === 'included' ? t('shopIncluded') : t('shopUnlock');
+    return t('shopUnlock');
   };
 
   const selectCategory = (categoryKey: string) => {
@@ -300,7 +305,7 @@ export default function ShopScreen() {
   );
 
   const handlePrimaryPackAction = async () => {
-    if (!isSelectedPackOwned) {
+    if (!isSelectedPackAvailable) {
       setShopMessage(t('shopPurchaseNotConnected'));
       return;
     }
@@ -420,14 +425,18 @@ export default function ShopScreen() {
             </View>
             <View style={styles.testPill}>
               <Text maxFontSizeMultiplier={1.1} style={styles.testPillText}>
-                {isSelectedPackOwned ? t('shopOwned') : isSelectedPackIncluded ? t('shopIncluded') : t('shopLocked')}
+                {isSelectedPackIncluded
+                  ? t('shopIncluded')
+                  : isSelectedPackOwned
+                    ? t('shopOwned')
+                    : t('shopLocked')}
               </Text>
             </View>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              isSelectedPackOwned
+              isSelectedPackAvailable
                 ? selectedPackHasUsableAssets
                   ? `${t('shopUseInStudio')}: ${localizeShopText(selectedPack.title)}`
                   : `${t('shopViewPreview')}: ${localizeShopText(selectedPack.title)}`
@@ -437,7 +446,7 @@ export default function ShopScreen() {
             style={[styles.addButton, { backgroundColor: colorTheme.tint }]}>
             <Ionicons
               name={
-                isSelectedPackOwned
+                isSelectedPackAvailable
                   ? selectedPackHasUsableAssets
                     ? 'brush-outline'
                     : 'checkmark-circle-outline'
@@ -447,7 +456,7 @@ export default function ShopScreen() {
               color="#FFFDF9"
             />
             <Text style={styles.addButtonText}>
-              {isSelectedPackOwned
+              {isSelectedPackAvailable
                 ? selectedPackHasUsableAssets
                   ? t('shopUseInStudio')
                   : t('shopSavedPreview')
@@ -499,7 +508,7 @@ export default function ShopScreen() {
           )}
 
           <Text style={styles.testPackNote}>
-            {isSelectedPackOwned
+            {isSelectedPackAvailable
               ? selectedPackHasUsableAssets
                 ? t('shopIncludedNote')
                 : t('shopPreviewLocalShelf')
@@ -567,11 +576,11 @@ export default function ShopScreen() {
                   <Text style={styles.previewAction}>
                     {pack.id === selectedPackId
                       ? t('shopSelected')
-                      : ownedPackIds.has(pack.id) && pack.backgrounds
+                      : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.backgrounds
                         ? t('shopViewBackgrounds')
-                        : ownedPackIds.has(pack.id) && pack.stickers
+                        : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.stickers
                           ? t('shopViewStickers')
-                          : ownedPackIds.has(pack.id)
+                          : pack.status === 'included' || ownedPackIds.has(pack.id)
                             ? t('shopViewPreview')
                             : t('shopUnlock')}
                   </Text>
