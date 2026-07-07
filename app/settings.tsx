@@ -121,6 +121,10 @@ function getFriendlySyncError(error: unknown, fallback: string, t: SettingsTrans
     return t('settingsSyncErrorEnterPhrase');
   }
 
+  if (message.includes('Network request failed')) {
+    return t('settingsSyncErrorTimedOut');
+  }
+
   if (message.includes('Unexpected API error') || message.includes('Sync request failed')) {
     return fallback;
   }
@@ -137,7 +141,7 @@ function getFriendlySyncError(error: unknown, fallback: string, t: SettingsTrans
 
 function waitForBusyIndicator() {
   return new Promise((resolve) => {
-    setTimeout(resolve, 80);
+    setTimeout(resolve, 150);
   });
 }
 
@@ -356,8 +360,8 @@ export default function SettingsScreen() {
 
     void (async () => {
       try {
-        const pushResult = await pushEncryptedSync(phrase);
         const pullResult = await pullEncryptedSync(phrase, { full: true });
+        const pushResult = await pushEncryptedSync(phrase);
 
         if (!isMountedRef.current) {
           return;
@@ -410,7 +414,10 @@ export default function SettingsScreen() {
       return;
     }
 
-    if (!privateSyncPhrase.trim()) {
+    Keyboard.dismiss();
+    const phrase = privateSyncPhrase.trim();
+
+    if (!phrase) {
       setSyncError(t('cloudSaveEnterPhrase'));
       setSyncMessage('');
       return;
@@ -427,7 +434,6 @@ export default function SettingsScreen() {
     setSyncError('');
     setSyncConflicts([]);
     setSyncMessage(accountSession ? t('settingsSyncStarting') : t('settingsSyncConnecting'));
-    Keyboard.dismiss();
     let didStartBackgroundSync = false;
 
     try {
@@ -435,7 +441,7 @@ export default function SettingsScreen() {
       if (!accountSession) {
         setSyncMessage(t('settingsSyncProtectingPhrase'));
         await waitForBusyIndicator();
-        const result = await connectPrivateSyncPhrase(privateSyncPhrase, username);
+        const result = await connectPrivateSyncPhrase(phrase, username);
         const connectedUsername = result.username || username;
         await persistCloudUsername(connectedUsername);
         setAccountSession({
@@ -444,7 +450,7 @@ export default function SettingsScreen() {
         });
         didStartBackgroundSync = true;
         startCloudSaveSyncInBackground(
-          privateSyncPhrase,
+          phrase,
           t('settingsSyncConnectedBackground')
         );
         return;
@@ -464,7 +470,7 @@ export default function SettingsScreen() {
         }
 
         setSyncMessage(t('settingsSyncSavingUsername'));
-        const nextSession = await updateSyncUsername(availability.username, privateSyncPhrase);
+        const nextSession = await updateSyncUsername(availability.username, phrase);
         const connectedUsername = nextSession.username || username;
         await persistCloudUsername(connectedUsername);
         setAccountSession({
@@ -473,13 +479,13 @@ export default function SettingsScreen() {
         });
         didStartBackgroundSync = true;
         startCloudSaveSyncInBackground(
-          privateSyncPhrase,
+          phrase,
           t('settingsSyncUsernameChangedBackground')
         );
         return;
       } else {
         didStartBackgroundSync = true;
-        startCloudSaveSyncInBackground(privateSyncPhrase, t('settingsSyncBackground'));
+        startCloudSaveSyncInBackground(phrase, t('settingsSyncBackground'));
         return;
       }
     } catch (error) {

@@ -3857,6 +3857,8 @@ export default function StudioScreen() {
     setNoteStyleEditorId(null);
     setFocusedNoteId(null);
     setFocusedNoteTarget(null);
+    setAutoFocusNoteId(null);
+    setOpenToolbarMenu(null);
   };
 
   const selectNote = (id: string) => {
@@ -5535,12 +5537,13 @@ export default function StudioScreen() {
                   setCaptureCanvasTop(event.nativeEvent.layout.y);
                 }}
                 style={styles.captureCanvas}>
-              <Pressable
-                onPress={clearCanvasSelection}
-                style={[
-                  styles.captureStage,
-                  { minHeight: contentStageMinHeight },
-                ]}>
+                <Pressable
+                  onPress={clearCanvasSelection}
+                  style={[
+                    styles.captureStage,
+                    { minHeight: contentStageMinHeight },
+                  ]}
+                  accessible={false}>
                 <DrawingLayer strokes={drawingStrokes} />
                 <View pointerEvents="box-none" style={styles.floatingLayer}>
                   {floatingItems.map((floatingItem) =>

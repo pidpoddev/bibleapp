@@ -7,16 +7,23 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   BIBLE_READING_PROGRESS_STORAGE_KEY,
+  JOURNAL_INDEX_KEY,
+  LEGACY_SAVED_DESIGNS_STORAGE_KEY,
+  SAVED_DESIGNS_BACKUP_STORAGE_KEY,
+  SAVED_DESIGNS_STORAGE_KEY,
   SHOP_OWNED_PACKS_STORAGE_KEY,
+  VERSE_DESIGN_INDEX_STORAGE_KEY,
+  VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
 } from '@/utils/storage-keys';
 
 const SYNC_SESSION_STORAGE_KEY = 'private_sync_session_v1';
 const SYNC_VERSION_STORAGE_KEY = 'private_sync_versions_v1';
 const SYNC_LAST_PULL_STORAGE_KEY = 'private_sync_last_pull_v1';
 const SYNC_API_URL = 'https://pidpod.com';
-const SYNC_REQUEST_TIMEOUT_MS = 15_000;
+const SYNC_REQUEST_TIMEOUT_MS = 12_000;
 const MAX_SYNC_ITEM_CHARS = 512 * 1024;
-const KDF_ITERATIONS = 60_000;
+const LEGACY_KDF_ITERATIONS = 60_000;
+const KDF_ITERATIONS = 12_000;
 const KDF_SALT = 'BibleApp Private Sync Phrase v1';
 
 export type SyncItemType =
@@ -42,6 +49,7 @@ type SyncSession = {
   recoveryId: string;
   username?: string | null;
   phraseFingerprint: string;
+  kdfIterations?: number;
   createdAt: number;
   lastSyncedAt?: string;
 };
@@ -61,6 +69,7 @@ type PhraseMaterial = {
   authSecret: string;
   encryptionKey: Uint8Array;
   phraseFingerprint: string;
+  kdfIterations: number;
 };
 
 type LocalSyncRecord = {
@@ -164,17 +173,17 @@ const SYNCABLE_EXACT_KEYS: Record<string, SyncItemType> = {
   account_session_v1: 'account_session',
   app_settings_v1: 'app_settings',
   [BIBLE_READING_PROGRESS_STORAGE_KEY]: 'bible_reading_progress',
-  journal_index: 'journal_index',
-  studio_favorites_v2: 'saved_designs',
-  studio_favorites_backup_v1: 'saved_designs_backup',
-  favorites: 'legacy_saved_designs',
-  verse_design_index_v1: 'verse_design_index',
-  verse_design_timestamps_v1: 'verse_design_timestamps',
+  [JOURNAL_INDEX_KEY]: 'journal_index',
+  [SAVED_DESIGNS_STORAGE_KEY]: 'saved_designs',
+  [SAVED_DESIGNS_BACKUP_STORAGE_KEY]: 'saved_designs_backup',
+  [LEGACY_SAVED_DESIGNS_STORAGE_KEY]: 'legacy_saved_designs',
+  [VERSE_DESIGN_INDEX_STORAGE_KEY]: 'verse_design_index',
+  [VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY]: 'verse_design_timestamps',
   [SHOP_OWNED_PACKS_STORAGE_KEY]: 'shop_entitlements',
 };
 
 let cachedPhraseMaterial: {
-  normalizedPhrase: string;
+  cacheKey: string;
   material: PhraseMaterial;
 } | null = null;
 
@@ -332,17 +341,18 @@ function getPhraseScope(username?: string | null) {
 
 async function derivePhraseMaterial(
   phrase: string,
-  username?: string | null
+  username?: string | null,
+  iterations = KDF_ITERATIONS
 ): Promise<PhraseMaterial> {
   const normalizedPhrase = normalizePhrase(phrase);
   const phraseScope = getPhraseScope(username);
-  const cacheKey = `${phraseScope || 'legacy'}|${normalizedPhrase}`;
-  if (cachedPhraseMaterial?.normalizedPhrase === cacheKey) {
+  const cacheKey = `${iterations}|${phraseScope || 'legacy'}|${normalizedPhrase}`;
+  if (cachedPhraseMaterial?.cacheKey === cacheKey) {
     return cachedPhraseMaterial.material;
   }
 
   const derived = await pbkdf2Async(sha256, normalizedPhrase, KDF_SALT, {
-    c: KDF_ITERATIONS,
+    c: iterations,
     dkLen: 96,
     asyncTick: 4,
   });
@@ -363,14 +373,52 @@ async function derivePhraseMaterial(
     authSecret: bytesToHex(sha256(new Uint8Array([...authKey, ...utf8ToBytes('auth')]))),
     encryptionKey,
     phraseFingerprint: bytesToHex(sha256(encryptionKey)).slice(0, 16),
+    kdfIterations: iterations,
   };
 
   cachedPhraseMaterial = {
-    normalizedPhrase: cacheKey,
+    cacheKey,
     material,
   };
 
   return material;
+}
+
+function getSessionKdfIterations(session: SyncSession) {
+  return session.kdfIterations ?? LEGACY_KDF_ITERATIONS;
+}
+
+async function getPhraseMaterialForSession(phrase: string, session: SyncSession) {
+  const primaryIterations = getSessionKdfIterations(session);
+  const primaryMaterial = await derivePhraseMaterial(phrase, session.username, primaryIterations);
+
+  if (primaryMaterial.phraseFingerprint === session.phraseFingerprint) {
+    if (session.kdfIterations === undefined) {
+      await AsyncStorage.setItem(
+        SYNC_SESSION_STORAGE_KEY,
+        JSON.stringify({ ...session, kdfIterations: primaryIterations })
+      );
+    }
+
+    return primaryMaterial;
+  }
+
+  if (session.kdfIterations === undefined) {
+    const fallbackIterations =
+      primaryIterations === LEGACY_KDF_ITERATIONS ? KDF_ITERATIONS : LEGACY_KDF_ITERATIONS;
+    const fallbackMaterial = await derivePhraseMaterial(phrase, session.username, fallbackIterations);
+
+    if (fallbackMaterial.phraseFingerprint === session.phraseFingerprint) {
+      await AsyncStorage.setItem(
+        SYNC_SESSION_STORAGE_KEY,
+        JSON.stringify({ ...session, kdfIterations: fallbackIterations })
+      );
+
+      return fallbackMaterial;
+    }
+  }
+
+  throw new Error('Private Sync Phrase does not match this device.');
 }
 
 function getDeviceName() {
@@ -438,12 +486,23 @@ async function requestJson<T>(
     headers['x-sync-device-secret'] = session.deviceSecret;
   }
 
+  let requestTimeout: ReturnType<typeof setTimeout> | null = null;
+
   try {
-    const response = await fetch(`${SYNC_API_URL}${path}`, {
+    const fetchRequest = fetch(`${SYNC_API_URL}${path}`, {
       ...init,
       headers,
       signal: controller?.signal,
     });
+    const response = await Promise.race([
+      fetchRequest,
+      new Promise<Response>((_, reject) => {
+        requestTimeout = setTimeout(
+          () => reject(new Error('Cloud Save request timed out.')),
+          SYNC_REQUEST_TIMEOUT_MS
+        );
+      }),
+    ]);
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
 
     if (!response.ok) {
@@ -458,6 +517,10 @@ async function requestJson<T>(
 
     throw error;
   } finally {
+    if (requestTimeout !== null) {
+      clearTimeout(requestTimeout);
+    }
+
     if (timeout !== null) {
       clearTimeout(timeout);
     }
@@ -494,6 +557,7 @@ export async function connectPrivateSyncPhrase(phrase: string, preferredUsername
     recoveryId: material.recoveryId,
     username: response.username ?? preferredUsername ?? null,
     phraseFingerprint: material.phraseFingerprint,
+    kdfIterations: KDF_ITERATIONS,
     createdAt: Date.now(),
   };
 
@@ -524,10 +588,8 @@ export async function updateSyncUsername(username: string, phrase: string) {
     throw new Error('Connect Cloud Save first.');
   }
 
-  const material = await derivePhraseMaterial(phrase, username);
-  if (material.phraseFingerprint !== session.phraseFingerprint) {
-    throw new Error('Private Sync Phrase does not match this device.');
-  }
+  const verifiedMaterial = await getPhraseMaterialForSession(phrase, session);
+  const material = await derivePhraseMaterial(phrase, username, verifiedMaterial.kdfIterations);
 
   const response = await requestJson<{ username: string }>(
     '/v1/sync/account',
@@ -537,7 +599,12 @@ export async function updateSyncUsername(username: string, phrase: string) {
     },
     session
   );
-  const nextSession = { ...session, username: response.username, recoveryId: material.recoveryId };
+  const nextSession = {
+    ...session,
+    username: response.username,
+    recoveryId: material.recoveryId,
+    kdfIterations: material.kdfIterations,
+  };
   await AsyncStorage.setItem(SYNC_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
   return nextSession;
 }
@@ -612,6 +679,201 @@ function parseStoredValue(value: string) {
   } catch {
     return value;
   }
+}
+
+function normalizeBibleReadingProgressValue(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+async function mergeBibleReadingProgressValue(remoteValue: unknown) {
+  const localValue = parseStoredValue(
+    (await AsyncStorage.getItem(BIBLE_READING_PROGRESS_STORAGE_KEY)) ?? '[]'
+  );
+  const mergedKeys = new Set([
+    ...normalizeBibleReadingProgressValue(localValue),
+    ...normalizeBibleReadingProgressValue(remoteValue),
+  ]);
+
+  return Array.from(mergedKeys).sort();
+}
+
+type SavedDesignSyncValue = {
+  key?: unknown;
+  savedAt?: unknown;
+};
+
+type JournalIndexSyncValue = {
+  id?: unknown;
+  updatedAt?: unknown;
+};
+
+type VerseDesignIndexSyncValue = {
+  savedAt?: unknown;
+};
+
+function getTimestamp(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  return 0;
+}
+
+function mergeById<T>(
+  localItems: unknown,
+  remoteItems: unknown,
+  getId: (item: T) => string | null,
+  getUpdatedAt: (item: T) => number
+) {
+  const merged = new Map<string, T>();
+  const candidates = [
+    ...(Array.isArray(localItems) ? localItems : []),
+    ...(Array.isArray(remoteItems) ? remoteItems : []),
+  ];
+
+  candidates.forEach((candidate) => {
+    if (typeof candidate !== 'object' || candidate === null) {
+      return;
+    }
+
+    const item = candidate as T;
+    const id = getId(item);
+
+    if (!id) {
+      return;
+    }
+
+    const existing = merged.get(id);
+    if (!existing || getUpdatedAt(item) >= getUpdatedAt(existing)) {
+      merged.set(id, item);
+    }
+  });
+
+  return Array.from(merged.values()).sort(
+    (left, right) => getUpdatedAt(right) - getUpdatedAt(left)
+  );
+}
+
+function mergeSavedDesigns(localValue: unknown, remoteValue: unknown) {
+  return mergeById<SavedDesignSyncValue>(
+    localValue,
+    remoteValue,
+    (item) => (typeof item.key === 'string' && item.key ? item.key : null),
+    (item) => getTimestamp(item.savedAt)
+  );
+}
+
+function mergeJournalIndex(localValue: unknown, remoteValue: unknown) {
+  return mergeById<JournalIndexSyncValue>(
+    localValue,
+    remoteValue,
+    (item) => (typeof item.id === 'string' && item.id ? item.id : null),
+    (item) => getTimestamp(item.updatedAt)
+  );
+}
+
+function asObjectRecord(value: unknown) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function mergeObjectMap(localValue: unknown, remoteValue: unknown) {
+  return {
+    ...asObjectRecord(remoteValue),
+    ...asObjectRecord(localValue),
+  };
+}
+
+function mergeTimestampMap(localValue: unknown, remoteValue: unknown) {
+  const merged = new Map<string, unknown>();
+
+  Object.entries(asObjectRecord(localValue)).forEach(([key, value]) => {
+    merged.set(key, value);
+  });
+
+  Object.entries(asObjectRecord(remoteValue)).forEach(([key, value]) => {
+    const existing = merged.get(key);
+
+    if (!existing || getTimestamp(value) >= getTimestamp(existing)) {
+      merged.set(key, value);
+    }
+  });
+
+  return Object.fromEntries(merged.entries());
+}
+
+function mergeVerseDesignIndex(localValue: unknown, remoteValue: unknown) {
+  const merged = new Map<string, unknown>();
+
+  Object.entries(asObjectRecord(localValue)).forEach(([key, value]) => {
+    merged.set(key, value);
+  });
+
+  Object.entries(asObjectRecord(remoteValue)).forEach(([key, value]) => {
+    if (typeof value !== 'object' || value === null) {
+      return;
+    }
+
+    const existing = merged.get(key);
+    const remoteSavedAt = getTimestamp((value as VerseDesignIndexSyncValue).savedAt);
+    const localSavedAt =
+      typeof existing === 'object' && existing !== null
+        ? getTimestamp((existing as VerseDesignIndexSyncValue).savedAt)
+        : 0;
+
+    if (!existing || remoteSavedAt >= localSavedAt) {
+      merged.set(key, value);
+    }
+  });
+
+  return Object.fromEntries(merged.entries());
+}
+
+async function mergeIncomingSyncValue(
+  localStorageKey: string,
+  itemType: SyncItemType,
+  remoteValue: unknown
+) {
+  const fallbackValue = itemType === 'verse_state_map' ? '{}' : '[]';
+  const localValue = parseStoredValue(
+    (await AsyncStorage.getItem(localStorageKey)) ?? fallbackValue
+  );
+
+  if (
+    localStorageKey === SAVED_DESIGNS_STORAGE_KEY ||
+    localStorageKey === SAVED_DESIGNS_BACKUP_STORAGE_KEY ||
+    localStorageKey === LEGACY_SAVED_DESIGNS_STORAGE_KEY
+  ) {
+    return mergeSavedDesigns(localValue, remoteValue);
+  }
+
+  if (localStorageKey === JOURNAL_INDEX_KEY) {
+    return mergeJournalIndex(localValue, remoteValue);
+  }
+
+  if (localStorageKey === VERSE_DESIGN_INDEX_STORAGE_KEY) {
+    return mergeVerseDesignIndex(localValue, remoteValue);
+  }
+
+  if (localStorageKey === VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY) {
+    return mergeTimestampMap(localValue, remoteValue);
+  }
+
+  if (itemType === 'verse_state_map') {
+    return mergeObjectMap(localValue, remoteValue);
+  }
+
+  return remoteValue;
 }
 
 function hasBlockedMediaPayload(json: string) {
@@ -725,10 +987,7 @@ export async function pushEncryptedSync(phrase: string) {
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase, session.username);
-  if (material.phraseFingerprint !== session.phraseFingerprint) {
-    throw new Error('Private Sync Phrase does not match this device.');
-  }
+  const material = await getPhraseMaterialForSession(phrase, session);
 
   const versions = await getStoredVersions();
   const records = await collectLocalSyncRecords(versions);
@@ -761,7 +1020,11 @@ export async function pushEncryptedSync(phrase: string) {
       }
     }
   });
-  const nextSession = { ...session, lastSyncedAt: new Date().toISOString() };
+  const nextSession = {
+    ...session,
+    kdfIterations: material.kdfIterations,
+    lastSyncedAt: new Date().toISOString(),
+  };
 
   await Promise.all([
     saveStoredVersions(nextVersions),
@@ -780,10 +1043,7 @@ export async function pullEncryptedSync(phrase: string, options: { full?: boolea
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase, session.username);
-  if (material.phraseFingerprint !== session.phraseFingerprint) {
-    throw new Error('Private Sync Phrase does not match this device.');
-  }
+  const material = await getPhraseMaterialForSession(phrase, session);
 
   const since = options.full ? null : await AsyncStorage.getItem(SYNC_LAST_PULL_STORAGE_KEY);
   const response = await requestJson<PullResponse>(
@@ -808,7 +1068,11 @@ export async function pullEncryptedSync(phrase: string, options: { full?: boolea
     if (isDeleted) {
       removals.push(localStorageKey);
     } else {
-      const valueText = JSON.stringify(payload.value);
+      const nextValue =
+        localStorageKey === BIBLE_READING_PROGRESS_STORAGE_KEY
+          ? await mergeBibleReadingProgressValue(payload.value)
+          : await mergeIncomingSyncValue(localStorageKey, item.itemType, payload.value);
+      const valueText = JSON.stringify(nextValue);
 
       if (hasBlockedMediaPayload(valueText)) {
         continue;
@@ -833,7 +1097,11 @@ export async function pullEncryptedSync(phrase: string, options: { full?: boolea
     await AsyncStorage.multiRemove(removals);
   }
 
-  const nextSession = { ...session, lastSyncedAt: response.pulledAt };
+  const nextSession = {
+    ...session,
+    kdfIterations: material.kdfIterations,
+    lastSyncedAt: response.pulledAt,
+  };
   await Promise.all([
     saveStoredVersions(versions),
     AsyncStorage.setItem(SYNC_LAST_PULL_STORAGE_KEY, response.pulledAt),
@@ -1005,10 +1273,7 @@ export async function getEncryptedSyncConflicts(phrase: string) {
     throw new Error('Create or enter your Private Sync Phrase first.');
   }
 
-  const material = await derivePhraseMaterial(phrase, session.username);
-  if (material.phraseFingerprint !== session.phraseFingerprint) {
-    throw new Error('Private Sync Phrase does not match this device.');
-  }
+  const material = await getPhraseMaterialForSession(phrase, session);
 
   const response = await requestJson<{ conflicts: ConflictResponseRow[] }>(
     '/v1/sync/conflicts',

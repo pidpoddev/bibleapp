@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -77,7 +78,7 @@ function RootNavigator() {
           options={{ title: t('settingsTitle'), presentation: 'card' }}
         />
       </Stack>
-      <StatusBar style="auto" />
+      {Platform.OS === 'android' ? null : <StatusBar style="auto" />}
     </ThemeProvider>
   );
 }

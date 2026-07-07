@@ -326,6 +326,48 @@ export default function BibleBooksScreen() {
         ),
     0
   );
+  useEffect(() => {
+    if (!readerSelection || readerItems.length === 0) {
+      return undefined;
+    }
+
+    const targetIndex = readerItems.findIndex(
+      (item) =>
+        item.type === 'verse' &&
+        item.book === readerSelection.book &&
+        item.chapter === readerSelection.chapter &&
+        item.verse === readerSelection.verse
+    );
+
+    if (targetIndex < 0) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+    const scrollToSelectedVerse = (animated: boolean) => {
+      if (isCancelled) {
+        return;
+      }
+
+      readingListRef.current?.scrollToIndex({
+        index: targetIndex,
+        animated,
+        viewPosition: 0.08,
+      });
+    };
+    const frame = requestAnimationFrame(() => scrollToSelectedVerse(false));
+    const retry = setTimeout(() => scrollToSelectedVerse(true), 260);
+
+    return () => {
+      isCancelled = true;
+      cancelAnimationFrame(frame);
+      clearTimeout(retry);
+    };
+  }, [
+    readerItems,
+    readerOpenToken,
+    readerSelection,
+  ]);
   const selectedChapterReadCount = useMemo(() => {
     if (!selectedBook || selectedChapter === null) {
       return 0;
@@ -1077,6 +1119,11 @@ export default function BibleBooksScreen() {
           ]}
           initialScrollIndex={readerInitialIndex}
           onScrollToIndexFailed={(info) => {
+            readingListRef.current?.scrollToOffset({
+              offset: Math.max(0, info.averageItemLength * info.index),
+              animated: false,
+            });
+
             setTimeout(() => {
               readingListRef.current?.scrollToIndex({
                 index: Math.min(info.index, Math.max(readerItems.length - 1, 0)),
