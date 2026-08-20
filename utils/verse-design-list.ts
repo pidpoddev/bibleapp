@@ -5,6 +5,7 @@ import {
   SAVED_DESIGNS_STORAGE_KEY,
   VERSE_DESIGN_INDEX_STORAGE_KEY,
   VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
+  BIBLE_INCLUDED_DESIGNS_STORAGE_KEY,
 } from '@/utils/storage-keys';
 import {
   getVerseStorageKey,
@@ -40,6 +41,7 @@ export type VerseDesignListItem = {
   selectedFont: string;
   fontSize: number;
   savedAt: string;
+  includeInBible: boolean;
 };
 
 const books = bible as BibleBook[];
@@ -142,6 +144,7 @@ function buildVerseDesignListItem(
     selectedFont: state.selectedFont,
     fontSize: state.fontSize,
     savedAt,
+    includeInBible: false,
   };
 }
 
@@ -194,7 +197,69 @@ function normalizeVerseDesignListItem(value: unknown): VerseDesignListItem | nul
     selectedFont: candidate.selectedFont,
     fontSize: candidate.fontSize,
     savedAt: typeof candidate.savedAt === 'string' ? candidate.savedAt : '',
+    includeInBible: candidate.includeInBible === true,
   };
+}
+
+async function loadBibleIncludedDesigns() {
+  const savedValue = await AsyncStorage.getItem(BIBLE_INCLUDED_DESIGNS_STORAGE_KEY);
+
+  if (!savedValue) return new Set<string>();
+
+  try {
+    const parsedValue = JSON.parse(savedValue) as unknown;
+    return new Set(
+      Array.isArray(parsedValue)
+        ? parsedValue.filter((value): value is string => typeof value === 'string')
+        : []
+    );
+  } catch (error) {
+    console.warn('Failed to load Bible-included canvas choices', error);
+    return new Set<string>();
+  }
+}
+
+export async function isVerseDesignIncludedInBible(book: string, designKey: string) {
+  const includedDesigns = await loadBibleIncludedDesigns();
+  return includedDesigns.has(getTimestampKey(book, designKey));
+}
+
+export async function setVerseDesignIncludedInBible(
+  book: string,
+  designKey: string,
+  included: boolean
+) {
+  const includedDesigns = await loadBibleIncludedDesigns();
+  const key = getTimestampKey(book, designKey);
+
+  if (included) includedDesigns.add(key);
+  else includedDesigns.delete(key);
+
+  await AsyncStorage.setItem(
+    BIBLE_INCLUDED_DESIGNS_STORAGE_KEY,
+    JSON.stringify(Array.from(includedDesigns))
+  );
+}
+
+export async function loadVerseDesignByKey(book: string, designKey: string) {
+  const [stateMap, index, includedDesigns, timestamps] = await Promise.all([
+    loadVerseStateMap(book),
+    loadVerseDesignIndex(),
+    loadBibleIncludedDesigns(),
+    loadVerseDesignTimestamps(),
+  ]);
+  const id = getTimestampKey(book, designKey);
+  const state = stateMap[designKey];
+  const item = state
+    ? buildVerseDesignListItem(book, designKey, state, timestamps[id] ?? '')
+    : index[id] ?? null;
+
+  return item
+    ? {
+        ...item,
+        includeInBible: includedDesigns.has(id),
+      }
+    : null;
 }
 
 async function loadVerseDesignTimestamps() {
@@ -331,9 +396,10 @@ export function getVerseDesignReferenceLabel(item: VerseDesignListItem) {
 }
 
 export async function loadVerseDesigns() {
-  const [timestamps, indexedDesigns] = await Promise.all([
+  const [timestamps, indexedDesigns, includedDesigns] = await Promise.all([
     loadVerseDesignTimestamps(),
     loadVerseDesignIndex(),
+    loadBibleIncludedDesigns(),
   ]);
   const designs = await Promise.all(
     books.map(async ({ book }) => {
@@ -395,7 +461,10 @@ export async function loadVerseDesigns() {
     }
 
     return getReferenceLabelFromItem(left).localeCompare(getReferenceLabelFromItem(right));
-  });
+  }).map((item) => ({
+    ...item,
+    includeInBible: includedDesigns.has(getTimestampKey(item.book, item.key)),
+  }));
 }
 
 export async function deleteVerseDesign(item: VerseDesignListItem) {

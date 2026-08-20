@@ -8,7 +8,7 @@ import { captureRef } from 'react-native-view-shot';
 import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
-import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { upsertJournalIndexEntry } from '@/utils/journal-storage';
 import { formatEntryDateTime } from '@/utils/date-time';
 import {
   DAILY_DEVOTIONAL_SECTION_KEYS,
@@ -117,11 +117,7 @@ export default function DailyDevotionalJournalScreen() {
   }, []);
 
   const updateIndex = useCallback(async (entry: DailyDevotionalEntry) => {
-    const existingIndex = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-    const parsedIndex = existingIndex ? (JSON.parse(existingIndex) as DailyDevotionalEntry[]) : [];
-    const nextIndex = parsedIndex.some((item) => item.id === entry.id) ? parsedIndex.map((item) => (item.id === entry.id ? entry : item)) : [entry, ...parsedIndex];
-    nextIndex.sort((left, right) => right.updatedAt - left.updatedAt);
-    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
+    await upsertJournalIndexEntry(entry);
   }, []);
 
   const saveEntry = useCallback(async (nextBook: string, nextChapter: string, nextVerse: string, nextSections: DailyDevotionalSection[], nextStickers = stickers, nextBackground = background, nextHighlightColor = highlightColor) => {

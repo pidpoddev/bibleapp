@@ -1,12 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
-  BIBLE_READING_PROGRESS_STORAGE_KEY,
+  BIBLE_INCLUDED_DESIGNS_STORAGE_KEY,
   JOURNAL_INDEX_KEY,
   LEGACY_SAVED_DESIGNS_STORAGE_KEY,
   SAVED_DESIGNS_BACKUP_STORAGE_KEY,
   SAVED_DESIGNS_STORAGE_KEY,
-  SHOP_OWNED_PACKS_STORAGE_KEY,
   VERSE_DESIGN_INDEX_STORAGE_KEY,
   VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
 } from '@/utils/storage-keys';
@@ -47,16 +46,33 @@ const JOURNAL_ENTRY_PREFIX_BY_TYPE: Record<JournalEntryType, string> = {
   'journal-studio': 'journal_studio_',
 };
 
-const EXACT_JOURNAL_DATA_KEYS = [
+// Cleared by "Reset journal data". Intentionally excludes shop entitlements and
+// bible reading progress so paid unlocks / reading % survive a journal wipe.
+const EXACT_JOURNAL_RESET_KEYS = [
   JOURNAL_INDEX_KEY,
-  BIBLE_READING_PROGRESS_STORAGE_KEY,
   SAVED_DESIGNS_STORAGE_KEY,
   SAVED_DESIGNS_BACKUP_STORAGE_KEY,
   LEGACY_SAVED_DESIGNS_STORAGE_KEY,
   VERSE_DESIGN_INDEX_STORAGE_KEY,
   VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
-  SHOP_OWNED_PACKS_STORAGE_KEY,
+  BIBLE_INCLUDED_DESIGNS_STORAGE_KEY,
 ];
+
+const JOURNAL_DATA_STORAGE_PREFIXES = [
+  ...Object.values(JOURNAL_ENTRY_PREFIX_BY_TYPE),
+  'verse_',
+];
+
+let journalIndexWriteQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueJournalIndexWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const nextWrite = journalIndexWriteQueue.then(operation, operation);
+  journalIndexWriteQueue = nextWrite.then(
+    () => undefined,
+    () => undefined
+  );
+  return nextWrite;
+}
 
 export function getJournalEntryStorageKey(entry: Pick<JournalIndexEntry, 'id' | 'type'>) {
   return `${JOURNAL_ENTRY_PREFIX_BY_TYPE[entry.type]}${entry.id}`;
@@ -89,6 +105,42 @@ export function safeParseJournalIndex(value: string | null): JournalIndexEntry[]
   } catch {
     return [];
   }
+}
+
+export async function upsertJournalIndexEntry(entry: JournalIndexEntry) {
+  return enqueueJournalIndexWrite(async () => {
+    const existingIndex = safeParseJournalIndex(await AsyncStorage.getItem(JOURNAL_INDEX_KEY));
+    const nextIndex = existingIndex.some((item) => item.id === entry.id)
+      ? existingIndex.map((item) => (item.id === entry.id ? { ...item, ...entry } : item))
+      : [entry, ...existingIndex];
+
+    nextIndex.sort((left, right) => right.updatedAt - left.updatedAt);
+    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
+    return nextIndex;
+  });
+}
+
+export async function removeJournalIndexEntry(
+  id: string,
+  type?: JournalEntryType
+) {
+  return enqueueJournalIndexWrite(async () => {
+    const existingIndex = safeParseJournalIndex(await AsyncStorage.getItem(JOURNAL_INDEX_KEY));
+    const nextIndex = existingIndex.filter((item) =>
+      type ? !(item.id === id && item.type === type) : item.id !== id
+    );
+
+    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
+    return nextIndex;
+  });
+}
+
+export async function replaceJournalIndex(entries: JournalIndexEntry[]) {
+  return enqueueJournalIndexWrite(async () => {
+    const nextIndex = [...entries].sort((left, right) => right.updatedAt - left.updatedAt);
+    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
+    return nextIndex;
+  });
 }
 
 function parseStoredJson(value: string | null) {
@@ -170,14 +222,9 @@ export async function getHydratedJournalEntries() {
   );
 }
 
-const JOURNAL_DATA_STORAGE_PREFIXES = [
-  ...Object.values(JOURNAL_ENTRY_PREFIX_BY_TYPE),
-  'verse_',
-];
-
 function isJournalDataStorageKey(key: string) {
   return (
-    EXACT_JOURNAL_DATA_KEYS.includes(key) ||
+    EXACT_JOURNAL_RESET_KEYS.includes(key) ||
     JOURNAL_DATA_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
 }
@@ -215,7 +262,7 @@ export async function buildJournalExportSnapshot() {
       },
       {}
     ),
-    savedDesigns: EXACT_JOURNAL_DATA_KEYS.filter((key) => key !== JOURNAL_INDEX_KEY).reduce<
+    savedDesigns: EXACT_JOURNAL_RESET_KEYS.filter((key) => key !== JOURNAL_INDEX_KEY).reduce<
       Record<string, unknown>
     >((accumulator, key) => {
       if (Object.prototype.hasOwnProperty.call(userData, key)) {

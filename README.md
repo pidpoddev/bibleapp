@@ -7,7 +7,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 1. Install dependencies
 
    ```bash
-   npm install
+    npm install
    ```
 
 2. Start the app
@@ -16,15 +16,18 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-## Remote Expo Go testing
+Store go-live steps for Apple and Google Play are in [docs/store-golive.md](docs/store-golive.md). App Store listing answers are in [docs/app-store-compliance.md](docs/app-store-compliance.md).
 
-For the TP-Link route and Expo Go, start the server with:
+## Shop purchases
+
+The Shop uses RevenueCat for optional in-app purchases in native Android and iOS builds. Set these public SDK keys in the build environment before testing paid packs:
 
 ```bash
-npm run web:remote
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=
 ```
 
-This keeps Expo on port `8081`, advertises `rcdl.tplinkdns.com` to Expo Go, and uses anonymous offline manifests so the server does not stop on the `Log in` / `Proceed anonymously` prompt. See [EXPO_WEB_RUNBOOK.md](EXPO_WEB_RUNBOOK.md) for the full runbook.
+Product IDs and launch checklist live in [docs/revenuecat-shop-setup.md](docs/revenuecat-shop-setup.md).
 
 In the output, you'll find options to open the app in a
 

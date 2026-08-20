@@ -47,7 +47,7 @@ import {
   localizeJournalSections,
 } from '@/utils/journal-localization';
 import { formatEntryDateTime } from '@/utils/date-time';
-import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { upsertJournalIndexEntry } from '@/utils/journal-storage';
 
 type PrayerSection = {
   id: string;
@@ -519,18 +519,7 @@ export default function PrayerJournalScreen() {
 
   const updateIndex = useCallback(async (entry: PrayerEntry) => {
     try {
-      const existingIndex = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-      const parsedIndex = existingIndex
-        ? (JSON.parse(existingIndex) as PrayerEntry[])
-        : [];
-
-      const nextIndex = parsedIndex.some((item) => item.id === entry.id)
-        ? parsedIndex.map((item) => (item.id === entry.id ? entry : item))
-        : [entry, ...parsedIndex];
-
-      nextIndex.sort((left, right) => right.updatedAt - left.updatedAt);
-
-      await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextIndex));
+      await upsertJournalIndexEntry(entry);
     } catch (error) {
       console.log('Error updating journal index:', error);
     }

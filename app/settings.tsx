@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -41,6 +42,7 @@ import {
   type SyncConflictVersion,
   type SyncLogEvent,
 } from '@/utils/sync-client';
+import { CLOUD_SAVE_ENABLED } from '@/utils/compliance';
 
 type AccountSession = {
   email: string;
@@ -55,6 +57,8 @@ const FAITH_CANVAS_LINKS = {
   support: 'https://pidpod.com/faithcanvas/support.html',
   email: 'mailto:support@pidpod.com',
 };
+
+const JOURNAL_BACKUP_DIALOG_TITLE = 'Save Faith Canvas journal backup';
 
 const USERNAME_PREFIXES = [
   'Grace',
@@ -90,7 +94,7 @@ function makePrettyUsername() {
 }
 
 function cleanUsername(value: string) {
-  return value.replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+  return value.replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40).toLowerCase();
 }
 
 type SettingsTranslator = (
@@ -143,6 +147,10 @@ function waitForBusyIndicator() {
   return new Promise((resolve) => {
     setTimeout(resolve, 150);
   });
+}
+
+function getJournalBackupFileName() {
+  return `faith-canvas-journal-backup-${new Date().toISOString().slice(0, 10)}.json`;
 }
 
 function confirmUsernameChange(
@@ -225,7 +233,6 @@ export default function SettingsScreen() {
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
   const [dataMessage, setDataMessage] = useState('');
   const [dataError, setDataError] = useState('');
-  const [exportText, setExportText] = useState('');
   const [cloudUsername, setCloudUsername] = useState(() => makePrettyUsername());
   const [privateSyncPhrase, setPrivateSyncPhrase] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
@@ -576,7 +583,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const downloadExportText = (text: string) => {
+  const downloadExportText = (text: string, fileName: string) => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
       return false;
     }
@@ -585,7 +592,7 @@ export default function SettingsScreen() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `bible-app-journal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -593,12 +600,43 @@ export default function SettingsScreen() {
     return true;
   };
 
+  const shareExportText = async (text: string, fileName: string) => {
+    let Sharing: typeof import('expo-sharing');
+    try {
+      Sharing = require('expo-sharing');
+    } catch {
+      throw new Error('File sharing is not available on this device.');
+    }
+
+    const canShare = await Sharing.isAvailableAsync();
+    const outputDirectory = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+
+    if (!canShare || !outputDirectory) {
+      throw new Error('File sharing is not available on this device.');
+    }
+
+    const fileUri = `${outputDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(fileUri, text, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    await Sharing.shareAsync(fileUri, {
+      dialogTitle: JOURNAL_BACKUP_DIALOG_TITLE,
+      mimeType: 'application/json',
+      UTI: 'public.json',
+    });
+  };
+
   const handleExportJournalData = async () => {
     try {
       const snapshot = await buildJournalExportSnapshot();
       const nextExportText = JSON.stringify(snapshot, null, 2);
-      const didDownload = downloadExportText(nextExportText);
-      setExportText(didDownload ? '' : nextExportText);
+      const fileName = getJournalBackupFileName();
+      const didDownload = downloadExportText(nextExportText, fileName);
+
+      if (!didDownload) {
+        await shareExportText(nextExportText, fileName);
+      }
+
       setDataError('');
       setDataMessage(
         didDownload ? t('settingsExportDownloaded') : t('settingsExportReady')
@@ -613,7 +651,6 @@ export default function SettingsScreen() {
   const performResetJournalData = async () => {
     try {
       await resetJournalData();
-      setExportText('');
       setDataError('');
       setDataMessage(t('settingsResetSuccess'));
     } catch (error) {
@@ -793,16 +830,17 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('settingsAccount')}</Text>
+        <Text style={styles.sectionTitle}>{t('settingsDataPrivacy')}</Text>
 
-        <View
-          style={[
-            styles.accountCard,
-            {
-              backgroundColor: colorTheme.cardBackground,
-              borderColor: colorTheme.border,
-            },
-          ]}>
+        {CLOUD_SAVE_ENABLED ? (
+          <View
+            style={[
+              styles.accountCard,
+              {
+                backgroundColor: colorTheme.cardBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
           <View style={styles.accountHeader}>
             <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
               <Ionicons name="sparkles-outline" size={22} color="#5B514D" />
@@ -1019,83 +1057,28 @@ export default function SettingsScreen() {
               <Text style={styles.dangerButtonText}>{t('settingsDisconnect')}</Text>
             </TouchableOpacity>
           ) : null}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('settingsColors')}</Text>
-
-        {colorThemes.map((theme) => {
-          const isSelected = theme.key === colorTheme.key;
-
-          return (
-            <TouchableOpacity
-              key={theme.key}
-              activeOpacity={0.88}
-              onPress={() => setColorThemeKey(theme.key)}
-              style={[
-                styles.colorCard,
-                {
-                  backgroundColor: theme.cardBackground,
-                  borderColor: isSelected ? theme.tint : theme.border,
-                },
-              ]}>
-              <View style={[styles.swatch, { backgroundColor: theme.accent }]} />
-
-              <View style={styles.colorTextBlock}>
-                <Text style={styles.colorName}>{theme.name}</Text>
-                <Text style={styles.colorHint}>{t('colorHint')}</Text>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.statusCard,
+              {
+                backgroundColor: colorTheme.cardBackground,
+                borderColor: colorTheme.border,
+              },
+            ]}>
+            <View style={styles.statusRow}>
+              <View style={[styles.accountIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
+                <Ionicons name="phone-portrait-outline" size={22} color="#5B514D" />
               </View>
 
-              {isSelected ? (
-                <Ionicons name="checkmark-circle" size={22} color={theme.tint} />
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('settingsLanguage')}</Text>
-
-        {languages.map((option) => {
-          const isSelected = option.key === language.key;
-          const optionLabel =
-            option.key === 'es' ? t('languageSpanish') : t('languageEnglish');
-
-          return (
-            <TouchableOpacity
-              key={option.key}
-              activeOpacity={0.88}
-              onPress={() => setLanguageKey(option.key)}
-              style={[
-                styles.colorCard,
-                {
-                  backgroundColor: colorTheme.cardBackground,
-                  borderColor: isSelected ? colorTheme.tint : colorTheme.border,
-                },
-              ]}>
-              <View style={[styles.swatch, { backgroundColor: colorTheme.accent }]}>
-                <Ionicons name="language-outline" size={16} color="#5B514D" />
+              <View style={styles.accountHeaderText}>
+                <Text style={styles.accountTitle}>{t('settingsCloudSaveUnavailableTitle')}</Text>
+                <Text style={styles.accountHint}>{t('settingsCloudSaveUnavailableText')}</Text>
               </View>
-
-              <View style={styles.colorTextBlock}>
-                <Text style={styles.colorName}>{optionLabel}</Text>
-                <Text style={styles.colorHint}>
-                  {`${option.nativeName} • ${t('languageHint')}`}
-                </Text>
-              </View>
-
-              {isSelected ? (
-                <Ionicons name="checkmark-circle" size={22} color={colorTheme.tint} />
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('settingsDataSafety')}</Text>
+            </View>
+          </View>
+        )}
 
         <View
           style={[
@@ -1135,23 +1118,78 @@ export default function SettingsScreen() {
             <Ionicons name="trash-outline" size={17} color="#B85F62" />
             <Text style={styles.dangerButtonText}>{t('settingsResetJournalData')}</Text>
           </TouchableOpacity>
-
-          {exportText ? (
-            <TextInput
-              value={exportText}
-              editable={false}
-              multiline
-              selectTextOnFocus
-              style={[
-                styles.exportPreview,
-                {
-                  backgroundColor: colorTheme.paperBackground,
-                  borderColor: colorTheme.border,
-                },
-              ]}
-            />
-          ) : null}
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('settingsAppearance')}</Text>
+        <Text style={styles.groupLabel}>{t('settingsColors')}</Text>
+
+        {colorThemes.map((theme) => {
+          const isSelected = theme.key === colorTheme.key;
+
+          return (
+            <TouchableOpacity
+              key={theme.key}
+              activeOpacity={0.88}
+              onPress={() => setColorThemeKey(theme.key)}
+              style={[
+                styles.colorCard,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: isSelected ? theme.tint : theme.border,
+                },
+              ]}>
+              <View style={[styles.swatch, { backgroundColor: theme.accent }]} />
+
+              <View style={styles.colorTextBlock}>
+                <Text style={styles.colorName}>{theme.name}</Text>
+              </View>
+
+              {isSelected ? (
+                <Ionicons name="checkmark-circle" size={22} color={theme.tint} />
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
+        <Text style={[styles.groupLabel, styles.groupLabelWithMargin]}>
+          {t('settingsLanguage')}
+        </Text>
+
+        {languages.map((option) => {
+          const isSelected = option.key === language.key;
+          const optionLabel =
+            option.key === 'es' ? t('languageSpanish') : t('languageEnglish');
+
+          return (
+            <TouchableOpacity
+              key={option.key}
+              activeOpacity={0.88}
+              onPress={() => setLanguageKey(option.key)}
+              style={[
+                styles.colorCard,
+                {
+                  backgroundColor: colorTheme.cardBackground,
+                  borderColor: isSelected ? colorTheme.tint : colorTheme.border,
+                },
+              ]}>
+              <View style={[styles.swatch, { backgroundColor: colorTheme.accent }]}>
+                <Ionicons name="language-outline" size={16} color="#5B514D" />
+              </View>
+
+              <View style={styles.colorTextBlock}>
+                <Text style={styles.colorName}>{optionLabel}</Text>
+                <Text style={styles.colorHint}>
+                  {`${option.nativeName} • ${t('languageHint')}`}
+                </Text>
+              </View>
+
+              {isSelected ? (
+                <Ionicons name="checkmark-circle" size={22} color={colorTheme.tint} />
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.section}>
@@ -1178,19 +1216,16 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <View style={[styles.privacySummary, { backgroundColor: colorTheme.paperBackground }]}>
-            <View style={styles.privacySummaryRow}>
-              <Ionicons name="phone-portrait-outline" size={18} color="#5B514D" />
-              <Text style={styles.privacySummaryText}>{t('settingsPrivacyLocal')}</Text>
-            </View>
-            <View style={styles.privacySummaryRow}>
-              <Ionicons name="cloud-outline" size={18} color="#5B514D" />
-              <Text style={styles.privacySummaryText}>{t('settingsPrivacyCloud')}</Text>
-            </View>
-            <View style={styles.privacySummaryRow}>
-              <Ionicons name="heart-outline" size={18} color="#5B514D" />
-              <Text style={styles.privacySummaryText}>{t('settingsPrivacyNoAds')}</Text>
-            </View>
+          <View
+            style={[
+              styles.aboutRatingNote,
+              {
+                backgroundColor: '#F7F1EA',
+                borderColor: colorTheme.border,
+              },
+            ]}>
+            <Text style={styles.aboutRatingTitle}>{t('settingsAboutRatingTitle')}</Text>
+            <Text style={styles.aboutRatingBody}>{t('settingsAboutRatingBody')}</Text>
           </View>
 
           <View style={styles.legalLinkGrid}>
@@ -1261,38 +1296,62 @@ const styles = StyleSheet.create({
     color: '#5B514D',
     marginBottom: 12,
   },
+  groupLabel: {
+    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#7A6F66',
+    textTransform: 'uppercase',
+  },
+  groupLabelWithMargin: {
+    marginTop: 10,
+  },
   colorCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.02,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   swatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    marginRight: 10,
   },
   colorTextBlock: {
     flex: 1,
   },
   colorName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1F1F1F',
   },
   colorHint: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: 12,
     color: '#7A6F66',
+  },
+  statusCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 13,
+    shadowColor: '#000',
+    shadowOpacity: 0.02,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   accountCard: {
     borderRadius: 20,
@@ -1405,6 +1464,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
     padding: 16,
+    marginTop: 10,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -1431,27 +1491,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
+  aboutRatingNote: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    marginBottom: 2,
+  },
+  aboutRatingTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3F3834',
+    marginBottom: 6,
+  },
+  aboutRatingBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#7A6F66',
+  },
   aboutLogo: {
     width: 54,
     height: 54,
     borderRadius: 16,
     marginRight: 12,
-  },
-  privacySummary: {
-    borderRadius: 18,
-    padding: 12,
-    gap: 10,
-  },
-  privacySummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  privacySummaryText: {
-    flex: 1,
-    color: '#5B514D',
-    fontSize: 13,
-    lineHeight: 18,
   },
   legalLinkGrid: {
     gap: 10,

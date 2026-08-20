@@ -148,6 +148,111 @@ These live in `assets/shop/stickers/scripture-verse-labels/`.
 
 Most scripture label stickers are 1050 x 447. The square-style labels are 902 x 900: `delight-yourself.png`, `spirit-not-fear.png`, `strength-shield.png`, `brokenhearted.png`, `trust-in-lord.png`, and `waters-with-you.png`.
 
+### Prayer Night Stickers
+
+These live in `assets/shop/stickers/prayer-night/` with matching previews in `assets/shop/sticker-previews/prayer-night/`.
+
+- `prayer-time.png`
+- `dear-god.png`
+- `amen.png`
+- `moon-cross.png`
+- `cloud-heart.png`
+- `heart-prayer.png`
+- `prayer-list.png`
+- `answered-prayer.png`
+- `cozy-bible.png`
+- `mug-heart.png`
+- `star-cluster.png`
+- `sleepy-bow.png`
+
+### Quiet Strength Stickers
+
+These live in `assets/shop/stickers/quiet-strength/` with matching previews in `assets/shop/sticker-previews/quiet-strength/`.
+
+These are AI-generated muted encouragement stickers for older teen journals. The approved visible words are:
+
+- `not-alone.png` - `not alone`
+- `god-is-near.png` - `God is near`
+- `be-still.png` - `be still`
+- `keep-going.png` - `keep going`
+- `grace-for-today.png` - `grace for today`
+- `steady.png` - `steady`
+- `take-heart.png` - `take heart`
+- `deep-breath.png` - `deep breath`
+- `new-mercies.png` - `new mercies`
+- `rooted.png` - `rooted`
+- `held.png` - `held`
+- `courage.png` - `courage`
+
+### Pressed Florals Stickers
+
+These live in `assets/shop/stickers/pressed-florals/` with matching previews in `assets/shop/sticker-previews/pressed-florals/`.
+
+These are AI-generated botanical stickers for ages 14-16. Visual QA confirmed no visible words, letters, numbers, watermark, signature, labels, or symbols.
+
+- `wildflower-bouquet.png`
+- `lavender-sprig.png`
+- `olive-blossom.png`
+- `chamomile-stems.png`
+- `peony-bloom.png`
+- `magnolia-branch.png`
+- `clay-poppy.png`
+- `bluebell-cluster.png`
+- `fern-wildflower.png`
+- `rosehip-branch.png`
+- `daisy-corner.png`
+- `lily-mauve-cluster.png`
+
+### Verse Markers Stickers
+
+These live in `assets/shop/stickers/verse-markers/` with matching previews in `assets/shop/sticker-previews/verse-markers/`.
+
+These are AI-generated arrow and tab stickers for decorating favorite verses, recolored to the app's soft journal theme palette. Visual QA confirmed the text-free stickers have no visible words, letters, numbers, watermark, or signature. Approved visible words are `NOTES`, `IMPORTANT`, `REMEMBER`, and `DON'T FORGET`.
+
+- `teal-dotted-arrow-tab.png`
+- `coral-dotted-arrow-tab.png`
+- `dusty-blue-dotted-arrow-tab.png`
+- `simple-teal-arrow.png`
+- `navy-loop-arrow.png`
+- `triple-down-arrows.png`
+- `peach-notes-tab.png` - `NOTES`
+- `teal-notes-tab.png` - `NOTES`
+- `important-arrow-label.png` - `IMPORTANT`
+- `remember-chevron-label.png` - `REMEMBER`
+- `dont-forget-label.png` - `DON'T FORGET`
+- `blue-page-tab.png`
+
+### Soft Journal Decor Stickers
+
+These live in `assets/shop/stickers/soft-journal-decor/` with matching previews in `assets/shop/sticker-previews/soft-journal-decor/`.
+
+These are AI-generated soft-palette journal decor stickers: index tabs, washi tape strips, arrows, blank labels, corner pieces, divider strips, and dot clusters. Visual QA confirmed no visible words, letters, numbers, watermark, signature, labels, or symbols.
+
+- `blush-solid-index-tab.png`
+- `lavender-dot-index-tab.png`
+- `peach-solid-index-tab.png`
+- `mint-dot-index-tab.png`
+- `sky-stripe-index-tab.png`
+- `cream-scallop-index-tab.png`
+- `blush-dot-washi.png`
+- `lavender-stripe-washi.png`
+- `peach-solid-washi.png`
+- `mint-grid-washi.png`
+- `sky-diagonal-washi.png`
+- `cream-solid-washi.png`
+- `blush-dot-arrow.png`
+- `lavender-curve-arrow.png`
+- `peach-chevron-arrow.png`
+- `mint-ribbon-arrow.png`
+- `sky-down-arrow-cluster.png`
+- `cream-corner-arrow.png`
+- `blush-scallop-label.png`
+- `lavender-rounded-label.png`
+- `mint-corner-bracket.png`
+- `peach-flag-tab.png`
+- `sky-divider-strip.png`
+- `pastel-dot-cluster.png`
+
 ## Placeholder Images
 
 The following images are default React/Expo placeholder assets, not Bible App brand assets:

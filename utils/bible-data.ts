@@ -159,6 +159,29 @@ export function getBookDisplayName(
   return language === 'es' ? bookEntry?.displayName ?? book : book;
 }
 
+/** Clearer labels in the book list so Gospel John is not confused with 1–3 John. */
+export function getBookListLabel(
+  book: string,
+  language: BibleLanguageKey = 'en',
+  versionKey?: BibleVersionKey
+) {
+  const baseName = getBookDisplayName(book, language, versionKey);
+
+  if (language === 'es') {
+    if (book === 'John') return 'Juan (Evangelio)';
+    if (book === '1 John') return '1 Juan (Carta)';
+    if (book === '2 John') return '2 Juan (Carta)';
+    if (book === '3 John') return '3 Juan (Carta)';
+  } else {
+    if (book === 'John') return 'John (Gospel)';
+    if (book === '1 John') return '1 John (Letter)';
+    if (book === '2 John') return '2 John (Letter)';
+    if (book === '3 John') return '3 John (Letter)';
+  }
+
+  return baseName;
+}
+
 export function getChapters(book: string, versionKey?: BibleVersionKey) {
   return findBook(book, versionKey)?.chapters.map((entry) => entry.chapter) ?? [];
 }

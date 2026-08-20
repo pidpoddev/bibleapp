@@ -19,7 +19,7 @@ import {
   getNextLocalMidnightDelay,
 } from '@/utils/daily-inspiration-verses';
 import bibleData, { getBookDisplayName, type BibleLanguageKey } from '@/utils/bible-data';
-import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { JOURNAL_INDEX_KEY, HOME_HIDDEN_RECENT_ENTRY_IDS_STORAGE_KEY } from '@/utils/storage-keys';
 import { FocusedScreenView } from '@/components/focused-screen-view';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
 
@@ -615,8 +615,11 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const layout = useResponsiveLayout();
+  const tabletScale = layout.tabletScale;
+  const isTablet = layout.isTablet;
   const [today, setToday] = useState(() => new Date());
   const [journalEntries, setJournalEntries] = useState<HomeJournalEntry[]>([]);
+  const [hiddenRecentEntryKeys, setHiddenRecentEntryKeys] = useState<Set<string>>(() => new Set());
   const [selectedMoodKey, setSelectedMoodKey] = useState<string | null>(null);
   const [weeklyMoodSummary, setWeeklyMoodSummary] = useState<WeeklyMoodSummary>(() =>
     getMostUsedMoodSummary([])
@@ -679,8 +682,9 @@ export default function HomeScreen() {
     () =>
       sortedJournalEntries
         .filter((entry) => entry.id !== latestTodayEntry?.id)
+        .filter((entry) => !hiddenRecentEntryKeys.has(`${entry.type}:${entry.id}`))
         .slice(0, latestTodayEntry ? 2 : 3),
-    [latestTodayEntry, sortedJournalEntries]
+    [hiddenRecentEntryKeys, latestTodayEntry, sortedJournalEntries]
   );
   const todayEntryCount = useMemo(
     () => sortedJournalEntries.filter((entry) => getLocalDayKey(parseEntryDate(entry)) === todayKey).length,
@@ -709,9 +713,10 @@ export default function HomeScreen() {
 
   const loadHomeJournalState = useCallback(async () => {
     const moodKeys = getRecentMoodStorageKeys(new Date());
-    const [journalData, moodData] = await Promise.all([
+    const [journalData, moodData, hiddenRecentData] = await Promise.all([
       AsyncStorage.getItem(JOURNAL_INDEX_KEY),
       AsyncStorage.getItem(getMoodStorageKey(new Date())),
+      AsyncStorage.getItem(HOME_HIDDEN_RECENT_ENTRY_IDS_STORAGE_KEY),
     ]);
     const weeklyMoods = await AsyncStorage.multiGet(moodKeys);
 
@@ -720,7 +725,22 @@ export default function HomeScreen() {
     )
       .filter(hasVisibleJournalContent);
 
+    let nextHiddenKeys = new Set<string>();
+    if (hiddenRecentData) {
+      try {
+        const parsed = JSON.parse(hiddenRecentData);
+        if (Array.isArray(parsed)) {
+          nextHiddenKeys = new Set(
+            parsed.filter((value): value is string => typeof value === 'string' && value.length > 0)
+          );
+        }
+      } catch {
+        nextHiddenKeys = new Set();
+      }
+    }
+
     setJournalEntries(visibleEntries);
+    setHiddenRecentEntryKeys(nextHiddenKeys);
     setSelectedMoodKey(moodData);
     setWeeklyMoodSummary(getMostUsedMoodSummary(weeklyMoods.map(([, value]) => value)));
   }, []);
@@ -802,6 +822,24 @@ export default function HomeScreen() {
       return;
     }
   };
+
+  const removeFromRecentWork = useCallback(async (entry: HomeJournalEntry) => {
+    const entryKey = `${entry.type}:${entry.id}`;
+
+    setHiddenRecentEntryKeys((current) => {
+      if (current.has(entryKey)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(entryKey);
+      void AsyncStorage.setItem(
+        HOME_HIDDEN_RECENT_ENTRY_IDS_STORAGE_KEY,
+        JSON.stringify([...next])
+      );
+      return next;
+    });
+  }, []);
 
   const openSuggestedJournal = (mood: MoodOption) => {
     const heartCheckVerse = getDailyHeartCheckVerse(mood, today);
@@ -886,6 +924,49 @@ export default function HomeScreen() {
     { label: t('tabBible'), icon: 'library-outline' as const, tint: '#647569', onPress: () => router.push('/bible') },
   ];
 
+  const homeUi = useMemo(
+    () => ({
+      dateSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      titleSize: isTablet ? Math.round(28 * tabletScale) : 28,
+      titleLineHeight: isTablet ? Math.round(34 * tabletScale) : 34,
+      settingsButtonSize: isTablet ? Math.round(38 * tabletScale) : 38,
+      settingsIconSize: isTablet ? Math.round(19 * tabletScale) : 19,
+      heroBadgeSize: isTablet ? Math.round(34 * tabletScale) : 34,
+      heroBadgeIconSize: isTablet ? Math.round(18 * tabletScale) : 18,
+      eyebrowSize: isTablet ? Math.round(11 * tabletScale) : 11,
+      verseSize: isTablet ? Math.round(19 * tabletScale) : 19,
+      verseLineHeight: isTablet ? Math.round(27 * tabletScale) : 27,
+      referenceSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      primaryButtonMinHeight: isTablet ? Math.round(44 * tabletScale) : 44,
+      buttonSize: isTablet ? Math.round(13 * tabletScale) : 13,
+      statusIconSize: isTablet ? Math.round(16 * tabletScale) : 16,
+      statusTextSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      actionBadgeSize: isTablet ? Math.round(32 * tabletScale) : 32,
+      actionIconSize: isTablet ? Math.round(19 * tabletScale) : 19,
+      actionLabelSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      panelTitleSize: isTablet ? Math.round(15 * tabletScale) : 15,
+      panelHintSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      introSize: isTablet ? Math.round(13 * tabletScale) : 13,
+      introLineHeight: isTablet ? Math.round(18 * tabletScale) : 18,
+      groupTitleSize: isTablet ? Math.round(11 * tabletScale) : 11,
+      chipMinHeight: isTablet ? Math.round(34 * tabletScale) : 34,
+      chipIconSize: isTablet ? Math.round(14 * tabletScale) : 14,
+      chipTextSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      suggestionTextSize: isTablet ? Math.round(13 * tabletScale) : 13,
+      suggestionTextLineHeight: isTablet ? Math.round(18 * tabletScale) : 18,
+      suggestionActionSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      continueTitleSize: isTablet ? Math.round(15 * tabletScale) : 15,
+      continuePreviewSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      continueChevronSize: isTablet ? Math.round(18 * tabletScale) : 18,
+      recentRowMinHeight: isTablet ? Math.round(45 * tabletScale) : 45,
+      recentIconSize: isTablet ? Math.round(17 * tabletScale) : 17,
+      recentTitleSize: isTablet ? Math.round(13 * tabletScale) : 13,
+      recentPreviewSize: isTablet ? Math.round(12 * tabletScale) : 12,
+      recentDateSize: isTablet ? Math.round(11 * tabletScale) : 11,
+    }),
+    [isTablet, tabletScale]
+  );
+
   return (
     <FocusedScreenView style={[styles.screen, { backgroundColor: colorTheme.screenBackground }]}>
       <ScrollView
@@ -904,21 +985,38 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.homeMockTopBar}>
           <View>
-            <Text style={styles.homeMockDate}>
+            <Text style={[styles.homeMockDate, { fontSize: homeUi.dateSize }]}>
               {today.toLocaleDateString(getDateLocale(language.key), {
                 weekday: 'long',
                 month: 'short',
                 day: 'numeric',
               })}
             </Text>
-            <Text style={styles.homeMockTitle}>Faith Canvas</Text>
+            <Text
+              style={[
+                styles.homeMockTitle,
+                {
+                  fontSize: homeUi.titleSize,
+                  lineHeight: homeUi.titleLineHeight,
+                },
+              ]}>
+              Faith Canvas
+            </Text>
           </View>
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={() => router.push('/settings')}
             accessibilityLabel={t('settingsTitle')}
-            style={[styles.homeMockSettingsButton, { backgroundColor: colorTheme.toolbarBackground }]}>
-            <Ionicons name="settings-outline" size={19} color="#5B514D" />
+            style={[
+              styles.homeMockSettingsButton,
+              {
+                backgroundColor: colorTheme.toolbarBackground,
+                width: homeUi.settingsButtonSize,
+                height: homeUi.settingsButtonSize,
+                borderRadius: homeUi.settingsButtonSize / 2,
+              },
+            ]}>
+            <Ionicons name="settings-outline" size={homeUi.settingsIconSize} color="#5B514D" />
           </TouchableOpacity>
         </View>
 
@@ -929,34 +1027,63 @@ export default function HomeScreen() {
             { borderColor: colorTheme.border },
           ]}>
           <View style={styles.homeMockHeroHeader}>
-            <View style={[styles.homeMockIconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
-              <Ionicons name="book-outline" size={18} color="#6C5F59" />
+            <View
+              style={[
+                styles.homeMockIconBadge,
+                {
+                  backgroundColor: colorTheme.toolbarBackground,
+                  width: homeUi.heroBadgeSize,
+                  height: homeUi.heroBadgeSize,
+                  borderRadius: homeUi.heroBadgeSize / 2,
+                },
+              ]}>
+              <Ionicons name="book-outline" size={homeUi.heroBadgeIconSize} color="#6C5F59" />
             </View>
-            <Text style={styles.homeMockEyebrow}>{t('homeVerseLabel')}</Text>
+            <Text style={[styles.homeMockEyebrow, { fontSize: homeUi.eyebrowSize }]}>{t('homeVerseLabel')}</Text>
           </View>
-          <Text numberOfLines={4} style={styles.homeMockVerseText}>{dailyVerse.text}</Text>
-          <Text style={styles.homeMockReference}>{dailyVerseReference}</Text>
+          <Text
+            numberOfLines={4}
+            style={[
+              styles.homeMockVerseText,
+              {
+                fontSize: homeUi.verseSize,
+                lineHeight: homeUi.verseLineHeight,
+              },
+            ]}>
+            {dailyVerse.text}
+          </Text>
+          <Text style={[styles.homeMockReference, { fontSize: homeUi.referenceSize }]}>{dailyVerseReference}</Text>
           <View style={styles.homeMockHeroActions}>
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={openTodayVerse}
-              style={[styles.homeMockPrimaryButton, { backgroundColor: colorTheme.tint }]}>
-              <Ionicons name="color-wand-outline" size={17} color="#FFFDF9" />
-              <Text style={styles.homeMockPrimaryButtonText}>{t('homeOpenInStudio')}</Text>
+              style={[
+                styles.homeMockPrimaryButton,
+                { backgroundColor: colorTheme.tint, minHeight: homeUi.primaryButtonMinHeight },
+              ]}>
+              <Ionicons name="color-wand-outline" size={homeUi.buttonSize + 4} color="#FFFDF9" />
+              <Text style={[styles.homeMockPrimaryButtonText, { fontSize: homeUi.buttonSize }]}>
+                {t('homeOpenInStudio')}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={openDailyDevotional}
-              style={[styles.homeMockSecondaryButton, { backgroundColor: colorTheme.toolbarBackground }]}>
-              <Text style={styles.homeMockSecondaryButtonText}>{t('homeReflect')}</Text>
+              style={[
+                styles.homeMockSecondaryButton,
+                { backgroundColor: colorTheme.toolbarBackground, minHeight: homeUi.primaryButtonMinHeight },
+              ]}>
+              <Text style={[styles.homeMockSecondaryButtonText, { fontSize: homeUi.buttonSize }]}>
+                {t('homeReflect')}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.homeMockStatusRow}>
           <View style={[styles.homeMockStatusPill, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
-            <Ionicons name="flame-outline" size={16} color="#A75E6C" />
-            <Text numberOfLines={1} style={styles.homeMockStatusText}>
+            <Ionicons name="flame-outline" size={homeUi.statusIconSize} color="#A75E6C" />
+            <Text numberOfLines={1} style={[styles.homeMockStatusText, { fontSize: homeUi.statusTextSize }]}>
               {gentleStreak > 0
                 ? t(gentleStreak === 1 ? 'homeDayStreak' : 'homeDayStreakPlural', {
                     count: gentleStreak,
@@ -965,8 +1092,12 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={[styles.homeMockStatusPill, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
-            <Ionicons name={todayEntryCount > 0 ? 'checkmark-circle-outline' : 'ellipse-outline'} size={16} color="#6F8C7A" />
-            <Text numberOfLines={1} style={styles.homeMockStatusText}>
+            <Ionicons
+              name={todayEntryCount > 0 ? 'checkmark-circle-outline' : 'ellipse-outline'}
+              size={homeUi.statusIconSize}
+              color="#6F8C7A"
+            />
+            <Text numberOfLines={1} style={[styles.homeMockStatusText, { fontSize: homeUi.statusTextSize }]}>
               {todayEntryCount > 0
                 ? t('homeTodayCount', { count: todayEntryCount })
                 : t('homeNoEntryYet')}
@@ -985,10 +1116,21 @@ export default function HomeScreen() {
                 layout.isTablet ? styles.tabletHomeActionTile : null,
                 { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border },
               ]}>
-              <View style={[styles.homeMockActionIcon, { backgroundColor: colorTheme.toolbarBackground }]}>
-                <Ionicons name={action.icon} size={19} color={action.tint} />
+              <View
+                style={[
+                  styles.homeMockActionIcon,
+                  {
+                    backgroundColor: colorTheme.toolbarBackground,
+                    width: homeUi.actionBadgeSize,
+                    height: homeUi.actionBadgeSize,
+                    borderRadius: homeUi.actionBadgeSize / 2,
+                  },
+                ]}>
+                <Ionicons name={action.icon} size={homeUi.actionIconSize} color={action.tint} />
               </View>
-              <Text numberOfLines={1} style={styles.homeMockActionLabel}>{action.label}</Text>
+              <Text numberOfLines={1} style={[styles.homeMockActionLabel, { fontSize: homeUi.actionLabelSize }]}>
+                {action.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -1000,12 +1142,21 @@ export default function HomeScreen() {
             { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border },
           ]}>
           <View style={styles.homeMockPanelHeader}>
-            <Text style={styles.homeMockPanelTitle}>{t('homeWordsFromGod')}</Text>
-            <Text style={styles.homeMockPanelHint}>
+            <Text style={[styles.homeMockPanelTitle, { fontSize: homeUi.panelTitleSize }]}>
+              {t('homeWordsFromGod')}
+            </Text>
+            <Text style={[styles.homeMockPanelHint, { fontSize: homeUi.panelHintSize }]}>
               {selectedMoodVerseReference ?? t('homePickWhatFits')}
             </Text>
           </View>
-          <Text style={styles.homeMockMoodIntro}>
+          <Text
+            style={[
+              styles.homeMockMoodIntro,
+              {
+                fontSize: homeUi.introSize,
+                lineHeight: homeUi.introLineHeight,
+              },
+            ]}>
             {t('homeWordsIntro')}
           </Text>
           {[
@@ -1013,7 +1164,7 @@ export default function HomeScreen() {
             { title: t('homeHelpSomeone'), options: SHARE_MOOD_OPTIONS },
           ].map((group) => (
             <View key={group.title} style={styles.homeMockMoodGroup}>
-              <Text style={styles.homeMockMoodGroupTitle}>{group.title}</Text>
+              <Text style={[styles.homeMockMoodGroupTitle, { fontSize: homeUi.groupTitleSize }]}>{group.title}</Text>
               <View style={styles.homeMockMoodWrap}>
                 {group.options.map((mood) => (
                   <TouchableOpacity
@@ -1024,11 +1175,12 @@ export default function HomeScreen() {
                     }}
                     style={[
                       styles.homeMockMoodChip,
+                      { minHeight: homeUi.chipMinHeight },
                       { backgroundColor: colorTheme.toolbarBackground, borderColor: colorTheme.border },
                       selectedMoodKey === mood.key ? { borderColor: mood.tint, borderWidth: 2 } : null,
                     ]}>
-                    <Ionicons name={mood.icon} size={14} color={mood.tint} />
-                    <Text numberOfLines={1} style={styles.homeMockMoodChipText}>
+                    <Ionicons name={mood.icon} size={homeUi.chipIconSize} color={mood.tint} />
+                    <Text numberOfLines={1} style={[styles.homeMockMoodChipText, { fontSize: homeUi.chipTextSize }]}>
                       {getMoodLabel(mood)}
                     </Text>
                   </TouchableOpacity>
@@ -1042,14 +1194,22 @@ export default function HomeScreen() {
               onPress={() => openSuggestedJournal(selectedMood)}
               style={styles.homeMockSuggestion}>
               <View style={styles.homeMockSuggestionCopy}>
-                <Text numberOfLines={2} style={styles.homeMockSuggestionText}>
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    styles.homeMockSuggestionText,
+                    {
+                      fontSize: homeUi.suggestionTextSize,
+                      lineHeight: homeUi.suggestionTextLineHeight,
+                    },
+                  ]}>
                   {getMoodSuggestion(selectedMood)}
                 </Text>
-                <Text style={styles.homeMockSuggestionAction}>
+                <Text style={[styles.homeMockSuggestionAction, { fontSize: homeUi.suggestionActionSize }]}>
                   {getMoodActionLabel(selectedMood)}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color="#8D7C70" />
+              <Ionicons name="chevron-forward" size={homeUi.statusIconSize} color="#8D7C70" />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -1059,47 +1219,81 @@ export default function HomeScreen() {
             activeOpacity={0.88}
             onPress={() => openJournalEntry(latestTodayEntry)}
             style={[styles.homeMockContinueCard, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
-            <View style={[styles.homeMockIconBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
-              <Ionicons name={getEntryTypeIcon(latestTodayEntry.type)} size={18} color="#7A6F66" />
+            <View
+              style={[
+                styles.homeMockIconBadge,
+                {
+                  backgroundColor: colorTheme.toolbarBackground,
+                  width: homeUi.heroBadgeSize,
+                  height: homeUi.heroBadgeSize,
+                  borderRadius: homeUi.heroBadgeSize / 2,
+                },
+              ]}>
+              <Ionicons
+                name={getEntryTypeIcon(latestTodayEntry.type)}
+                size={homeUi.heroBadgeIconSize}
+                color="#7A6F66"
+              />
             </View>
             <View style={styles.homeMockContinueText}>
-              <Text style={styles.homeMockEyebrow}>{t('homeContinueToday')}</Text>
-              <Text numberOfLines={1} style={styles.homeMockContinueTitle}>
+              <Text style={[styles.homeMockEyebrow, { fontSize: homeUi.eyebrowSize }]}>{t('homeContinueToday')}</Text>
+              <Text numberOfLines={1} style={[styles.homeMockContinueTitle, { fontSize: homeUi.continueTitleSize }]}>
                 {getEntryTypeLabel(latestTodayEntry.type, t)}
               </Text>
-              <Text numberOfLines={1} style={styles.homeMockContinuePreview}>
+              <Text
+                numberOfLines={1}
+                style={[styles.homeMockContinuePreview, { fontSize: homeUi.continuePreviewSize }]}>
                 {localizeReferencePreview(latestTodayEntry.preview, language.key) || t('homeKeepWriting')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#8D7C70" />
+            <Ionicons name="chevron-forward" size={homeUi.continueChevronSize} color="#8D7C70" />
           </TouchableOpacity>
         ) : null}
 
         {recentContinueEntries.length > 0 ? (
           <View style={[styles.homeMockRecentPanel, { backgroundColor: colorTheme.cardBackground, borderColor: colorTheme.border }]}>
             <View style={styles.homeMockPanelHeader}>
-              <Text style={styles.homeMockPanelTitle}>{t('homeRecentWork')}</Text>
-              <Text style={styles.homeMockPanelHint}>
+              <Text style={[styles.homeMockPanelTitle, { fontSize: homeUi.panelTitleSize }]}>{t('homeRecentWork')}</Text>
+              <Text style={[styles.homeMockPanelHint, { fontSize: homeUi.panelHintSize }]}>
                 {t('homeThisWeek', { count: weekSummary.entryCount })}
               </Text>
             </View>
             {recentContinueEntries.map((entry) => (
-              <TouchableOpacity
+              <View
                 key={`${entry.type}-${entry.id}`}
-                activeOpacity={0.88}
-                onPress={() => openJournalEntry(entry)}
-                style={styles.homeMockRecentRow}>
-                <Ionicons name={getEntryTypeIcon(entry.type)} size={17} color="#7A6F66" />
-                <View style={styles.homeMockRecentText}>
-                  <Text numberOfLines={1} style={styles.homeMockRecentTitle}>
-                    {getEntryTypeLabel(entry.type, t)}
+                style={[styles.homeMockRecentRow, { minHeight: homeUi.recentRowMinHeight }]}>
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={() => openJournalEntry(entry)}
+                  style={styles.homeMockRecentMainPressable}>
+                  <Ionicons name={getEntryTypeIcon(entry.type)} size={homeUi.recentIconSize} color="#7A6F66" />
+                  <View style={styles.homeMockRecentText}>
+                    <Text numberOfLines={1} style={[styles.homeMockRecentTitle, { fontSize: homeUi.recentTitleSize }]}>
+                      {getEntryTypeLabel(entry.type, t)}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.homeMockRecentPreview, { fontSize: homeUi.recentPreviewSize }]}>
+                      {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.homeMockRecentDate, { fontSize: homeUi.recentDateSize }]}>
+                    {formatRecentEntryDate(parseEntryDate(entry), language.key)}
                   </Text>
-                  <Text numberOfLines={1} style={styles.homeMockRecentPreview}>
-                    {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
-                  </Text>
-                </View>
-                <Text style={styles.homeMockRecentDate}>{formatRecentEntryDate(parseEntryDate(entry), language.key)}</Text>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={t('homeRemoveFromRecentAccessibility', {
+                    title: getEntryTypeLabel(entry.type, t),
+                  })}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  onPress={() => {
+                    void removeFromRecentWork(entry);
+                  }}
+                  style={styles.homeMockRecentRemoveButton}>
+                  <Ionicons name="close" size={16} color="#9A8F86" />
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         ) : null}
@@ -1719,7 +1913,22 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0,0,0,0.07)',
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  homeMockRecentMainPressable: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 9,
+    paddingVertical: 8,
+  },
+  homeMockRecentRemoveButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   homeMockRecentText: {
     flex: 1,

@@ -7,6 +7,7 @@ export type StickerData = {
   x: number;
   y: number;
   scale: number;
+  rotation?: number;
   zIndex: number;
 };
 
@@ -20,10 +21,13 @@ export type NoteData = {
   y: number;
   width: number;
   height: number;
+  rotation?: number;
   zIndex: number;
 };
 
 export type HighlightColor = 'yellow' | 'pink' | 'blue';
+
+export type VerseReferenceDisplay = 'number' | 'none' | 'full';
 
 export type VerseCardData = {
   id: string;
@@ -37,6 +41,7 @@ export type VerseCardData = {
   scale: number;
   rotation: number;
   cardColorKey?: string;
+  referenceDisplay?: VerseReferenceDisplay;
   zIndex: number;
 };
 
@@ -246,6 +251,12 @@ function normalizeVerseEditorState(
               typeof normalizedVerseCard.cardColorKey === 'string'
                 ? normalizedVerseCard.cardColorKey
                 : undefined,
+            referenceDisplay:
+              normalizedVerseCard.referenceDisplay === 'number' ||
+              normalizedVerseCard.referenceDisplay === 'none' ||
+              normalizedVerseCard.referenceDisplay === 'full'
+                ? normalizedVerseCard.referenceDisplay
+                : undefined,
             zIndex:
               typeof normalizedVerseCard.zIndex === 'number'
                 ? normalizedVerseCard.zIndex
@@ -281,6 +292,10 @@ function normalizeVerseEditorState(
             x: normalizedSticker.x,
             y: normalizedSticker.y,
             scale: normalizedSticker.scale,
+            rotation:
+              typeof normalizedSticker.rotation === 'number'
+                ? normalizedSticker.rotation
+                : 0,
             zIndex:
               typeof normalizedSticker.zIndex === 'number'
                 ? normalizedSticker.zIndex
@@ -330,6 +345,10 @@ function normalizeVerseEditorState(
               typeof normalizedNote.height === 'number'
                 ? normalizedNote.height
                 : 120,
+            rotation:
+              typeof normalizedNote.rotation === 'number'
+                ? normalizedNote.rotation
+                : 0,
             zIndex:
               typeof normalizedNote.zIndex === 'number'
                 ? normalizedNote.zIndex
@@ -445,7 +464,13 @@ export async function loadVerseStateMap(
     return {};
   }
 
-  const parsedValue = JSON.parse(savedValue) as unknown;
+  let parsedValue: unknown;
+
+  try {
+    parsedValue = JSON.parse(savedValue) as unknown;
+  } catch {
+    return {};
+  }
 
   if (isVerseEditorState(parsedValue)) {
     return fallbackKey ? { [fallbackKey]: parsedValue } : {};
@@ -495,8 +520,12 @@ export async function loadVerseEditorState(
     return defaults;
   }
 
-  const parsedValue = JSON.parse(savedValue) as Partial<VerseEditorState>;
-  return normalizeVerseEditorState(parsedValue, defaults) ?? defaults;
+  try {
+    const parsedValue = JSON.parse(savedValue) as Partial<VerseEditorState>;
+    return normalizeVerseEditorState(parsedValue, defaults) ?? defaults;
+  } catch {
+    return defaults;
+  }
 }
 
 export async function saveVerseEditorState(

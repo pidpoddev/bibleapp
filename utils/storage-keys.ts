@@ -4,5 +4,7 @@ export const SAVED_DESIGNS_BACKUP_STORAGE_KEY = 'studio_favorites_backup_v1';
 export const LEGACY_SAVED_DESIGNS_STORAGE_KEY = 'favorites';
 export const VERSE_DESIGN_INDEX_STORAGE_KEY = 'verse_design_index_v1';
 export const VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY = 'verse_design_timestamps_v1';
+export const BIBLE_INCLUDED_DESIGNS_STORAGE_KEY = 'bible_included_designs_v1';
 export const BIBLE_READING_PROGRESS_STORAGE_KEY = 'bible_reading_progress_v1';
 export const SHOP_OWNED_PACKS_STORAGE_KEY = 'shop_owned_packs_v1';
+export const HOME_HIDDEN_RECENT_ENTRY_IDS_STORAGE_KEY = 'home_hidden_recent_entry_ids_v1';

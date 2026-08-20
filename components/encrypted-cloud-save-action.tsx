@@ -20,6 +20,7 @@ import {
   pushEncryptedSync,
 } from '@/utils/sync-client';
 import { useAppSettings, type TranslationKey } from '@/utils/app-settings';
+import { CLOUD_SAVE_ENABLED } from '@/utils/compliance';
 
 type CloudSaveResult = {
   pushedCount: number;
@@ -34,6 +35,20 @@ type EncryptedCloudSaveActionProps = {
   disabledStyle?: StyleProp<ViewStyle>;
   onSaved?: (result: CloudSaveResult) => void;
 };
+
+const USERNAME_PREFIXES = ['Faith', 'Grace', 'Hope', 'Peace', 'Joy'];
+const USERNAME_SUFFIXES = ['Bloom', 'Light', 'Heart', 'Path', 'Song'];
+
+function makePrettyUsername() {
+  const prefix = USERNAME_PREFIXES[Math.floor(Math.random() * USERNAME_PREFIXES.length)];
+  const suffix = USERNAME_SUFFIXES[Math.floor(Math.random() * USERNAME_SUFFIXES.length)];
+  const number = Math.floor(100 + Math.random() * 900);
+  return `${prefix}${suffix}${number}`;
+}
+
+function cleanUsername(value: string) {
+  return value.replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40).toLowerCase();
+}
 
 function getFriendlyCloudError(
   error: unknown,
@@ -74,11 +89,16 @@ export function EncryptedCloudSaveAction({
   const { t } = useAppSettings();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [username, setUsername] = useState(makePrettyUsername);
   const [phrase, setPhrase] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const buttonLabel = label ?? t('actionSaveToCloud');
+
+  if (!CLOUD_SAVE_ENABLED) {
+    return null;
+  }
 
   const openCloudSave = async () => {
     setError('');
@@ -88,6 +108,9 @@ export function EncryptedCloudSaveAction({
     try {
       const session = await getSyncSession();
       setHasSession(Boolean(session));
+      if (session?.username) {
+        setUsername(session.username);
+      }
       setMessage(
         session
           ? t('cloudSaveExistingSessionPrompt')
@@ -115,14 +138,20 @@ export function EncryptedCloudSaveAction({
       return;
     }
 
+    const cleanedUsername = cleanUsername(username);
+    const session = await getSyncSession();
+
+    if (!session && cleanedUsername.length < 3) {
+      setError(t('settingsUsernameTooShort'));
+      return;
+    }
+
     setIsBusy(true);
     setError('');
 
     try {
-      const session = await getSyncSession();
-
       if (!session) {
-        await connectPrivateSyncPhrase(phrase);
+        await connectPrivateSyncPhrase(phrase, cleanedUsername);
       }
 
       const result = await pushEncryptedSync(phrase);
@@ -189,6 +218,19 @@ export function EncryptedCloudSaveAction({
               {t('settingsPhraseWarning')}
             </Text>
             {message ? <Text style={styles.modalMessage}>{message}</Text> : null}
+
+            {hasSession !== true ? (
+              <TextInput
+                value={username}
+                onChangeText={setUsername}
+                placeholder={t('settingsUsername')}
+                placeholderTextColor="#9C9087"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isBusy}
+                style={[styles.phraseInput, styles.usernameInput]}
+              />
+            ) : null}
 
             <TextInput
               value={phrase}
@@ -335,6 +377,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 14,
     fontWeight: '700',
+  },
+  usernameInput: {
+    marginBottom: 10,
   },
   errorText: {
     color: '#B55E53',

@@ -37,7 +37,11 @@ function normalizeUsername(value) {
     return null;
   }
 
-  const username = value.trim().replace(/\s+/g, '').replace(/[^A-Za-z0-9_]/g, '');
+  const username = value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[^A-Za-z0-9_]/g, '')
+    .toLowerCase();
   if (!username) {
     return null;
   }
@@ -552,6 +556,17 @@ app.post('/v1/sync/conflicts/:itemId/resolve', getAuthedDevice, async (req, res,
 
     if (action === 'keep_version') {
       requireString(versionId, 'versionId');
+      const [validVersions] = await connection.query(
+        `SELECT id FROM encrypted_item_versions
+         WHERE id = ? AND item_id = ? AND user_id = ?
+         LIMIT 1`,
+        [versionId, itemId, userId]
+      );
+
+      if (validVersions.length === 0) {
+        throw Object.assign(new Error('Conflict version was not found.'), { statusCode: 404 });
+      }
+
       await connection.query(
         `UPDATE encrypted_items
          SET current_version_id = ?, has_conflict = FALSE, conflict_detected_at = NULL
@@ -574,6 +589,7 @@ app.post('/v1/sync/conflicts/:itemId/resolve', getAuthedDevice, async (req, res,
       const source = versions[0];
       const newItemId = randomId();
       const newVersionId = randomId();
+      const newLocalStorageKey = `${source.local_storage_key || source.item_type}__copy_${newItemId}`;
       await connection.query(
         `INSERT INTO encrypted_items
          (id, user_id, client_item_id, item_type, local_storage_key, schema_version, current_version_id)
@@ -581,9 +597,9 @@ app.post('/v1/sync/conflicts/:itemId/resolve', getAuthedDevice, async (req, res,
         [
           newItemId,
           userId,
-          `${source.local_storage_key || source.item_type}:${newItemId}`,
+          newLocalStorageKey,
           source.item_type,
-          source.local_storage_key,
+          newLocalStorageKey,
           source.schema_version,
           newVersionId,
         ]

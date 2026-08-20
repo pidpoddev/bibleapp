@@ -11,7 +11,11 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings } from '@/utils/app-settings';
-import { formatEntryDateTime, getLocalDateKey } from '@/utils/date-time';
+import { formatEntryDateTime } from '@/utils/date-time';
+import {
+  removeJournalIndexEntry,
+  safeParseJournalIndex,
+} from '@/utils/journal-storage';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 
 type PrayerJournalListItem = {
@@ -21,46 +25,6 @@ type PrayerJournalListItem = {
   preview: string;
   isFavorite?: boolean;
   updatedAt: number;
-};
-
-const PURGE_TODAY_FLAG_KEY = 'prayer_purge_today_v2_2026_04_29';
-
-const purgeTodayPrayerEntriesOnce = async () => {
-  const hasPurged = await AsyncStorage.getItem(PURGE_TODAY_FLAG_KEY);
-
-  if (hasPurged === 'done') {
-    return;
-  }
-
-  const data = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-  const allEntries = data ? (JSON.parse(data) as PrayerJournalListItem[]) : [];
-  const todayKey = getLocalDateKey();
-
-  const entriesToDelete = allEntries.filter((entry) => {
-    if (entry.type !== 'prayer') {
-      return false;
-    }
-
-    if (typeof entry.updatedAt !== 'number') {
-      return false;
-    }
-
-    return getLocalDateKey(new Date(entry.updatedAt)) === todayKey;
-  });
-
-  if (entriesToDelete.length > 0) {
-    await Promise.all(
-      entriesToDelete.map((entry) => AsyncStorage.removeItem(`journal_prayer_${entry.id}`))
-    );
-
-    const remainingEntries = allEntries.filter(
-      (entry) => !entriesToDelete.some((deletedEntry) => deletedEntry.id === entry.id)
-    );
-
-    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(remainingEntries));
-  }
-
-  await AsyncStorage.setItem(PURGE_TODAY_FLAG_KEY, 'done');
 };
 
 export default function PrayerJournalListScreen() {
@@ -79,12 +43,7 @@ export default function PrayerJournalListScreen() {
   const deleteEntry = async (id: string) => {
     try {
       await AsyncStorage.removeItem(`journal_prayer_${id}`);
-
-      const data = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-      const allEntries = data ? (JSON.parse(data) as PrayerJournalListItem[]) : [];
-      const nextEntries = allEntries.filter((entry) => entry.id !== id);
-
-      await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextEntries));
+      await removeJournalIndexEntry(id, 'prayer');
       setEntries((currentEntries) => currentEntries.filter((entry) => entry.id !== id));
     } catch (error) {
       console.log('Error deleting prayer journal:', error);
@@ -93,13 +52,21 @@ export default function PrayerJournalListScreen() {
 
   const loadEntries = useCallback(async () => {
     try {
-      await purgeTodayPrayerEntriesOnce();
-
       const data = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-      const allEntries = data ? (JSON.parse(data) as PrayerJournalListItem[]) : [];
+      const allEntries = safeParseJournalIndex(data);
 
       let prayerEntries = allEntries
         .filter((entry) => entry.type === 'prayer')
+        .map(
+          (entry): PrayerJournalListItem => ({
+            id: entry.id,
+            type: 'prayer',
+            date: entry.date ?? '',
+            preview: entry.preview ?? '',
+            isFavorite: entry.isFavorite,
+            updatedAt: entry.updatedAt,
+          })
+        )
         .sort((left, right) => right.updatedAt - left.updatedAt);
 
       if (showFavorites) {

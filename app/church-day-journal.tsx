@@ -8,7 +8,7 @@ import { captureRef } from 'react-native-view-shot';
 import { EncryptedCloudSaveAction } from '@/components/encrypted-cloud-save-action';
 import { getBooks, getChapters, getVerses, getVerseText } from '@/utils/bible-data';
 import { useAppSettings } from '@/utils/app-settings';
-import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
+import { upsertJournalIndexEntry } from '@/utils/journal-storage';
 import { formatEntryDateTime } from '@/utils/date-time';
 import {
   CHURCH_DAY_SECTION_KEYS,
@@ -116,11 +116,7 @@ export default function ChurchDayJournalScreen() {
   }, []);
 
   const updateIndex = useCallback(async (entry: ChurchDayEntry) => {
-    const saved = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-    const entries = saved ? (JSON.parse(saved) as ChurchDayEntry[]) : [];
-    const nextEntries = entries.some((item) => item.id === entry.id) ? entries.map((item) => (item.id === entry.id ? entry : item)) : [entry, ...entries];
-    nextEntries.sort((a, b) => b.updatedAt - a.updatedAt);
-    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextEntries));
+    await upsertJournalIndexEntry(entry);
   }, []);
 
   const saveEntry = useCallback(async (nextBook: string, nextChapter: string, nextVerse: string, nextSections: ChurchDaySection[], nextStickers = stickers, nextBackground = background, nextHighlightColor = highlightColor) => {

@@ -75,7 +75,7 @@ export function SaveConfirmationToast({
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(760),
+      Animated.delay(2200),
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 0,
@@ -95,7 +95,7 @@ export function SaveConfirmationToast({
     hideTimeoutRef.current = setTimeout(() => {
       setIsRendered(false);
       hideTimeoutRef.current = null;
-    }, 1300);
+    }, 2800);
   }, [opacity, scale, translateY, visibleKey]);
 
   useEffect(() => {
@@ -131,7 +131,9 @@ export function SaveConfirmationToast({
           <Ionicons name="checkmark" size={10} color={tintColor} />
         </View>
       </View>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={styles.message} numberOfLines={3}>
+        {message}
+      </Text>
       <View style={[styles.sparkle, styles.sparkleTop, { backgroundColor: '#EBCB77' }]} />
       <View style={[styles.sparkle, styles.sparkleBottom, { backgroundColor: '#F3D1DC' }]} />
     </Animated.View>
@@ -150,7 +152,8 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 44,
     minWidth: 128,
-    maxWidth: 168,
+    maxWidth: 320,
+    marginHorizontal: 24,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 16,
@@ -183,9 +186,11 @@ const styles = StyleSheet.create({
     borderColor: '#E8DCD4',
   },
   message: {
+    flexShrink: 1,
     color: '#5B514D',
     fontSize: 14,
     fontWeight: '800',
+    textAlign: 'left',
   },
   sparkle: {
     position: 'absolute',

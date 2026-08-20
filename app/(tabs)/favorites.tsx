@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings, type AppLanguageKey } from '@/utils/app-settings';
 import {
-  JOURNAL_INDEX_KEY,
   LEGACY_SAVED_DESIGNS_STORAGE_KEY,
   SAVED_DESIGNS_BACKUP_STORAGE_KEY,
   SAVED_DESIGNS_STORAGE_KEY,
@@ -15,6 +14,7 @@ import { FocusedScreenView } from '@/components/focused-screen-view';
 import {
   getHydratedJournalEntries,
   getJournalEntryStorageKey,
+  removeJournalIndexEntry,
   type HydratedJournalEntry,
 } from '@/utils/journal-storage';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
@@ -227,15 +227,10 @@ export default function FavoritesScreen() {
 
   const deleteFavorite = useCallback(
     async (item: UnifiedFavorite) => {
-      const journalData = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-      const journalEntries = safeParseArray<JournalFavorite>(journalData);
       const entryStorageKey = getJournalEntryStorageKey({ id: item.entryId, type: item.type });
       const entryValue = await AsyncStorage.getItem(entryStorageKey);
-      const nextJournalEntries = journalEntries.filter(
-        (entry) => !(entry.id === item.entryId && entry.type === item.type)
-      );
 
-      await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextJournalEntries));
+      await removeJournalIndexEntry(item.entryId, item.type);
       await AsyncStorage.removeItem(entryStorageKey);
 
       if (item.editor === 'studio' || item.type === 'journal-studio') {

@@ -13,11 +13,6 @@ const expoUrls = [
     url: 'exp://192.168.70.70:8081',
     svgPath: resolve('assets/expo-go-local-qr.svg'),
   },
-  {
-    label: 'External DNS',
-    url: 'exp://rcdl.tplinkdns.com:8081',
-    svgPath: resolve('assets/expo-go-external-qr.svg'),
-  },
 ];
 const qrMarkdownPath = resolve('EXPO_GO_QR.md');
 
@@ -66,12 +61,6 @@ Scan with Expo Go.
 ![Local Expo Go QR code](assets/expo-go-local-qr.svg)
 
 Expo Go URL: \`exp://192.168.70.70:8081\`
-
-## External DNS
-
-![External DNS Expo Go QR code](assets/expo-go-external-qr.svg)
-
-Expo Go URL: \`exp://rcdl.tplinkdns.com:8081\`
 `;
 
 writeFileSync(qrMarkdownPath, markdown);

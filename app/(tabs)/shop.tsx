@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Image,
   Platform,
@@ -16,6 +16,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppSettings, type AppLanguageKey } from '@/utils/app-settings';
 import { SHOP_BACKGROUND_PACKS, type ShopBackground } from '@/utils/shop-backgrounds';
 import { getOwnedShopPackIds } from '@/utils/shop-library';
+import {
+  purchaseShopPack,
+  refreshShopPurchases,
+  restoreShopPurchases,
+  type ShopStoreProduct,
+} from '@/utils/shop-purchases';
+import { getShopPurchaseProduct } from '@/utils/shop-products';
+import { SHOP_NOTE_STYLE_PACKS, type ShopNoteStyle } from '@/utils/shop-note-styles';
 import { SHOP_STICKER_PACKS, type ShopSticker } from '@/utils/shop-stickers';
 import { FocusedScreenView } from '@/components/focused-screen-view';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
@@ -30,7 +38,8 @@ type ShopCategory = {
     | 'shopCategoryThemes'
     | 'shopCategoryDecor'
     | 'shopCategoryStickers'
-    | 'shopCategoryTools';
+    | 'shopCategoryTools'
+    | 'shopCategoryNoteStyles';
   icon: keyof typeof Ionicons.glyphMap;
 };
 
@@ -43,20 +52,45 @@ type ShopPack = {
   colors: string[];
   icon: keyof typeof Ionicons.glyphMap;
   tag: string;
-  status: 'included' | 'preview';
+  status: 'included' | 'paid' | 'preview';
+  priceLabel?: string;
   previewImage?: ImageSourcePropType;
   stickers?: ShopSticker[];
   backgrounds?: ShopBackground[];
+  noteStyles?: ShopNoteStyle[];
 };
 
 const CATEGORIES: ShopCategory[] = [
   { key: 'all', titleKey: 'shopCategoryAll', icon: 'storefront-outline' },
   { key: 'backgrounds', titleKey: 'shopCategoryCanvas', icon: 'image-outline' },
+  { key: 'note-styles', titleKey: 'shopCategoryNoteStyles', icon: 'document-text-outline' },
   { key: 'themes', titleKey: 'shopCategoryThemes', icon: 'color-palette-outline' },
   { key: 'decor', titleKey: 'shopCategoryDecor', icon: 'sparkles-outline' },
   { key: 'stickers', titleKey: 'shopCategoryStickers', icon: 'pricetags-outline' },
   { key: 'tools', titleKey: 'shopCategoryTools', icon: 'brush-outline' },
 ];
+
+const STICKER_PACK_COLORS: Record<string, string[]> = {
+  'floral-faith-stickers': ['#F4D6CE', '#DDE5CF', '#F9F7EC'],
+  'scripture-verse-label-stickers': ['#E8D4A8', '#F7EBC8', '#2F2C28'],
+  'faith-canvas-pastel-stickers': ['#F8C8D4', '#CDB5EF', '#BFE3D6'],
+  'prayer-night-stickers': ['#D9C7F0', '#BFD7F1', '#F7D9E5'],
+  'quiet-strength-stickers': ['#E8DED1', '#9FAF9A', '#C88C93'],
+  'pressed-florals-stickers': ['#EFE6D9', '#A4AD8C', '#C58B8B'],
+  'verse-markers-stickers': ['#FCEEF3', '#F4F1FF', '#EFF7FF'],
+  'soft-journal-decor-stickers': ['#FCEEF3', '#EEF9F3', '#EFF7FF'],
+};
+
+const STICKER_PACK_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  'floral-faith-stickers': 'flower-outline',
+  'scripture-verse-label-stickers': 'pricetag-outline',
+  'faith-canvas-pastel-stickers': 'heart-outline',
+  'prayer-night-stickers': 'moon-outline',
+  'quiet-strength-stickers': 'leaf-outline',
+  'pressed-florals-stickers': 'flower-outline',
+  'verse-markers-stickers': 'arrow-forward-circle-outline',
+  'soft-journal-decor-stickers': 'albums-outline',
+};
 
 const PACKS: ShopPack[] = [
   {
@@ -67,22 +101,15 @@ const PACKS: ShopPack[] = [
     status: 'included',
     previewImage: SHOP_BACKGROUND_PACKS[0].backgrounds[0].image,
   },
-  {
-    ...SHOP_STICKER_PACKS[0],
+  ...SHOP_STICKER_PACKS.map((pack): ShopPack => ({
+    ...pack,
     categoryKey: 'stickers',
-    colors: ['#F4D6CE', '#DDE5CF', '#F9F7EC'],
-    icon: 'flower-outline',
-    status: 'included',
-    previewImage: SHOP_STICKER_PACKS[0].stickers[0].image,
-  },
-  {
-    ...SHOP_STICKER_PACKS[1],
-    categoryKey: 'stickers',
-    colors: ['#E8D4A8', '#F7EBC8', '#2F2C28'],
-    icon: 'pricetag-outline',
-    status: 'included',
-    previewImage: SHOP_STICKER_PACKS[1].stickers[0].image,
-  },
+    colors: STICKER_PACK_COLORS[pack.id] ?? ['#F4D6CE', '#DDE5CF', '#F9F7EC'],
+    icon: STICKER_PACK_ICONS[pack.id] ?? 'pricetags-outline',
+    status: pack.isIncluded ? 'included' : 'paid',
+    priceLabel: pack.priceLabel,
+    previewImage: pack.stickers[0]?.previewImage ?? pack.stickers[0]?.image,
+  })),
   {
     id: 'cozy-canvas-kit',
     title: 'Cozy Canvas Kit',
@@ -94,28 +121,15 @@ const PACKS: ShopPack[] = [
     tag: 'Preview',
     status: 'preview',
   },
-  {
-    id: 'quiet-mornings',
-    title: 'Quiet Mornings',
-    subtitle: 'Soft paper, sunrise washes, and peaceful note pages',
-    categoryKey: 'themes',
-    category: 'Themes',
-    colors: ['#FFF6D9', '#F9D7E5', '#DDEBFF'],
-    icon: 'sunny-outline',
-    tag: 'Preview',
-    status: 'preview',
-  },
-  {
-    id: 'sunday-table',
-    title: 'Sunday Table',
-    subtitle: 'A coordinated theme with cream paper, sage tabs, and blush accents',
-    categoryKey: 'themes',
-    category: 'Themes',
-    colors: ['#FFF8EA', '#BFD5C7', '#E9A9B5'],
-    icon: 'color-palette-outline',
-    tag: 'Preview',
-    status: 'preview',
-  },
+  ...SHOP_NOTE_STYLE_PACKS.map(
+    (pack): ShopPack => ({
+      ...pack,
+      categoryKey: 'note-styles',
+      icon: 'document-text-outline',
+      status: pack.isIncluded ? 'included' : 'paid',
+      priceLabel: pack.priceLabel,
+    })
+  ),
   {
     id: 'faith-notes',
     title: 'Faith Notes',
@@ -192,6 +206,10 @@ const SHOP_TEXT_TRANSLATIONS: Record<string, Partial<Record<AppLanguageKey, stri
   'A coordinated theme with cream paper, sage tabs, and blush accents': {
     es: 'Un tema coordinado con papel crema, pestañas salvia y detalles rosados',
   },
+  'Pastel Note Papers': { es: 'Papeles de nota pastel' },
+  'Eight sticky-note colors for Studio notes: peach, coral, honey, mint, and more': {
+    es: 'Ocho colores de notas adhesivas para Estudio: durazno, coral, miel, menta y más',
+  },
   'Faith Notes': { es: 'Notas de fe' },
   'Tiny crosses, hearts, stars, tabs, and page markers': {
     es: 'Cruces pequeñas, corazones, estrellas, pestañas y marcadores de página',
@@ -226,21 +244,30 @@ const SHOP_TEXT_TRANSLATIONS: Record<string, Partial<Record<AppLanguageKey, stri
 
 export default function ShopScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ category?: string | string[] }>();
   const { colorTheme, language, t } = useAppSettings();
   const layout = useResponsiveLayout();
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedPackId, setSelectedPackId] = useState(PACKS[0].id);
+  const routeCategoryParam = Array.isArray(params.category)
+    ? params.category[0]
+    : params.category;
+  const initialCategory =
+    typeof routeCategoryParam === 'string' &&
+    CATEGORIES.some((category) => category.key === routeCategoryParam)
+      ? routeCategoryParam
+      : 'all';
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
+  const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [ownedPackIds, setOwnedPackIds] = useState<Set<string>>(() => new Set());
+  const [storeProductsByPackId, setStoreProductsByPackId] = useState<
+    Record<string, ShopStoreProduct>
+  >({});
+  const [isPurchasePending, setIsPurchasePending] = useState(false);
   const [shopMessage, setShopMessage] = useState('');
-  const selectedPack = PACKS.find((pack) => pack.id === selectedPackId) ?? PACKS[0];
-  const isSelectedPackIncluded = selectedPack.status === 'included';
-  const isSelectedPackOwned = ownedPackIds.has(selectedPack.id);
-  const isSelectedPackAvailable = isSelectedPackIncluded || isSelectedPackOwned;
-  const selectedPackHasUsableAssets = Boolean(selectedPack.stickers || selectedPack.backgrounds);
   const packCategoryLabels = {
     all: t('shopCategoryBundle'),
     backgrounds: t('shopCategoryCanvas'),
+    'note-styles': t('shopCategoryNoteStyles'),
     themes: t('shopCategoryThemes'),
     decor: t('shopCategoryDecor'),
     stickers: t('shopCategoryStickers'),
@@ -254,9 +281,32 @@ export default function ShopScreen() {
     [language.key]
   );
 
+  const isPackAvailable = (pack: ShopPack) => pack.status === 'included' || ownedPackIds.has(pack.id);
+  const packHasUsableAssets = (pack: ShopPack) =>
+    Boolean(pack.stickers || pack.backgrounds || pack.noteStyles);
+  const getPackPriceLabel = (pack: ShopPack) =>
+    storeProductsByPackId[pack.id]?.priceLabel ??
+    getShopPurchaseProduct(pack.id)?.fallbackPriceLabel ??
+    pack.priceLabel;
+  const getPackPurchaseLabel = (pack: ShopPack) => {
+    const priceLabel = getPackPriceLabel(pack);
+
+    return priceLabel ? t('shopBuyPrice', { price: priceLabel }) : t('shopUnlock');
+  };
+
   useEffect(() => {
     setShopMessage('');
   }, [selectedPackId]);
+
+  useEffect(() => {
+    if (
+      typeof routeCategoryParam === 'string' &&
+      CATEGORIES.some((category) => category.key === routeCategoryParam)
+    ) {
+      setSelectedCategory(routeCategoryParam);
+      setSelectedPackId(null);
+    }
+  }, [routeCategoryParam]);
 
   const getPackStatusLabel = (pack: ShopPack) => {
     if (pack.status === 'included') {
@@ -267,14 +317,12 @@ export default function ShopScreen() {
       return t('shopOwned');
     }
 
-    return t('shopUnlock');
+    return getPackPriceLabel(pack) ?? t('shopUnlock');
   };
 
   const selectCategory = (categoryKey: string) => {
     setSelectedCategory(categoryKey);
-    const nextPack =
-      PACKS.find((pack) => categoryKey === 'all' || pack.categoryKey === categoryKey) ?? PACKS[0];
-    setSelectedPackId(nextPack.id);
+    setSelectedPackId(null);
     requestAnimationFrame(() => {
       scrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: false });
     });
@@ -284,14 +332,24 @@ export default function ShopScreen() {
     useCallback(() => {
       let isActive = true;
 
-      getOwnedShopPackIds()
-        .then((nextOwnedPackIds) => {
+      refreshShopPurchases()
+        .then((purchaseState) => {
           if (isActive) {
-            setOwnedPackIds(nextOwnedPackIds);
+            setOwnedPackIds(purchaseState.ownedPackIds);
+            setStoreProductsByPackId(purchaseState.productsByPackId);
           }
         })
         .catch((error) => {
-          console.warn('Failed to load owned shop packs', error);
+          console.warn('Failed to load shop purchases', error);
+          getOwnedShopPackIds()
+            .then((nextOwnedPackIds) => {
+              if (isActive) {
+                setOwnedPackIds(nextOwnedPackIds);
+              }
+            })
+            .catch((ownedError) => {
+              console.warn('Failed to load owned shop packs', ownedError);
+            });
         });
 
       requestAnimationFrame(() => {
@@ -304,17 +362,41 @@ export default function ShopScreen() {
     }, [])
   );
 
-  const handlePrimaryPackAction = async () => {
-    if (!isSelectedPackAvailable) {
-      setShopMessage(t('shopPurchaseNotConnected'));
+  const handlePrimaryPackAction = async (pack: ShopPack) => {
+    if (!isPackAvailable(pack)) {
+      if (!getShopPurchaseProduct(pack.id) || !packHasUsableAssets(pack)) {
+        setShopMessage(t('shopPreviewSavedToolsPending'));
+        return;
+      }
+
+      setIsPurchasePending(true);
+      setShopMessage(t('shopPurchaseLoading'));
+
+      try {
+        const purchaseResult = await purchaseShopPack(pack.id);
+        setOwnedPackIds(purchaseResult.ownedPackIds);
+
+        if (purchaseResult.status === 'purchased') {
+          setShopMessage(t('shopPurchaseSuccess'));
+        } else if (purchaseResult.status === 'cancelled') {
+          setShopMessage(t('shopPurchaseCancelled'));
+        } else if (purchaseResult.status === 'unavailable') {
+          setShopMessage(t('shopPurchaseUnavailable'));
+        } else {
+          setShopMessage(t('shopPurchaseFailed'));
+        }
+      } finally {
+        setIsPurchasePending(false);
+      }
+
       return;
     }
 
-    if (selectedPackHasUsableAssets) {
+    if (packHasUsableAssets(pack)) {
       router.push({
         pathname: '/studio',
         params: {
-          openToolbar: selectedPack.backgrounds ? 'backgrounds' : 'stickers',
+          openToolbar: pack.backgrounds ? 'backgrounds' : pack.stickers ? 'stickers' : '',
           selectionToken: String(Date.now()),
         },
       });
@@ -322,6 +404,149 @@ export default function ShopScreen() {
     }
 
     setShopMessage(t('shopPreviewSavedToolsPending'));
+  };
+
+  const handleRestorePurchases = async () => {
+    setIsPurchasePending(true);
+    setShopMessage(t('shopRestoreLoading'));
+
+    try {
+      const restoreResult = await restoreShopPurchases();
+      setOwnedPackIds(restoreResult.ownedPackIds);
+
+      if (restoreResult.status === 'restored') {
+        setShopMessage(
+          restoreResult.restoredPackCount > 0 ? t('shopRestoreSuccess') : t('shopRestoreEmpty')
+        );
+      } else if (restoreResult.status === 'unavailable') {
+        setShopMessage(t('shopPurchaseUnavailable'));
+      } else {
+        setShopMessage(t('shopRestoreFailed'));
+      }
+    } finally {
+      setIsPurchasePending(false);
+    }
+  };
+
+  const renderPackExpandedDetail = (pack: ShopPack) => {
+    const isIncluded = pack.status === 'included';
+    const isOwned = ownedPackIds.has(pack.id);
+    const isAvailable = isIncluded || isOwned;
+    const hasUsableAssets = packHasUsableAssets(pack);
+
+    return (
+      <View style={styles.packDetailInline}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            isAvailable
+              ? hasUsableAssets
+                ? `${t('shopUseInStudio')}: ${localizeShopText(pack.title)}`
+                : `${t('shopViewPreview')}: ${localizeShopText(pack.title)}`
+              : `${getPackPurchaseLabel(pack)}: ${localizeShopText(pack.title)}`
+          }
+          onPress={() => handlePrimaryPackAction(pack)}
+          disabled={isPurchasePending}
+          style={[
+            styles.addButton,
+            { backgroundColor: colorTheme.tint },
+            isPurchasePending ? styles.disabledButton : null,
+          ]}>
+          <Ionicons
+            name={
+              isAvailable
+                ? hasUsableAssets
+                  ? 'brush-outline'
+                  : 'checkmark-circle-outline'
+                : 'lock-open-outline'
+            }
+            size={17}
+            color="#FFFDF9"
+          />
+          <Text style={styles.addButtonText}>
+            {isAvailable
+              ? hasUsableAssets
+                ? t('shopUseInStudio')
+                : t('shopSavedPreview')
+              : isPurchasePending
+                ? t('shopPurchaseLoading')
+                : getPackPurchaseLabel(pack)}
+          </Text>
+        </Pressable>
+        {shopMessage ? <Text style={styles.shopMessage}>{shopMessage}</Text> : null}
+
+        {pack.stickers ? (
+          <View style={styles.stickerPreviewGrid}>
+            {pack.stickers.map((sticker) => (
+              <View key={sticker.key} style={styles.stickerPreviewCard}>
+                <Image
+                  source={sticker.previewImage ?? sticker.image}
+                  resizeMode="contain"
+                  style={styles.stickerPreviewImage}
+                />
+                <Text style={styles.stickerPreviewName}>{localizeShopText(sticker.name)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : pack.backgrounds ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.backgroundPreviewScroll}
+            contentContainerStyle={styles.backgroundPreviewRow}>
+            {pack.backgrounds.map((background) => (
+              <View key={background.key} style={styles.backgroundPreviewCard}>
+                <Image
+                  source={background.previewImage ?? background.image}
+                  resizeMode="cover"
+                  style={styles.backgroundPreviewImage}
+                />
+                <Text
+                  maxFontSizeMultiplier={1.05}
+                  numberOfLines={2}
+                  style={styles.backgroundPreviewName}>
+                  {localizeShopText(background.name)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        ) : pack.noteStyles ? (
+          <View style={styles.noteStylePreviewGrid}>
+            {pack.noteStyles.map((noteStyle) => (
+              <View
+                key={noteStyle.key}
+                style={[
+                  styles.noteStylePreviewCard,
+                  {
+                    backgroundColor: noteStyle.backgroundColor,
+                    borderColor: noteStyle.borderColor,
+                  },
+                ]}>
+                <Text style={[styles.noteStylePreviewName, { color: noteStyle.textColor }]}>
+                  {localizeShopText(noteStyle.label)}
+                </Text>
+                <Text style={[styles.noteStylePreviewSample, { color: noteStyle.mutedTextColor }]}>
+                  Aa
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.placeholderDetail}>
+            <Ionicons name={pack.icon} size={26} color="#5B514D" />
+            <Text style={styles.placeholderDetailText}>{t('shopPackPreviewSoon')}</Text>
+          </View>
+        )}
+
+        <Text style={styles.testPackNote}>
+          {isAvailable
+            ? hasUsableAssets
+              ? t('shopIncludedNote')
+              : t('shopPreviewLocalShelf')
+            : t('shopUnlockParentApproval')}
+        </Text>
+      </View>
+    );
   };
 
   return (
@@ -356,7 +581,17 @@ export default function ShopScreen() {
             <Text style={styles.subtitle}>{t('shopSubtitle')}</Text>
           </View>
           <View style={[styles.shelfBadge, { backgroundColor: colorTheme.toolbarBackground }]}>
-            <Ionicons name="sparkles-outline" size={22} color="#5B514D" />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('shopRestorePurchases')}
+              disabled={isPurchasePending}
+              onPress={handleRestorePurchases}
+              style={styles.restoreButton}>
+              <Ionicons name="refresh-outline" size={17} color="#5B514D" />
+              <Text numberOfLines={1} style={styles.restoreButtonText}>
+                {t('shopRestorePurchases')}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -397,125 +632,6 @@ export default function ShopScreen() {
           </View>
         </View>
 
-        <View
-          style={[
-            styles.packDetail,
-            {
-              backgroundColor: colorTheme.cardBackground,
-              borderColor: colorTheme.border,
-            },
-          ]}>
-          <View style={styles.packDetailHeader}>
-            <View style={styles.packDetailTitleBlock}>
-              <Text maxFontSizeMultiplier={1.15} style={styles.packDetailCategory}>
-                {packCategoryLabels[
-                  selectedPack.categoryKey as keyof typeof packCategoryLabels
-                ] ?? selectedPack.category}
-              </Text>
-              <Text
-                maxFontSizeMultiplier={1.15}
-                numberOfLines={2}
-                adjustsFontSizeToFit
-                style={styles.packDetailTitle}>
-                {localizeShopText(selectedPack.title)}
-              </Text>
-              <Text maxFontSizeMultiplier={1.15} style={styles.packDetailText}>
-                {localizeShopText(selectedPack.subtitle)}
-              </Text>
-            </View>
-            <View style={styles.testPill}>
-              <Text maxFontSizeMultiplier={1.1} style={styles.testPillText}>
-                {isSelectedPackIncluded
-                  ? t('shopIncluded')
-                  : isSelectedPackOwned
-                    ? t('shopOwned')
-                    : t('shopLocked')}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              isSelectedPackAvailable
-                ? selectedPackHasUsableAssets
-                  ? `${t('shopUseInStudio')}: ${localizeShopText(selectedPack.title)}`
-                  : `${t('shopViewPreview')}: ${localizeShopText(selectedPack.title)}`
-                : `${t('shopUnlock')}: ${localizeShopText(selectedPack.title)}`
-            }
-            onPress={handlePrimaryPackAction}
-            style={[styles.addButton, { backgroundColor: colorTheme.tint }]}>
-            <Ionicons
-              name={
-                isSelectedPackAvailable
-                  ? selectedPackHasUsableAssets
-                    ? 'brush-outline'
-                    : 'checkmark-circle-outline'
-                  : 'lock-open-outline'
-              }
-              size={17}
-              color="#FFFDF9"
-            />
-            <Text style={styles.addButtonText}>
-              {isSelectedPackAvailable
-                ? selectedPackHasUsableAssets
-                  ? t('shopUseInStudio')
-                  : t('shopSavedPreview')
-                : t('shopUnlock')}
-            </Text>
-          </Pressable>
-          {shopMessage ? <Text style={styles.shopMessage}>{shopMessage}</Text> : null}
-
-          {selectedPack.stickers ? (
-            <View style={styles.stickerPreviewGrid}>
-              {selectedPack.stickers.map((sticker) => (
-                <View key={sticker.key} style={styles.stickerPreviewCard}>
-                  <Image
-                    source={sticker.previewImage ?? sticker.image}
-                    resizeMode="contain"
-                    style={styles.stickerPreviewImage}
-                  />
-                  <Text style={styles.stickerPreviewName}>{localizeShopText(sticker.name)}</Text>
-                </View>
-              ))}
-            </View>
-          ) : selectedPack.backgrounds ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.backgroundPreviewScroll}
-              contentContainerStyle={styles.backgroundPreviewRow}>
-              {selectedPack.backgrounds.map((background) => (
-                <View key={background.key} style={styles.backgroundPreviewCard}>
-                  <Image
-                    source={background.previewImage ?? background.image}
-                    resizeMode="cover"
-                    style={styles.backgroundPreviewImage}
-                  />
-                  <Text
-                    maxFontSizeMultiplier={1.05}
-                    numberOfLines={2}
-                    style={styles.backgroundPreviewName}>
-                    {localizeShopText(background.name)}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.placeholderDetail}>
-              <Ionicons name={selectedPack.icon} size={26} color="#5B514D" />
-              <Text style={styles.placeholderDetailText}>{t('shopPackPreviewSoon')}</Text>
-            </View>
-          )}
-
-          <Text style={styles.testPackNote}>
-            {isSelectedPackAvailable
-              ? selectedPackHasUsableAssets
-                ? t('shopIncludedNote')
-                : t('shopPreviewLocalShelf')
-              : t('shopUnlockParentApproval')}
-          </Text>
-        </View>
-
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{t('shopShelfTitle')}</Text>
           <Text style={styles.sectionMeta}>
@@ -526,9 +642,8 @@ export default function ShopScreen() {
         {visiblePacks.length > 0 ? (
           <View style={styles.packGrid}>
             {visiblePacks.map((pack) => (
-              <Pressable
+              <View
                 key={pack.id}
-                onPress={() => setSelectedPackId(pack.id)}
                 style={[
                   styles.packCard,
                   selectedPackId === pack.id ? styles.packCardSelected : null,
@@ -537,56 +652,69 @@ export default function ShopScreen() {
                     borderColor: colorTheme.border,
                   },
                 ]}>
-                <View style={styles.packTopRow}>
-                  {pack.previewImage ? (
-                    <View style={styles.packImagePreview}>
-                      <Image
-                        source={pack.previewImage}
-                        resizeMode="contain"
-                        style={styles.packPreviewImage}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: selectedPackId === pack.id }}
+                  onPress={() =>
+                    setSelectedPackId((current) => (current === pack.id ? null : pack.id))
+                  }
+                  style={styles.packSummary}>
+                  <View style={styles.packTopRow}>
+                    {pack.previewImage ? (
+                      <View style={styles.packImagePreview}>
+                        <Image
+                          source={pack.previewImage}
+                          resizeMode="contain"
+                          style={styles.packPreviewImage}
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.packIconShell}>
+                        <Ionicons name={pack.icon} size={22} color="#5B514D" />
+                      </View>
+                    )}
+                    <Text style={styles.packTag}>
+                      {getPackStatusLabel(pack)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.swatchRow}>
+                    {pack.colors.map((color) => (
+                      <View
+                        key={`${pack.id}-${color}`}
+                        style={[styles.swatch, { backgroundColor: color }]}
                       />
-                    </View>
-                  ) : (
-                    <View style={styles.packIconShell}>
-                      <Ionicons name={pack.icon} size={22} color="#5B514D" />
-                    </View>
-                  )}
-                  <Text style={styles.packTag}>
-                    {getPackStatusLabel(pack)}
-                  </Text>
-                </View>
+                    ))}
+                  </View>
 
-                <View style={styles.swatchRow}>
-                  {pack.colors.map((color) => (
-                    <View
-                      key={`${pack.id}-${color}`}
-                      style={[styles.swatch, { backgroundColor: color }]}
+                  <Text style={styles.packCategory}>
+                    {packCategoryLabels[pack.categoryKey as keyof typeof packCategoryLabels] ??
+                      pack.category}
+                  </Text>
+                  <Text style={styles.packTitle}>{localizeShopText(pack.title)}</Text>
+                  <Text style={styles.packSubtitle}>{localizeShopText(pack.subtitle)}</Text>
+
+                  <View style={styles.packActionRow}>
+                    <Text style={styles.previewAction}>
+                      {pack.id === selectedPackId
+                        ? t('shopSelected')
+                        : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.backgrounds
+                          ? t('shopViewBackgrounds')
+                          : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.stickers
+                            ? t('shopViewStickers')
+                            : pack.status === 'included' || ownedPackIds.has(pack.id)
+                              ? t('shopViewPreview')
+                              : getPackPurchaseLabel(pack)}
+                    </Text>
+                    <Ionicons
+                      name={pack.id === selectedPackId ? 'chevron-down' : 'chevron-forward'}
+                      size={16}
+                      color="#8A7F76"
                     />
-                  ))}
-                </View>
-
-                <Text style={styles.packCategory}>
-                  {packCategoryLabels[pack.categoryKey as keyof typeof packCategoryLabels] ??
-                    pack.category}
-                </Text>
-                <Text style={styles.packTitle}>{localizeShopText(pack.title)}</Text>
-                <Text style={styles.packSubtitle}>{localizeShopText(pack.subtitle)}</Text>
-
-                <View style={styles.packActionRow}>
-                  <Text style={styles.previewAction}>
-                    {pack.id === selectedPackId
-                      ? t('shopSelected')
-                      : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.backgrounds
-                        ? t('shopViewBackgrounds')
-                        : (pack.status === 'included' || ownedPackIds.has(pack.id)) && pack.stickers
-                          ? t('shopViewStickers')
-                          : pack.status === 'included' || ownedPackIds.has(pack.id)
-                            ? t('shopViewPreview')
-                            : t('shopUnlock')}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={16} color="#8A7F76" />
-                </View>
-              </Pressable>
+                  </View>
+                </Pressable>
+                {pack.id === selectedPackId ? renderPackExpandedDetail(pack) : null}
+              </View>
             ))}
           </View>
         ) : (
@@ -660,12 +788,23 @@ const styles = StyleSheet.create({
     maxWidth: 260,
   },
   shelfBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    minHeight: 40,
+    borderRadius: 20,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F3EDE8',
+  },
+  restoreButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  restoreButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B514D',
   },
   categoryRow: {
     flexDirection: 'row',
@@ -752,54 +891,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginLeft: 28,
   },
-  packDetail: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 22,
-    backgroundColor: '#FFFFFF',
-  },
-  packDetailHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  packDetailTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  packDetailCategory: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8A7F76',
-    marginBottom: 4,
-  },
-  packDetailTitle: {
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: '700',
-    color: '#1F1F1F',
-  },
-  packDetailText: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#7A6F66',
-    marginTop: 6,
-  },
-  testPill: {
-    minHeight: 30,
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8EDEF',
-    flexShrink: 0,
-  },
-  testPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9A4C56',
+  packDetailInline: {
+    borderTopWidth: 1,
+    borderTopColor: '#EFE6DD',
+    marginTop: 14,
+    paddingTop: 14,
   },
   addButton: {
     minHeight: 44,
@@ -810,6 +906,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  disabledButton: {
+    opacity: 0.65,
   },
   addButtonText: {
     color: '#FFFDF9',
@@ -851,6 +950,30 @@ const styles = StyleSheet.create({
     color: '#5B514D',
     marginTop: 6,
     textAlign: 'center',
+  },
+  noteStylePreviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
+  },
+  noteStylePreviewCard: {
+    width: 96,
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    justifyContent: 'space-between',
+  },
+  noteStylePreviewName: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  noteStylePreviewSample: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
   },
   backgroundPreviewScroll: {
     marginTop: 16,
@@ -942,6 +1065,9 @@ const styles = StyleSheet.create({
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
+  },
+  packSummary: {
+    width: '100%',
   },
   packCardSelected: {
     borderColor: '#C88C93',

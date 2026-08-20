@@ -33,6 +33,7 @@ import {
 import {
   getBibleData,
   getBookDisplayName,
+  getBookListLabel,
   getVerseText,
   type BibleBook,
   type BibleLanguageKey,
@@ -43,7 +44,9 @@ import {
   type GenesisReadingImage,
 } from '@/utils/genesis-reading-images';
 import { FocusedScreenView } from '@/components/focused-screen-view';
+import { BibleCanvasPreview } from '@/components/bible-canvas-preview';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
+import { loadVerseDesigns, type VerseDesignListItem } from '@/utils/verse-design-list';
 
 type SearchResult = {
   type: 'verse';
@@ -99,6 +102,25 @@ function normalizeBookName(value: string) {
     .toLowerCase()
     .replace(/\s+/g, '')
     .replace(/\./g, '');
+}
+
+function bookMatchesNameQuery(book: string, displayName: string, query: string) {
+  const normalizedQuery = normalizeBookName(query);
+
+  if (!normalizedQuery) {
+    return false;
+  }
+
+  const normalizedBook = normalizeBookName(book);
+  const displayCore = displayName.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const normalizedDisplayCore = normalizeBookName(displayCore);
+
+  return (
+    normalizedBook === normalizedQuery ||
+    normalizedDisplayCore === normalizedQuery ||
+    normalizedBook.startsWith(normalizedQuery) ||
+    normalizedDisplayCore.startsWith(normalizedQuery)
+  );
 }
 
 function normalizeSearchText(value: string) {
@@ -193,10 +215,11 @@ export default function BibleBooksScreen() {
   const [readerSelection, setReaderSelection] = useState<ReaderSelection | null>(null);
   const [readerOpenToken, setReaderOpenToken] = useState(0);
   const [isSelectionPanelCollapsed, setIsSelectionPanelCollapsed] = useState(false);
+  const [verseDesigns, setVerseDesigns] = useState<VerseDesignListItem[]>([]);
   const panelTranslateY = useSharedValue(0);
   const books = useMemo(() => getBibleData(bibleVersionKey), [bibleVersionKey]);
   const displayBookName = useCallback(
-    (book: string) => getBookDisplayName(book, language.key, bibleVersionKey),
+    (book: string) => getBookListLabel(book, language.key, bibleVersionKey),
     [bibleVersionKey, language.key]
   );
   const sections = useMemo(
@@ -206,6 +229,33 @@ export default function BibleBooksScreen() {
     ],
     [books, t]
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      void loadVerseDesigns()
+        .then((designs) => {
+          if (isActive) setVerseDesigns(designs);
+        })
+        .catch((error) => console.warn('Failed to load Bible canvas previews', error));
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  const designByVerse = useMemo(() => {
+    const designs = new Map<string, VerseDesignListItem>();
+    verseDesigns.filter((design) => design.includeInBible).forEach((design) => {
+      design.selectedVerses.forEach((verse) => {
+        const key = makeBibleVerseKey({ book: design.book, chapter: design.chapter, verse });
+        if (!designs.has(key)) designs.set(key, design);
+      });
+    });
+    return designs;
+  }, [verseDesigns]);
 
   useEffect(() => {
     if (!selectedBook) {
@@ -547,7 +597,12 @@ export default function BibleBooksScreen() {
     setReaderSelection({ book, chapter, verse });
   };
 
-  const sendVerseToStudio = (book: string, chapter: number, verse: number) => {
+  const sendVerseToStudio = (
+    book: string,
+    chapter: number,
+    verse: number,
+    existingDesign?: VerseDesignListItem
+  ) => {
     markVerseAsRead(book, chapter, verse);
     router.push({
       pathname: '/studio',
@@ -557,6 +612,9 @@ export default function BibleBooksScreen() {
         selectedBook: book,
         selectedChapter: String(chapter),
         selectedVerse: String(verse),
+        editDesignKey: existingDesign?.key ?? '',
+        includeInBible: existingDesign ? '' : 'true',
+        selectedVerses: existingDesign?.selectedVerses.join(',') ?? String(verse),
         selectionToken: String(Date.now()),
       },
     });
@@ -627,15 +685,11 @@ export default function BibleBooksScreen() {
     }
 
     const normalizedQuery = normalizeSearchText(trimmedQuery);
-    const normalizedBookQuery = normalizeBookName(trimmedQuery);
     const matchingBooks = books
       .filter((book) => {
         const displayName = displayBookName(book.book);
 
-        return (
-          normalizeBookName(book.book).includes(normalizedBookQuery) ||
-          normalizeBookName(displayName).includes(normalizedBookQuery)
-        );
+        return bookMatchesNameQuery(book.book, displayName, trimmedQuery);
       })
       .filter((book) => !hideRead || getBookReadStats(book).unreadCount > 0)
       .map((book) => ({ type: 'book' as const, book }));
@@ -1214,6 +1268,9 @@ export default function BibleBooksScreen() {
               language.key,
               bibleVersionKey
             );
+            const verseDesign = designByVerse.get(
+              makeBibleVerseKey({ book: item.book, chapter: item.chapter, verse: item.verse })
+            );
 
             return (
               <View
@@ -1239,7 +1296,8 @@ export default function BibleBooksScreen() {
                       sendVerseToStudio(
                         item.book,
                         item.chapter,
-                        item.verse
+                        item.verse,
+                        verseDesign
                       )
                     }
                     accessibilityRole="button"
@@ -1247,11 +1305,21 @@ export default function BibleBooksScreen() {
                       reference: `${displayBookName(item.book)} ${item.chapter}:${item.verse}`,
                     })}
                     style={styles.readerStudioButton}>
-                    <Ionicons name="color-wand-outline" size={14} color="#5B514D" />
-                    <Text style={styles.readerStudioButtonText}>{t('commonStudio')}</Text>
+                    <Ionicons
+                      name={verseDesign ? 'color-wand' : 'color-wand-outline'}
+                      size={17}
+                      color="#5B514D"
+                    />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.readerVerseText}>{verseText}</Text>
+                {verseDesign ? (
+                  <View style={styles.readerCanvasWrap}>
+                    <BibleCanvasPreview design={verseDesign} />
+                    <Text style={styles.readerCanvasCaption}>My Canvas · {displayBookName(item.book)} {item.chapter}:{item.verse}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.readerVerseText}>{verseText}</Text>
+                )}
               </View>
             );
           }}
@@ -1933,19 +2001,23 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     color: '#342E2A',
   },
-  readerStudioButton: {
-    minHeight: 32,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    backgroundColor: '#F3EDE8',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+  readerCanvasWrap: {
+    gap: 8,
   },
-  readerStudioButtonText: {
-    fontSize: 12,
+  readerCanvasCaption: {
+    color: '#8D7C70',
+    fontSize: 11,
     fontWeight: '800',
-    color: '#5B514D',
+    letterSpacing: 0.35,
+    textAlign: 'center',
+  },
+  readerStudioButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F3EDE8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   collapsedSelectionTab: {
     position: 'absolute',

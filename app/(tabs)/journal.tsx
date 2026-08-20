@@ -5,7 +5,11 @@ import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View }
 import { Ionicons } from '@expo/vector-icons';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
 import { useAppSettings, type AppLanguageKey, type TranslationKey } from '@/utils/app-settings';
-import { getJournalEntryStorageKey } from '@/utils/journal-storage';
+import {
+  getJournalEntryStorageKey,
+  removeJournalIndexEntry,
+  safeParseJournalIndex,
+} from '@/utils/journal-storage';
 import { JOURNAL_INDEX_KEY } from '@/utils/storage-keys';
 import { FocusedScreenView } from '@/components/focused-screen-view';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
@@ -76,34 +80,6 @@ const JOURNAL_MOOD_TRANSLATION_KEYS: Record<string, TranslationKey> = {
   tired: 'moodTired',
   happy: 'moodHappy',
 };
-
-function safeParseJournalIndex(value: string | null): JournalLogEntry[] {
-  if (!value) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.filter((entry): entry is JournalLogEntry => {
-      if (typeof entry !== 'object' || entry === null) {
-        return false;
-      }
-
-      const candidate = entry as Partial<JournalLogEntry>;
-      return (
-        typeof candidate.id === 'string' &&
-        typeof candidate.type === 'string' &&
-        typeof candidate.updatedAt === 'number'
-      );
-    });
-  } catch {
-    return [];
-  }
-}
 
 function parseEntryDate(entry: JournalLogEntry) {
   if (typeof entry.date === 'string' && entry.date.trim().length > 0) {
@@ -404,7 +380,7 @@ export default function JournalScreen() {
       AsyncStorage.multiGet(getRecentMoodStorageKeys(new Date())),
     ]);
     const entries = dedupeJournalEntries(
-      await hydrateStudioLogEntries(safeParseJournalIndex(data))
+      await hydrateStudioLogEntries(safeParseJournalIndex(data) as JournalLogEntry[])
     )
       .filter((entry) => entry.type in templateMap)
       .filter(hasVisibleJournalContent)
@@ -535,13 +511,7 @@ export default function JournalScreen() {
   };
 
   const deleteLogEntry = useCallback(async (entryToDelete: JournalLogEntry) => {
-    const data = await AsyncStorage.getItem(JOURNAL_INDEX_KEY);
-    const entries = safeParseJournalIndex(data);
-    const nextEntries = entries.filter(
-      (entry) => !(entry.id === entryToDelete.id && entry.type === entryToDelete.type)
-    );
-
-    await AsyncStorage.setItem(JOURNAL_INDEX_KEY, JSON.stringify(nextEntries));
+    await removeJournalIndexEntry(entryToDelete.id, entryToDelete.type);
 
     const storageKey = getEntryStorageKey(entryToDelete);
     if (storageKey) {

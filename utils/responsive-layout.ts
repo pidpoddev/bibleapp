@@ -7,6 +7,7 @@ export function useResponsiveLayout() {
   const shortSide = Math.min(width, height);
   const longSide = Math.max(width, height);
   const isTablet = shortSide >= TABLET_MIN_SHORT_SIDE;
+  const tabletScale = isTablet ? (shortSide >= 1000 ? 1.28 : 1.18) : 1;
 
   return {
     width,
@@ -21,5 +22,6 @@ export function useResponsiveLayout() {
     studioMaxWidth: isTablet ? 1280 : undefined,
     pagePaddingHorizontal: isTablet ? 24 : 18,
     isNativeTablet: isTablet && Platform.OS !== 'web',
+    tabletScale,
   };
 }

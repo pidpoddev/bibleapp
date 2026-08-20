@@ -11,10 +11,13 @@ import {
   LEGACY_SAVED_DESIGNS_STORAGE_KEY,
   SAVED_DESIGNS_BACKUP_STORAGE_KEY,
   SAVED_DESIGNS_STORAGE_KEY,
-  SHOP_OWNED_PACKS_STORAGE_KEY,
   VERSE_DESIGN_INDEX_STORAGE_KEY,
   VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY,
 } from '@/utils/storage-keys';
+import {
+  upsertJournalIndexEntry,
+  type JournalIndexEntry,
+} from '@/utils/journal-storage';
 
 const SYNC_SESSION_STORAGE_KEY = 'private_sync_session_v1';
 const SYNC_VERSION_STORAGE_KEY = 'private_sync_versions_v1';
@@ -23,7 +26,7 @@ const SYNC_API_URL = 'https://pidpod.com';
 const SYNC_REQUEST_TIMEOUT_MS = 12_000;
 const MAX_SYNC_ITEM_CHARS = 512 * 1024;
 const LEGACY_KDF_ITERATIONS = 60_000;
-const KDF_ITERATIONS = 12_000;
+const KDF_ITERATIONS = 100_000;
 const KDF_SALT = 'BibleApp Private Sync Phrase v1';
 
 export type SyncItemType =
@@ -39,8 +42,7 @@ export type SyncItemType =
   | 'verse_design_timestamps'
   | 'saved_designs'
   | 'saved_designs_backup'
-  | 'legacy_saved_designs'
-  | 'shop_entitlements';
+  | 'legacy_saved_designs';
 
 type SyncSession = {
   userId: string;
@@ -59,6 +61,7 @@ type SyncStoredVersion = {
   itemType: SyncItemType;
   localStorageKey: string;
   deleted?: boolean;
+  contentSha256?: string;
 };
 
 type SyncStoredVersions = Record<string, SyncStoredVersion | string>;
@@ -78,6 +81,7 @@ type LocalSyncRecord = {
   localStorageKey: string;
   value: unknown;
   updatedAt: number;
+  contentSha256?: string;
   deleted?: boolean;
 };
 
@@ -179,7 +183,6 @@ const SYNCABLE_EXACT_KEYS: Record<string, SyncItemType> = {
   [LEGACY_SAVED_DESIGNS_STORAGE_KEY]: 'legacy_saved_designs',
   [VERSE_DESIGN_INDEX_STORAGE_KEY]: 'verse_design_index',
   [VERSE_DESIGN_TIMESTAMPS_STORAGE_KEY]: 'verse_design_timestamps',
-  [SHOP_OWNED_PACKS_STORAGE_KEY]: 'shop_entitlements',
 };
 
 let cachedPhraseMaterial: {
@@ -898,12 +901,24 @@ async function collectLocalSyncRecords(versions: SyncStoredVersions) {
       return nextRecords;
     }
 
+    const contentSha256 = bytesToHex(sha256(utf8ToBytes(rawValue)));
+    const existingVersion = getStoredVersionMeta(versions, localStorageKey);
+
+    if (
+      existingVersion &&
+      !existingVersion.deleted &&
+      existingVersion.contentSha256 === contentSha256
+    ) {
+      return nextRecords;
+    }
+
     nextRecords.push({
       clientItemId: localStorageKey,
       itemType,
       localStorageKey,
       value: parseStoredValue(rawValue),
       updatedAt: now,
+      contentSha256,
     });
     return nextRecords;
   }, []);
@@ -1016,6 +1031,7 @@ export async function pushEncryptedSync(phrase: string) {
           itemType: record.itemType,
           localStorageKey: record.localStorageKey,
           deleted: record.deleted === true,
+          contentSha256: record.contentSha256,
         });
       }
     }
@@ -1067,25 +1083,32 @@ export async function pullEncryptedSync(phrase: string, options: { full?: boolea
 
     if (isDeleted) {
       removals.push(localStorageKey);
-    } else {
-      const nextValue =
-        localStorageKey === BIBLE_READING_PROGRESS_STORAGE_KEY
-          ? await mergeBibleReadingProgressValue(payload.value)
-          : await mergeIncomingSyncValue(localStorageKey, item.itemType, payload.value);
-      const valueText = JSON.stringify(nextValue);
-
-      if (hasBlockedMediaPayload(valueText)) {
-        continue;
-      }
-
-      writes.push([localStorageKey, valueText]);
+      setStoredVersionMeta(versions, item.clientItemId, {
+        versionId: item.currentVersionId,
+        itemType: item.itemType,
+        localStorageKey,
+        deleted: true,
+      });
+      continue;
     }
 
+    const nextValue =
+      localStorageKey === BIBLE_READING_PROGRESS_STORAGE_KEY
+        ? await mergeBibleReadingProgressValue(payload.value)
+        : await mergeIncomingSyncValue(localStorageKey, item.itemType, payload.value);
+    const valueText = JSON.stringify(nextValue);
+
+    if (hasBlockedMediaPayload(valueText)) {
+      continue;
+    }
+
+    writes.push([localStorageKey, valueText]);
     setStoredVersionMeta(versions, item.clientItemId, {
       versionId: item.currentVersionId,
       itemType: item.itemType,
       localStorageKey,
-      deleted: isDeleted,
+      deleted: false,
+      contentSha256: bytesToHex(sha256(utf8ToBytes(valueText))),
     });
   }
 
@@ -1250,21 +1273,8 @@ async function addJournalCopyToLocal(version: SyncConflictVersion) {
     throw new Error('Save both is only available for journal entry conflicts.');
   }
 
-  const indexValue = await AsyncStorage.getItem('journal_index');
-  let indexEntries: unknown[] = [];
-
-  try {
-    const parsedIndex = indexValue ? (JSON.parse(indexValue) as unknown) : [];
-    indexEntries = Array.isArray(parsedIndex) ? parsedIndex : [];
-  } catch {
-    indexEntries = [];
-  }
-
-  indexEntries.unshift(cloned.indexEntry);
-  await AsyncStorage.multiSet([
-    [cloned.localStorageKey, JSON.stringify(cloned.value)],
-    ['journal_index', JSON.stringify(indexEntries)],
-  ]);
+  await AsyncStorage.setItem(cloned.localStorageKey, JSON.stringify(cloned.value));
+  await upsertJournalIndexEntry(cloned.indexEntry as JournalIndexEntry);
 }
 
 export async function getEncryptedSyncConflicts(phrase: string) {

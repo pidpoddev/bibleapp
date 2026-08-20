@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -73,12 +74,16 @@ const TRANSLATIONS = {
     settingsAccountPasswordError: 'Use at least 8 characters.',
     settingsAccountPasswordMatchError: 'Passwords need to match.',
     settingsCloudSave: 'Cloud Save',
+    settingsCloudSaveUnavailableTitle: 'Cloud Save is off for launch',
+    settingsCloudSaveUnavailableText:
+      'Faith Canvas keeps journals, favorites, verse art, and settings on this device for launch. A parent-approved Cloud Save flow can be added later.',
     settingsUsername: 'Username',
     settingsSecretPhrase: 'Secret Phrase',
     settingsPhrasePlaceholder: 'Enter Secret Phrase',
     settingsPhraseWarning: "Don't lose the phrase! It can't be recovered.",
     settingsSyncLogTitle: 'Cloud Save Log',
     settingsSyncLogEmpty: 'No uploads or downloads yet.',
+    settingsAppearance: 'Appearance',
     settingsColors: 'Colors',
     settingsLanguage: 'Language',
     settingsPhraseHint: 'Save your journal with a secret phrase.',
@@ -95,6 +100,7 @@ const TRANSLATIONS = {
     settingsBibleReadingImagesHint: 'Beta: show gentle Genesis chapter images while reading.',
     settingsBibleProgressTitle: '% of the Bible Read',
     settingsBibleProgressHint: '{{read}} of {{total}} verses opened',
+    settingsDataPrivacy: 'Data & Privacy',
     settingsDataSafety: 'Data safety',
     settingsJournalBackupTitle: 'Journal backup',
     settingsJournalBackupHint: 'Export entries before changing devices or clearing local data.',
@@ -111,7 +117,7 @@ const TRANSLATIONS = {
       'Change your Cloud Save username from {{currentUsername}} to {{nextUsername}}? Your saved files will stay connected.',
     settingsUsernameChangeAction: 'Change',
     settingsExportDownloaded: 'Journal backup downloaded.',
-    settingsExportReady: 'Journal backup is ready below.',
+    settingsExportReady: 'Journal backup is ready to save or share.',
     settingsExportError: 'Could not prepare journal backup.',
     settingsSyncErrorUsernamePhraseMismatch:
       'That Username and Secret Phrase do not match.',
@@ -163,12 +169,15 @@ const TRANSLATIONS = {
     settingsConflictSubtitle: 'This was saved on more than one device.',
     settingsConflictPick: 'Pick',
     settingsConflictKeepBoth: 'Keep Both',
-    settingsAboutTitle: 'About and help',
+    settingsAboutTitle: 'Help',
     settingsAboutImageLabel: 'Faith Canvas app icon',
     settingsAboutAppName: 'Faith Canvas',
     settingsAboutVersion: 'Version 1.0.0 • PidPod, the applications brand of Bumfuzzle Inc., a Tennessee corporation',
+    settingsAboutRatingTitle: 'Why stores list a Teen rating',
+    settingsAboutRatingBody:
+      'Apple and Google rate Faith Canvas Teen (about 13+) because the Bible itself includes some violent, mature, or graphic wording. The app is still a gentle journal with no ads, chat, or social feed. A parent or guardian should decide which books and verses a child reads.',
     settingsPrivacyLocal: 'Your journal, favorites, verse art, and settings stay on this device unless you choose Cloud Save.',
-    settingsPrivacyCloud: 'Cloud Save is optional and uses your Secret Phrase to protect saved app content before it is sent to PidPod servers.',
+    settingsPrivacyCloud: 'Cloud Save is off for launch, so saved app content stays on this device unless you export it yourself.',
     settingsPrivacyNoAds: 'No third-party ads, public profiles, followers, open chat, or social feed.',
     settingsPrivacyPolicy: 'Privacy Policy',
     settingsChildSafety: 'Child Safety',
@@ -232,6 +241,15 @@ const TRANSLATIONS = {
     studioBackToDesigns: 'Go to verse designs',
     studioStartOver: 'Start over',
     studioStartOverToast: 'Started over',
+    studioDiscardNewPage: 'Discard & new page',
+    studioDiscardNewPageTitle: 'Discard this page?',
+    studioDiscardNewPageMessage:
+      'Starts a blank Studio page. Unsaved changes on this page will be lost. Anything already saved in Journal stays there.',
+    studioDiscardConfirm: 'Discard',
+    studioVerseReferenceLabel: 'Reference',
+    studioVerseReferenceNumber: 'Verse #',
+    studioVerseReferenceNone: 'Hide number',
+    studioVerseReferenceFull: 'Book + chapter:verse',
     verseDesignsTitle: 'Verse Designs',
     verseDesignsSubtitle: 'All the verse cards you have decorated',
     verseDesignsEmptyTitle: 'No decorated verse cards yet',
@@ -276,6 +294,8 @@ const TRANSLATIONS = {
     homeHelpSomeone: 'I want to help someone',
     homeContinueToday: 'Continue today',
     homeRecentWork: 'Recent work',
+    homeRemoveFromRecent: 'Remove from Recent',
+    homeRemoveFromRecentAccessibility: 'Remove {{title}} from Recent work',
     homeThisWeek: '{{count}} this week',
     homeKeepWriting: 'Open to keep writing...',
     journalNewEntryTab: 'New Entry',
@@ -376,6 +396,7 @@ const TRANSLATIONS = {
     shopSupplyCount: '{{count}} supplies',
     shopCategoryAll: 'All',
     shopCategoryCanvas: 'Canvas',
+    shopCategoryNoteStyles: 'Note styles',
     shopCategoryThemes: 'Themes',
     shopCategoryDecor: 'Decor',
     shopCategoryStickers: 'Stickers',
@@ -387,10 +408,22 @@ const TRANSLATIONS = {
     shopOwned: 'Owned',
     shopLocked: 'Locked',
     shopUnlock: 'Unlock',
+    shopBuyPrice: 'Buy {{price}}',
     shopUseInStudio: 'Use in Studio',
     shopSavedPreview: 'Saved preview',
     shopViewPreview: 'View preview',
     shopPurchaseNotConnected: 'Purchases are not connected yet, so this pack was not unlocked.',
+    shopPurchaseLoading: 'Connecting to the store...',
+    shopPurchaseSuccess: 'Pack unlocked. It is ready to use in Studio and journals.',
+    shopPurchaseCancelled: 'Purchase cancelled.',
+    shopPurchaseUnavailable:
+      'Purchases are not ready on this device yet. A parent can try again after store setup is finished.',
+    shopPurchaseFailed: 'Purchase did not finish. Please try again.',
+    shopRestorePurchases: 'Restore',
+    shopRestoreLoading: 'Checking purchases...',
+    shopRestoreSuccess: 'Purchases restored.',
+    shopRestoreEmpty: 'No previous Shop purchases were found for this store account.',
+    shopRestoreFailed: 'Purchases could not be restored. Please try again.',
     shopPreviewSavedToolsPending: 'This preview is saved, but its creative tools are not built yet.',
     shopPreviewLocalShelf: 'This preview is in your local shelf. Its tools still need to be built before it appears in Studio.',
     shopUnlockParentApproval: 'Unlock will require a purchase or parent approval once payments are connected.',
@@ -454,6 +487,7 @@ const TRANSLATIONS = {
     editorLined: 'Lined',
     editorPlain: 'Plain',
     editorQuickStickers: 'Quick Stickers',
+    editorAddMoreDecor: 'Add more',
     editorWriteHere: 'Write here...',
     editorSavedToFavorites: 'Saved to Favorites',
     editorSaveToFavorites: 'Save to Favorites',
@@ -479,7 +513,7 @@ const TRANSLATIONS = {
     editorSavingImage: 'Saving image',
     editorSharingImage: 'Sharing image',
     editorSavedImage: 'Saved image',
-    editorSavedToTarget: 'Saved to {{target}}',
+    editorSavedToTarget: 'Saved to {{target}} as "{{title}}"',
     editorAddSomethingFirst: 'Add something first',
     editorAddedToFavorites: 'Added to Favorites',
     editorCloudSavedReviewSync: 'Cloud saved, review sync',
@@ -492,6 +526,14 @@ const TRANSLATIONS = {
     editorNoteStyleSage: 'Sage',
     editorNoteStyleSky: 'Sky',
     editorNoteStyleLinen: 'Linen',
+    editorNoteStylePeach: 'Peach',
+    editorNoteStyleCoral: 'Coral',
+    editorNoteStyleHoney: 'Honey',
+    editorNoteStyleMint: 'Mint',
+    editorNoteStyleSeafoam: 'Seafoam',
+    editorNoteStyleCocoa: 'Cocoa',
+    editorNoteStyleBlush: 'Blush',
+    editorNoteStyleDusk: 'Dusk',
     journalPrayerPromptPrayingFor: "What I'm praying for",
     journalPrayerPromptThankfulFor: "What I'm thankful for",
     journalPrayerPromptHeart: "What's on my heart",
@@ -537,12 +579,16 @@ const TRANSLATIONS = {
     settingsAccountPasswordError: 'Usa al menos 8 caracteres.',
     settingsAccountPasswordMatchError: 'Las contraseñas deben coincidir.',
     settingsCloudSave: 'Guardado en la nube',
+    settingsCloudSaveUnavailableTitle: 'Guardado en la nube desactivado para el lanzamiento',
+    settingsCloudSaveUnavailableText:
+      'Faith Canvas guarda diarios, favoritos, arte bíblico y ajustes en este dispositivo para el lanzamiento. Un flujo de Guardado en la nube aprobado por padres puede agregarse después.',
     settingsUsername: 'Nombre de usuario',
     settingsSecretPhrase: 'Frase secreta',
     settingsPhrasePlaceholder: 'Ingresa la frase secreta',
     settingsPhraseWarning: 'No pierdas la frase. No se puede recuperar.',
     settingsSyncLogTitle: 'Registro de guardado en la nube',
     settingsSyncLogEmpty: 'Todavía no hay subidas ni descargas.',
+    settingsAppearance: 'Apariencia',
     settingsColors: 'Colores',
     settingsLanguage: 'Idioma',
     settingsPhraseHint: 'Guarda tu diario con una frase secreta.',
@@ -561,6 +607,7 @@ const TRANSLATIONS = {
       'Beta: mostrar imágenes suaves de los capítulos de Génesis al leer.',
     settingsBibleProgressTitle: '% de la Biblia leída',
     settingsBibleProgressHint: '{{read}} de {{total}} versículos abiertos',
+    settingsDataPrivacy: 'Datos y privacidad',
     settingsDataSafety: 'Seguridad de datos',
     settingsJournalBackupTitle: 'Respaldo del diario',
     settingsJournalBackupHint:
@@ -578,7 +625,7 @@ const TRANSLATIONS = {
       '¿Cambiar tu nombre de usuario de Guardado en la nube de {{currentUsername}} a {{nextUsername}}? Tus archivos guardados seguirán conectados.',
     settingsUsernameChangeAction: 'Cambiar',
     settingsExportDownloaded: 'Respaldo del diario descargado.',
-    settingsExportReady: 'El respaldo del diario está listo abajo.',
+    settingsExportReady: 'El respaldo del diario está listo para guardar o compartir.',
     settingsExportError: 'No se pudo preparar el respaldo del diario.',
     settingsSyncErrorUsernamePhraseMismatch:
       'Ese nombre de usuario y frase secreta no coinciden.',
@@ -630,12 +677,15 @@ const TRANSLATIONS = {
     settingsConflictSubtitle: 'Esto se guardó en más de un dispositivo.',
     settingsConflictPick: 'Elegir',
     settingsConflictKeepBoth: 'Conservar ambas',
-    settingsAboutTitle: 'Acerca de y ayuda',
+    settingsAboutTitle: 'Ayuda',
     settingsAboutImageLabel: 'Icono de la app Faith Canvas',
     settingsAboutAppName: 'Faith Canvas',
     settingsAboutVersion: 'Version 1.0.0 • PidPod, la marca de aplicaciones de Bumfuzzle Inc., una corporacion de Tennessee',
+    settingsAboutRatingTitle: 'Por que las tiendas marcan clasificacion Teen',
+    settingsAboutRatingBody:
+      'Apple y Google clasifican Faith Canvas como Teen (alrededor de 13+) porque la Biblia incluye algunos pasajes violentos, maduros o graficos. La app sigue siendo un diario suave, sin anuncios, chat ni feed social. Un padre o tutor debe decidir que libros y versiculos lee un nino.',
     settingsPrivacyLocal: 'Tu diario, favoritos, arte de versiculos y configuracion se quedan en este dispositivo a menos que elijas Guardado en la nube.',
-    settingsPrivacyCloud: 'Guardado en la nube es opcional y usa tu Frase secreta para proteger el contenido guardado antes de enviarlo a los servidores de PidPod.',
+    settingsPrivacyCloud: 'Guardado en la nube está desactivado para el lanzamiento, así que el contenido guardado permanece en este dispositivo a menos que lo exportes.',
     settingsPrivacyNoAds: 'Sin anuncios de terceros, perfiles publicos, seguidores, chat abierto ni feed social.',
     settingsPrivacyPolicy: 'Politica de privacidad',
     settingsChildSafety: 'Seguridad infantil',
@@ -699,6 +749,15 @@ const TRANSLATIONS = {
     studioBackToDesigns: 'Ir a diseños de versículos',
     studioStartOver: 'Empezar de nuevo',
     studioStartOverToast: 'Empezado de nuevo',
+    studioDiscardNewPage: 'Descartar y nueva página',
+    studioDiscardNewPageTitle: '¿Descartar esta página?',
+    studioDiscardNewPageMessage:
+      'Abre una página en blanco de Estudio. Se perderán los cambios no guardados de esta página. Lo que ya esté guardado en Diario se queda.',
+    studioDiscardConfirm: 'Descartar',
+    studioVerseReferenceLabel: 'Referencia',
+    studioVerseReferenceNumber: 'Versículo #',
+    studioVerseReferenceNone: 'Ocultar número',
+    studioVerseReferenceFull: 'Libro + capítulo:versículo',
     verseDesignsTitle: 'Diseños de Versículos',
     verseDesignsSubtitle: 'Todas las tarjetas de versículos que has decorado',
     verseDesignsEmptyTitle: 'Aún no hay tarjetas decoradas',
@@ -743,6 +802,8 @@ const TRANSLATIONS = {
     homeHelpSomeone: 'Quiero ayudar a alguien',
     homeContinueToday: 'Continuar hoy',
     homeRecentWork: 'Trabajo reciente',
+    homeRemoveFromRecent: 'Quitar de Recientes',
+    homeRemoveFromRecentAccessibility: 'Quitar {{title}} de Trabajo reciente',
     homeThisWeek: '{{count}} esta semana',
     homeKeepWriting: 'Abrir para seguir escribiendo...',
     journalNewEntryTab: 'Nueva entrada',
@@ -843,6 +904,7 @@ const TRANSLATIONS = {
     shopSupplyCount: '{{count}} recursos',
     shopCategoryAll: 'Todo',
     shopCategoryCanvas: 'Lienzos',
+    shopCategoryNoteStyles: 'Estilos de nota',
     shopCategoryThemes: 'Temas',
     shopCategoryDecor: 'Decoración',
     shopCategoryStickers: 'Stickers',
@@ -854,10 +916,22 @@ const TRANSLATIONS = {
     shopOwned: 'Adquirido',
     shopLocked: 'Bloqueado',
     shopUnlock: 'Desbloquear',
+    shopBuyPrice: 'Comprar {{price}}',
     shopUseInStudio: 'Usar en Estudio',
     shopSavedPreview: 'Vista guardada',
     shopViewPreview: 'Ver vista previa',
     shopPurchaseNotConnected: 'Las compras aún no están conectadas, así que este paquete no se desbloqueó.',
+    shopPurchaseLoading: 'Conectando con la tienda...',
+    shopPurchaseSuccess: 'Paquete desbloqueado. Ya está listo para usar en Estudio y diarios.',
+    shopPurchaseCancelled: 'Compra cancelada.',
+    shopPurchaseUnavailable:
+      'Las compras aún no están listas en este dispositivo. Un padre puede intentarlo de nuevo cuando termine la configuración de la tienda.',
+    shopPurchaseFailed: 'La compra no terminó. Inténtalo otra vez.',
+    shopRestorePurchases: 'Restaurar',
+    shopRestoreLoading: 'Revisando compras...',
+    shopRestoreSuccess: 'Compras restauradas.',
+    shopRestoreEmpty: 'No se encontraron compras anteriores de la Tienda para esta cuenta.',
+    shopRestoreFailed: 'No se pudieron restaurar las compras. Inténtalo otra vez.',
     shopPreviewSavedToolsPending: 'Esta vista previa está guardada, pero sus herramientas creativas aún no están listas.',
     shopPreviewLocalShelf: 'Esta vista previa está en tu colección local. Sus herramientas aún deben construirse antes de aparecer en Estudio.',
     shopUnlockParentApproval: 'Desbloquear requerirá una compra o aprobación de un padre cuando los pagos estén conectados.',
@@ -921,6 +995,7 @@ const TRANSLATIONS = {
     editorLined: 'Con líneas',
     editorPlain: 'Simple',
     editorQuickStickers: 'Stickers rápidos',
+    editorAddMoreDecor: 'Agregar más',
     editorWriteHere: 'Escribe aquí...',
     editorSavedToFavorites: 'Guardado en Favoritos',
     editorSaveToFavorites: 'Guardar en Favoritos',
@@ -946,7 +1021,7 @@ const TRANSLATIONS = {
     editorSavingImage: 'Guardando imagen',
     editorSharingImage: 'Compartiendo imagen',
     editorSavedImage: 'Imagen guardada',
-    editorSavedToTarget: 'Guardado en {{target}}',
+    editorSavedToTarget: 'Guardado en {{target}} como "{{title}}"',
     editorAddSomethingFirst: 'Agrega algo primero',
     editorAddedToFavorites: 'Agregado a Favoritos',
     editorCloudSavedReviewSync: 'Nube guardada, revisa sincronización',
@@ -959,6 +1034,14 @@ const TRANSLATIONS = {
     editorNoteStyleSage: 'Salvia',
     editorNoteStyleSky: 'Cielo',
     editorNoteStyleLinen: 'Lino',
+    editorNoteStylePeach: 'Durazno',
+    editorNoteStyleCoral: 'Coral',
+    editorNoteStyleHoney: 'Miel',
+    editorNoteStyleMint: 'Menta',
+    editorNoteStyleSeafoam: 'Espuma de mar',
+    editorNoteStyleCocoa: 'Cacao',
+    editorNoteStyleBlush: 'Rubor',
+    editorNoteStyleDusk: 'Atardecer',
     journalPrayerPromptPrayingFor: 'Por lo que estoy orando',
     journalPrayerPromptThankfulFor: 'Por lo que doy gracias',
     journalPrayerPromptHeart: 'Lo que hay en mi corazón',
@@ -1154,6 +1237,15 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     DEFAULT_BIBLE_READING_IMAGES_ENABLED
   );
   const [isLoaded, setIsLoaded] = useState(false);
+  const settingsRef = useRef<Required<StoredAppSettings>>({
+    colorThemeKey: DEFAULT_COLOR_THEME_KEY,
+    languageKey: DEFAULT_LANGUAGE_KEY,
+    bibleVersionKeys: {
+      en: getDefaultBibleVersionKey('en'),
+      es: getDefaultBibleVersionKey('es'),
+    },
+    bibleReadingImagesEnabled: DEFAULT_BIBLE_READING_IMAGES_ENABLED,
+  });
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -1168,21 +1260,27 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         const parsedSettings = JSON.parse(storedSettings) as StoredAppSettings;
 
         if (parsedSettings.colorThemeKey) {
+          settingsRef.current.colorThemeKey = parsedSettings.colorThemeKey;
           setColorThemeKeyState(parsedSettings.colorThemeKey);
         }
 
         if (parsedSettings.languageKey) {
+          settingsRef.current.languageKey = parsedSettings.languageKey;
           setLanguageKeyState(parsedSettings.languageKey);
         }
 
         if (parsedSettings.bibleVersionKeys) {
-          setBibleVersionKeysByLanguage({
+          const nextBibleVersionKeys = {
             en: normalizeBibleVersionKey('en', parsedSettings.bibleVersionKeys.en),
             es: normalizeBibleVersionKey('es', parsedSettings.bibleVersionKeys.es),
-          });
+          };
+          settingsRef.current.bibleVersionKeys = nextBibleVersionKeys;
+          setBibleVersionKeysByLanguage(nextBibleVersionKeys);
         }
 
         if (typeof parsedSettings.bibleReadingImagesEnabled === 'boolean') {
+          settingsRef.current.bibleReadingImagesEnabled =
+            parsedSettings.bibleReadingImagesEnabled;
           setBibleReadingImagesEnabledState(parsedSettings.bibleReadingImagesEnabled);
         }
       } catch (error) {
@@ -1196,15 +1294,20 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const persistSettings = (nextSettings: StoredAppSettings) => {
+    settingsRef.current = {
+      ...settingsRef.current,
+      ...nextSettings,
+      bibleVersionKeys: nextSettings.bibleVersionKeys
+        ? {
+            ...settingsRef.current.bibleVersionKeys,
+            ...nextSettings.bibleVersionKeys,
+          }
+        : settingsRef.current.bibleVersionKeys,
+    };
+
     void AsyncStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        colorThemeKey,
-        languageKey,
-        bibleVersionKeys: bibleVersionKeysByLanguage,
-        bibleReadingImagesEnabled,
-        ...nextSettings,
-      })
+      JSON.stringify(settingsRef.current)
     ).catch((error) => {
       console.log('Error saving app settings:', error);
     });
