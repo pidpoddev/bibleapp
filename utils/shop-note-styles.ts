@@ -136,7 +136,7 @@ export const SHOP_NOTE_STYLE_PACKS: ShopNoteStylePack[] = [
   {
     id: 'pastel-note-papers',
     title: 'Pastel Note Papers',
-    subtitle: 'Eight sticky-note colors for Studio notes: peach, coral, honey, mint, and more',
+    subtitle: 'Eight sticky-note colors for Canvas notes: peach, coral, honey, mint, and more',
     category: 'Note styles',
     tag: 'New',
     priceLabel: '$1',

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import {
   Image,
   Platform,
@@ -189,8 +189,8 @@ const PACKS: ShopPack[] = [
 
 const SHOP_TEXT_TRANSLATIONS: Record<string, Partial<Record<AppLanguageKey, string>>> = {
   'Soft Glitter Backgrounds': { es: 'Fondos con brillo suave' },
-  '10 shimmering paper backgrounds for Studio and journals': {
-    es: '10 fondos de papel brillante para Estudio y diarios',
+  '10 shimmering paper backgrounds for Canvas and journals': {
+    es: '10 fondos de papel brillante para Canvas y diarios',
   },
   'Floral Faith Stickers': { es: 'Stickers florales de fe' },
   'Scripture Verse Labels': { es: 'Etiquetas de versículos bíblicos' },
@@ -207,8 +207,8 @@ const SHOP_TEXT_TRANSLATIONS: Record<string, Partial<Record<AppLanguageKey, stri
     es: 'Un tema coordinado con papel crema, pestañas salvia y detalles rosados',
   },
   'Pastel Note Papers': { es: 'Papeles de nota pastel' },
-  'Eight sticky-note colors for Studio notes: peach, coral, honey, mint, and more': {
-    es: 'Ocho colores de notas adhesivas para Estudio: durazno, coral, miel, menta y más',
+  'Eight sticky-note colors for Canvas notes: peach, coral, honey, mint, and more': {
+    es: 'Ocho colores de notas adhesivas para Canvas: durazno, coral, miel, menta y más',
   },
   'Faith Notes': { es: 'Notas de fe' },
   'Tiny crosses, hearts, stars, tabs, and page markers': {
@@ -244,10 +244,12 @@ const SHOP_TEXT_TRANSLATIONS: Record<string, Partial<Record<AppLanguageKey, stri
 
 export default function ShopScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const params = useLocalSearchParams<{ category?: string | string[] }>();
   const { colorTheme, language, t } = useAppSettings();
   const layout = useResponsiveLayout();
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const openedFromStudio = pathname === '/studio-shop' || pathname.endsWith('/studio-shop');
   const routeCategoryParam = Array.isArray(params.category)
     ? params.category[0]
     : params.category;
@@ -393,6 +395,11 @@ export default function ShopScreen() {
     }
 
     if (packHasUsableAssets(pack)) {
+      if (openedFromStudio && router.canGoBack()) {
+        router.back();
+        return;
+      }
+
       router.push({
         pathname: '/studio',
         params: {

@@ -5,6 +5,21 @@ export function getLocalDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+/** e.g. "Aug 20, 2026 Prayer Journal" */
+export function formatJournalEntryTitle(
+  typeLabel: string,
+  date: Date = new Date(),
+  language: 'en' | 'es' = 'en'
+) {
+  const dateLabel = date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  return `${dateLabel} ${typeLabel}`.trim();
+}
+
 export function formatEntryDateTime(value: string | number | Date) {
   const parsedDate = new Date(value);
 

@@ -607,7 +607,7 @@ export default function BibleBooksScreen() {
     router.push({
       pathname: '/studio',
       params: {
-        saveTarget: 'bible-study',
+        saveTarget: 'journal-studio',
         openSelectedVerse: 'true',
         selectedBook: book,
         selectedChapter: String(chapter),

@@ -30,6 +30,7 @@ type JournalFavorite = {
   id: string;
   type: 'prayer' | 'bible-study' | 'church-day' | 'daily-devotional' | 'journal-studio';
   date: string;
+  title?: string;
   preview: string;
   updatedAt: number;
   isFavorite?: boolean;
@@ -98,7 +99,8 @@ function getTypeBadge(type: UnifiedFavorite['type']) {
 
 function hasVisibleFavoriteContent(entry: HydratedJournalEntry) {
   return Boolean(
-    entry.preview?.trim() ||
+    entry.title?.trim() ||
+      entry.preview?.trim() ||
       (entry.book && entry.chapter && entry.verse)
   );
 }
@@ -182,7 +184,7 @@ export default function FavoritesScreen() {
         .map((entry) => ({
           id: `${entry.type}:${entry.id}`,
           type: entry.type,
-          title: journalTypeMap[entry.type].title,
+          title: entry.title?.trim() || journalTypeMap[entry.type].title,
           subtitle: journalTypeMap[entry.type].subtitle,
           preview: entry.preview ?? '',
           updatedAt: entry.updatedAt,
@@ -190,6 +192,7 @@ export default function FavoritesScreen() {
           editor: entry.editor,
           searchableText: [
             entry.searchableText,
+            entry.title ?? '',
             journalTypeMap[entry.type].title,
             journalTypeMap[entry.type].subtitle,
             formatSavedAt(entry.updatedAt, language.key),

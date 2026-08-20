@@ -31,6 +31,7 @@ type JournalLogEntry = {
   id: string;
   type: JournalEntryType;
   date?: string;
+  title?: string;
   preview?: string;
   updatedAt: number;
   isFavorite?: boolean;
@@ -192,7 +193,8 @@ function getEntryStorageKey(entry: Pick<JournalLogEntry, 'id' | 'type'>) {
 
 function hasVisibleJournalContent(entry: JournalLogEntry) {
   return Boolean(
-    entry.preview?.trim() ||
+    entry.title?.trim() ||
+      entry.preview?.trim() ||
       (entry.book && entry.chapter && entry.verse)
   );
 }
@@ -688,11 +690,15 @@ export default function JournalScreen() {
                             <Image source={template.iconImage} resizeMode="contain" style={styles.logEntryIcon} />
                             <View style={styles.logEntryContent}>
                               <View style={styles.logEntryTitleRow}>
-                                <Text style={styles.logEntryTitle}>{template.title}</Text>
+                                <Text style={styles.logEntryTitle}>
+                                  {entry.title?.trim() || template.title}
+                                </Text>
                                 {entry.isFavorite ? <Ionicons name="heart" size={14} color={template.tint} /> : null}
                               </View>
                               <Text style={styles.logEntryPreview} numberOfLines={1}>
-                                {entry.preview || t('homeKeepWriting')}
+                                {entry.title?.trim()
+                                  ? entry.preview || template.title
+                                  : entry.preview || t('homeKeepWriting')}
                               </Text>
                             </View>
                             <Text style={styles.logEntryTime}>{formatLogTime(entryDate, language.key)}</Text>

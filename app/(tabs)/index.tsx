@@ -41,6 +41,7 @@ type HomeJournalEntry = {
   id: string;
   type: HomeJournalEntryType;
   date?: string;
+  title?: string;
   preview?: string;
   updatedAt: number;
   isFavorite?: boolean;
@@ -578,7 +579,8 @@ function dedupeJournalEntries(entries: HomeJournalEntry[]) {
 
 function hasVisibleJournalContent(entry: HomeJournalEntry) {
   return Boolean(
-    entry.preview?.trim() ||
+    entry.title?.trim() ||
+      entry.preview?.trim() ||
       (entry.book && entry.chapter && entry.verse)
   );
 }
@@ -1269,12 +1271,15 @@ export default function HomeScreen() {
                   <Ionicons name={getEntryTypeIcon(entry.type)} size={homeUi.recentIconSize} color="#7A6F66" />
                   <View style={styles.homeMockRecentText}>
                     <Text numberOfLines={1} style={[styles.homeMockRecentTitle, { fontSize: homeUi.recentTitleSize }]}>
-                      {getEntryTypeLabel(entry.type, t)}
+                      {entry.title?.trim() || getEntryTypeLabel(entry.type, t)}
                     </Text>
                     <Text
                       numberOfLines={1}
                       style={[styles.homeMockRecentPreview, { fontSize: homeUi.recentPreviewSize }]}>
-                      {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
+                      {entry.title?.trim()
+                        ? localizeReferencePreview(entry.preview, language.key) ||
+                          getEntryTypeLabel(entry.type, t)
+                        : localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
                     </Text>
                   </View>
                   <Text style={[styles.homeMockRecentDate, { fontSize: homeUi.recentDateSize }]}>
@@ -1404,10 +1409,13 @@ export default function HomeScreen() {
               <Ionicons name={getEntryTypeIcon(entry.type)} size={17} color="#7A6F66" />
               <View style={styles.recentEntryText}>
                 <Text numberOfLines={1} style={styles.recentEntryTitle}>
-                  {getEntryTypeLabel(entry.type, t)}
+                  {entry.title?.trim() || getEntryTypeLabel(entry.type, t)}
                 </Text>
                 <Text numberOfLines={1} style={styles.recentEntryPreview}>
-                  {localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
+                  {entry.title?.trim()
+                    ? localizeReferencePreview(entry.preview, language.key) ||
+                      getEntryTypeLabel(entry.type, t)
+                    : localizeReferencePreview(entry.preview, language.key) || t('homeKeepWriting')}
                 </Text>
               </View>
               <Text style={styles.recentEntryDate}>{formatRecentEntryDate(parseEntryDate(entry), language.key)}</Text>

@@ -23,6 +23,7 @@ export type JournalIndexEntry = {
   id: string;
   type: JournalEntryType;
   date?: string;
+  title?: string;
   preview?: string;
   updatedAt: number;
   isFavorite?: boolean;
@@ -194,6 +195,7 @@ export function buildSearchableJournalText(
   const pieces: string[] = [
     entry.type,
     entry.date ?? '',
+    entry.title ?? '',
     entry.preview ?? '',
     entry.book ? `${entry.book} ${entry.chapter ?? ''}:${entry.verse ?? ''}` : '',
   ];

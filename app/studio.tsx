@@ -76,10 +76,13 @@ import {
   loadVerseDesignByKey,
 } from '@/utils/verse-design-list';
 import {
+  getHydratedJournalEntries,
   getJournalEntryStorageKey,
   upsertJournalIndexEntry,
+  type HydratedJournalEntry,
   type JournalEntryType,
 } from '@/utils/journal-storage';
+import { formatJournalEntryTitle } from '@/utils/date-time';
 import {
   LEGACY_SAVED_DESIGNS_STORAGE_KEY,
   SAVED_DESIGNS_BACKUP_STORAGE_KEY,
@@ -281,6 +284,7 @@ type StudioJournalIndexEntry = {
   id: string;
   type: JournalEntryType;
   date: string;
+  title: string;
   preview: string;
   updatedAt: number;
   isFavorite: boolean;
@@ -296,6 +300,7 @@ type StudioJournalPayload = {
   id: string;
   type: JournalEntryType;
   date: string;
+  title: string;
   preview: string;
   updatedAt: number;
   isFavorite: boolean;
@@ -309,7 +314,7 @@ const STUDIO_SAVE_TARGET_OPTIONS: {
   label: string;
 }[] = [
   { key: 'prayer', label: 'Prayer Journal' },
-  { key: 'journal-studio', label: 'Studio' },
+  { key: 'journal-studio', label: 'Canvas' },
   { key: 'bible-study', label: 'Bible Study' },
   { key: 'church-day', label: 'Church Day' },
   { key: 'daily-devotional', label: 'Daily Devotional' },
@@ -796,6 +801,7 @@ function DraggableSticker({
   onUpdate,
 }: DraggableStickerProps) {
   const [cornerMode, setCornerMode] = useState<CornerHandleMode>('resize');
+  const cornerModeRef = useRef<CornerHandleMode>('resize');
   const cornerModeSV = useSharedValue(0);
   const translateX = useSharedValue(sticker.x);
   const translateY = useSharedValue(sticker.y);
@@ -813,6 +819,7 @@ function DraggableSticker({
 
   useEffect(() => {
     if (!isSelected) {
+      cornerModeRef.current = 'resize';
       setCornerMode('resize');
       cornerModeSV.value = 0;
     }
@@ -852,12 +859,15 @@ function DraggableSticker({
       return;
     }
 
-    handleSelect();
-    setCornerMode((current) => {
-      const nextMode = current === 'resize' ? 'rotate' : 'resize';
-      cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
-      return nextMode;
-    });
+    if (!isSelected) {
+      handleSelect();
+    }
+
+    const nextMode: CornerHandleMode =
+      cornerModeRef.current === 'resize' ? 'rotate' : 'resize';
+    cornerModeRef.current = nextMode;
+    cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
+    setCornerMode(nextMode);
   };
 
   const panGesture = Gesture.Pan()
@@ -924,7 +934,7 @@ function DraggableSticker({
   const cornerPanGesture = Gesture.Pan()
     .enabled(!isLocked)
     .maxPointers(1)
-    .minDistance(4)
+    .minDistance(10)
     .onBegin(() => {
       startScale.value = scale.value;
       startRotation.value = rotation.value;
@@ -949,14 +959,10 @@ function DraggableSticker({
       );
     });
 
-  const cornerTapGesture = Gesture.Tap()
-    .enabled(!isLocked)
-    .onEnd(() => {
-      runOnJS(toggleCornerMode)();
-    });
-
+  const cornerNativeGesture = Gesture.Native();
   const stickerGesture = Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture);
-  const cornerGesture = Gesture.Exclusive(cornerPanGesture, cornerTapGesture);
+  // Native + Pressable owns the tap (and stops canvas deselect). Pan owns drag after minDistance.
+  const cornerGesture = Gesture.Simultaneous(cornerPanGesture, cornerNativeGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     zIndex: sticker.zIndex,
@@ -998,7 +1004,7 @@ function DraggableSticker({
 
               <GestureDetector gesture={cornerGesture}>
                 <Animated.View style={styles.resizeHandleWrapper}>
-                  <View
+                  <Pressable
                     accessible
                     accessibilityRole="button"
                     accessibilityLabel={
@@ -1006,13 +1012,17 @@ function DraggableSticker({
                         ? 'Resize sticker. Tap to switch to rotate.'
                         : 'Rotate sticker. Tap to switch to resize.'
                     }
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      toggleCornerMode();
+                    }}
                     style={styles.resizeHandle}>
                     <Feather
                       name={cornerMode === 'resize' ? 'arrow-down-right' : 'rotate-cw'}
                       size={15}
                       color="#1F1F1F"
                     />
-                  </View>
+                  </Pressable>
                 </Animated.View>
               </GestureDetector>
             </>
@@ -1056,8 +1066,8 @@ function DraggableNote({
   const router = useRouter();
   const NOTE_LINE_BUMP = 28;
   const [cornerMode, setCornerMode] = useState<CornerHandleMode>('resize');
+  const cornerModeRef = useRef<CornerHandleMode>('resize');
   const cornerModeSV = useSharedValue(0);
-  const resizeHandleRef = useRef(null);
   const translateX = useSharedValue(note.x);
   const translateY = useSharedValue(note.y);
   const width = useSharedValue(note.width);
@@ -1077,6 +1087,7 @@ function DraggableNote({
 
   useEffect(() => {
     if (!isSelected) {
+      cornerModeRef.current = 'resize';
       setCornerMode('resize');
       cornerModeSV.value = 0;
     }
@@ -1128,12 +1139,15 @@ function DraggableNote({
       return;
     }
 
-    onSelect(note.id);
-    setCornerMode((current) => {
-      const nextMode = current === 'resize' ? 'rotate' : 'resize';
-      cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
-      return nextMode;
-    });
+    if (!isSelected) {
+      onSelect(note.id);
+    }
+
+    const nextMode: CornerHandleMode =
+      cornerModeRef.current === 'resize' ? 'rotate' : 'resize';
+    cornerModeRef.current = nextMode;
+    cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
+    setCornerMode(nextMode);
   };
 
   const handleNoteTextChange = (text: string) => {
@@ -1183,11 +1197,11 @@ function DraggableNote({
     translateY.value = startY.value + event.nativeEvent.translationY;
   };
 
-  const onResizeStateChange = (event: PanGestureHandlerStateChangeEvent) => {
-    'worklet';
-    const { state, oldState } = event.nativeEvent;
-
-    if (state === State.BEGAN) {
+  const noteCornerPanGesture = Gesture.Pan()
+    .enabled(!isLocked)
+    .maxPointers(1)
+    .minDistance(10)
+    .onBegin(() => {
       startWidth.value = width.value;
       startHeight.value = height.value;
       startRotation.value = rotation.value;
@@ -1195,45 +1209,36 @@ function DraggableNote({
       if (!isLocked) {
         runOnJS(onSelect)(note.id);
       }
-    }
+    })
+    .onUpdate((event) => {
+      if (cornerModeSV.value === 0) {
+        width.value = clamp(
+          startWidth.value + event.translationX,
+          MIN_NOTE_WIDTH,
+          MAX_NOTE_WIDTH
+        );
+        height.value = clamp(
+          startHeight.value + event.translationY,
+          MIN_NOTE_HEIGHT,
+          MAX_NOTE_HEIGHT
+        );
+        return;
+      }
 
-    if (!isLocked && (oldState === State.ACTIVE || state === State.END)) {
+      rotation.value =
+        startRotation.value + getCornerRotationDelta(event.translationX, event.translationY);
+    })
+    .onEnd(() => {
       runOnJS(commitCornerTransform)(
         width.value,
         height.value,
         rotation.value,
         cornerModeSV.value
       );
-    }
-  };
+    });
 
-  const onResizeGestureEvent = (event: PanGestureHandlerGestureEvent) => {
-    'worklet';
-    if (isLocked) {
-      return;
-    }
-
-    if (cornerModeSV.value === 0) {
-      width.value = clamp(
-        startWidth.value + event.nativeEvent.translationX,
-        MIN_NOTE_WIDTH,
-        MAX_NOTE_WIDTH
-      );
-      height.value = clamp(
-        startHeight.value + event.nativeEvent.translationY,
-        MIN_NOTE_HEIGHT,
-        MAX_NOTE_HEIGHT
-      );
-      return;
-    }
-
-    rotation.value =
-      startRotation.value +
-      getCornerRotationDelta(
-        event.nativeEvent.translationX,
-        event.nativeEvent.translationY
-      );
-  };
+  const noteCornerNativeGesture = Gesture.Native();
+  const noteCornerGesture = Gesture.Simultaneous(noteCornerPanGesture, noteCornerNativeGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     zIndex: note.zIndex,
@@ -1252,7 +1257,6 @@ function DraggableNote({
       enabled={!isLocked}
       maxPointers={1}
       minDist={6}
-      waitFor={resizeHandleRef}
       onGestureEvent={onDragGestureEvent}
       onHandlerStateChange={onDragStateChange}>
       <Animated.View
@@ -1285,16 +1289,16 @@ function DraggableNote({
               <Text style={styles.deleteButtonText}>X</Text>
             </Pressable>
 
-            <PanGestureHandler
-              ref={resizeHandleRef}
-              enabled={!isLocked}
-              maxPointers={1}
-              minDist={2}
-              onGestureEvent={onResizeGestureEvent}
-              onHandlerStateChange={onResizeStateChange}>
+            <GestureDetector gesture={noteCornerGesture}>
               <Animated.View style={styles.noteResizeHandleWrapper}>
                 <Pressable
-                  hitSlop={12}
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    cornerMode === 'resize'
+                      ? 'Resize note. Tap to switch to rotate.'
+                      : 'Rotate note. Tap to switch to resize.'
+                  }
                   onPress={(event) => {
                     event.stopPropagation();
                     toggleCornerMode();
@@ -1307,7 +1311,7 @@ function DraggableNote({
                   />
                 </Pressable>
               </Animated.View>
-            </PanGestureHandler>
+            </GestureDetector>
 
                 {isStyleEditorOpen ? (
                   <View
@@ -1360,7 +1364,7 @@ function DraggableNote({
                   onPress={(event) => {
                     event.stopPropagation();
                     router.push({
-                      pathname: '/shop',
+                      pathname: '/studio-shop',
                       params: { category: 'note-styles' },
                     });
                   }}
@@ -1464,6 +1468,7 @@ function DraggableVerseCard({
 }: DraggableVerseCardProps) {
   const { t } = useAppSettings();
   const [cornerMode, setCornerMode] = useState<CornerHandleMode>('resize');
+  const cornerModeRef = useRef<CornerHandleMode>('resize');
   const cornerModeSV = useSharedValue(0);
   const translateX = useSharedValue(card.x);
   const translateY = useSharedValue(card.y);
@@ -1508,6 +1513,7 @@ function DraggableVerseCard({
 
   useEffect(() => {
     if (!isActive) {
+      cornerModeRef.current = 'resize';
       setCornerMode('resize');
       cornerModeSV.value = 0;
     }
@@ -1558,12 +1564,15 @@ function DraggableVerseCard({
       return;
     }
 
-    handleSelect();
-    setCornerMode((current) => {
-      const nextMode = current === 'resize' ? 'rotate' : 'resize';
-      cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
-      return nextMode;
-    });
+    if (!isActive) {
+      handleSelect();
+    }
+
+    const nextMode: CornerHandleMode =
+      cornerModeRef.current === 'resize' ? 'rotate' : 'resize';
+    cornerModeRef.current = nextMode;
+    cornerModeSV.value = nextMode === 'rotate' ? 1 : 0;
+    setCornerMode(nextMode);
   };
 
   const panGesture = Gesture.Pan()
@@ -1630,7 +1639,7 @@ function DraggableVerseCard({
   const cornerPanGesture = Gesture.Pan()
     .enabled(!isLocked)
     .maxPointers(1)
-    .minDistance(4)
+    .minDistance(10)
     .onBegin(() => {
       startWidth.value = width.value;
       startHeight.value = height.value;
@@ -1664,18 +1673,13 @@ function DraggableVerseCard({
       );
     });
 
-  const cornerTapGesture = Gesture.Tap()
-    .enabled(!isLocked)
-    .onEnd(() => {
-      runOnJS(toggleCornerMode)();
-    });
-
+  const cornerNativeGesture = Gesture.Native();
   const verseCardGesture = Gesture.Simultaneous(
     panGesture,
     pinchGesture,
     rotationGesture
   );
-  const cornerGesture = Gesture.Exclusive(cornerPanGesture, cornerTapGesture);
+  const cornerGesture = Gesture.Simultaneous(cornerPanGesture, cornerNativeGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     zIndex: card.zIndex,
@@ -1872,7 +1876,7 @@ function DraggableVerseCard({
         {isActive && !isLocked ? (
           <GestureDetector gesture={cornerGesture}>
             <Animated.View style={styles.verseResizeHandleWrapper}>
-              <View
+              <Pressable
                 accessible
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -1880,13 +1884,17 @@ function DraggableVerseCard({
                     ? 'Resize verse. Tap to switch to rotate.'
                     : 'Rotate verse. Tap to switch to resize.'
                 }
+                onPress={(event) => {
+                  event.stopPropagation();
+                  toggleCornerMode();
+                }}
                 style={styles.resizeHandle}>
                 <Feather
                   name={cornerMode === 'resize' ? 'arrow-down-right' : 'rotate-cw'}
                   size={15}
                   color="#1F1F1F"
                 />
-              </View>
+              </Pressable>
             </Animated.View>
           </GestureDetector>
         ) : null}
@@ -2007,6 +2015,7 @@ export default function StudioScreen() {
   const hasAppliedRouteBibleDefaultRef = useRef(false);
   const lastIncludedBibleDesignKeyRef = useRef<string | null>(null);
   const studioSessionReadyRef = useRef(false);
+  const pendingLeaveActionRef = useRef<object | null>(null);
   const [allowNavigationAfterSave, setAllowNavigationAfterSave] = useState(false);
   const route = useRoute<any>();
   const routeDesignParam =
@@ -2098,7 +2107,12 @@ export default function StudioScreen() {
   const [selectedSaveTarget, setSelectedSaveTarget] = useState<StudioSaveTarget>(
     defaultStudioSaveTarget
   );
+  const [studioEntryTitle, setStudioEntryTitle] = useState('');
+  const studioEntryTitleTouchedRef = useRef(false);
   const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
+  const [isPagesMenuOpen, setIsPagesMenuOpen] = useState(false);
+  const [studioPages, setStudioPages] = useState<HydratedJournalEntry[]>([]);
+  const [isLoadingStudioPages, setIsLoadingStudioPages] = useState(false);
   const [includeInBible, setIncludeInBible] = useState(false);
   const [selectedBook, setSelectedBook] = useState(() =>
     routeSelectedBookParam && getBooks(bibleVersionKey).includes(routeSelectedBookParam)
@@ -2244,6 +2258,29 @@ export default function StudioScreen() {
     },
     [t]
   );
+
+  const buildDefaultStudioEntryTitle = useCallback(
+    (target: StudioSaveTarget = selectedSaveTarget) =>
+      formatJournalEntryTitle(
+        getTranslatedStudioSaveTargetLabel(target),
+        new Date(),
+        language.key
+      ),
+    [getTranslatedStudioSaveTargetLabel, language.key, selectedSaveTarget]
+  );
+
+  const applyStudioEntryTitle = useCallback(
+    (nextTitle: string, options?: { touched?: boolean }) => {
+      const trimmed = nextTitle.trim();
+      setStudioEntryTitle(trimmed);
+      if (options?.touched !== undefined) {
+        studioEntryTitleTouchedRef.current = options.touched;
+      } else if (trimmed.length > 0) {
+        studioEntryTitleTouchedRef.current = true;
+      }
+    },
+    []
+  );
   const normalizedSelectedVerses = useMemo(
     () =>
       hasVerseSelection
@@ -2255,6 +2292,14 @@ export default function StudioScreen() {
   useEffect(() => {
     setSelectedSaveTarget(defaultStudioSaveTarget);
   }, [defaultStudioSaveTarget]);
+
+  useEffect(() => {
+    if (studioEntryTitleTouchedRef.current) {
+      return;
+    }
+
+    setStudioEntryTitle(buildDefaultStudioEntryTitle(selectedSaveTarget));
+  }, [buildDefaultStudioEntryTitle, selectedSaveTarget]);
 
   useEffect(() => {
     if (routeOpenToolbarParam) {
@@ -2465,7 +2510,9 @@ export default function StudioScreen() {
     setIsFavoriteActive(false);
     setIsStudioLocked(false);
     setHasLoadedState(true);
-  }, [defaultStudioSaveTarget]);
+    studioEntryTitleTouchedRef.current = false;
+    setStudioEntryTitle(buildDefaultStudioEntryTitle(nextSaveTarget));
+  }, [buildDefaultStudioEntryTitle, defaultStudioSaveTarget]);
 
   const ensureFavoriteKey = useCallback(() => {
     if (routeFavoriteKeyParam) {
@@ -2492,7 +2539,7 @@ export default function StudioScreen() {
         ? `${selectedBook} ${selectedChapter}:${selectedVerse}`.trim()
         : '';
 
-      return (referencePreview ? `${referencePreview} ${notePreview}` : notePreview || 'Blank Studio design')
+      return (referencePreview ? `${referencePreview} ${notePreview}` : notePreview || 'Blank Canvas design')
         .trim()
         .slice(0, 80);
     },
@@ -2545,6 +2592,7 @@ export default function StudioScreen() {
     (
       entryId: string,
       nextDesign: SavedVerseDesign,
+      title: string,
       preview: string,
       updatedAt: number,
       isFavorite: boolean,
@@ -2553,6 +2601,7 @@ export default function StudioScreen() {
       id: entryId,
       type: saveTarget,
       date: new Date().toLocaleString(),
+      title,
       preview,
       updatedAt,
       isFavorite,
@@ -2563,8 +2612,45 @@ export default function StudioScreen() {
     [selectedSaveTarget]
   );
 
+  const resolveStudioEntryTitle = useCallback(
+    async (entryId: string, saveTarget: StudioSaveTarget) => {
+      const defaultTitle = formatJournalEntryTitle(
+        getTranslatedStudioSaveTargetLabel(saveTarget),
+        new Date(),
+        language.key
+      );
+      const storageKey = getJournalEntryStorageKey({ id: entryId, type: saveTarget });
+
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (!stored) {
+          return defaultTitle;
+        }
+
+        const parsed = JSON.parse(stored) as Partial<StudioJournalPayload>;
+        const existingTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+        const existingTarget =
+          (isStudioSaveTarget(parsed.saveTarget) ? parsed.saveTarget : null) ??
+          (isStudioSaveTarget(parsed.type) ? parsed.type : null);
+
+        if (existingTitle && existingTarget === saveTarget) {
+          return existingTitle;
+        }
+      } catch {
+        // Fall through to the dated default name.
+      }
+
+      return defaultTitle;
+    },
+    [getTranslatedStudioSaveTargetLabel, language.key]
+  );
+
   const saveStudioJournalEntry = useCallback(
-    async (isFavorite: boolean, saveTarget: StudioSaveTarget = selectedSaveTarget) => {
+    async (
+      isFavorite: boolean,
+      saveTarget: StudioSaveTarget = selectedSaveTarget,
+      options?: { entryIdOverride?: string }
+    ) => {
       const latestNotes = getLatestWebNotes(notesRef.current);
       notesRef.current = latestNotes;
       const latestEditorState = {
@@ -2578,16 +2664,21 @@ export default function StudioScreen() {
 
       const favoriteKey = ensureFavoriteKey();
       const updatedAt = Date.now();
-      const entryId = routeDraftEntryIdParam ?? currentEntryId ?? generateId();
+      const entryId =
+        options?.entryIdOverride ?? routeDraftEntryIdParam ?? currentEntryId ?? generateId();
       const nextDesign = buildCurrentSavedDesign(
         favoriteKey,
         new Date().toISOString(),
         latestNotes
       );
+      const title =
+        studioEntryTitle.trim() || (await resolveStudioEntryTitle(entryId, saveTarget));
+      applyStudioEntryTitle(title, { touched: true });
       const preview = buildStudioPreview(latestNotes);
       const studioJournalPayload = buildStudioJournalPayload(
         entryId,
         nextDesign,
+        title,
         preview,
         updatedAt,
         isFavorite,
@@ -2595,6 +2686,9 @@ export default function StudioScreen() {
       );
 
       setSelectedSaveTarget(saveTarget);
+      if (!currentEntryId) {
+        setCurrentEntryId(entryId);
+      }
       await AsyncStorage.setItem(
         getJournalEntryStorageKey({ id: entryId, type: studioJournalPayload.type }),
         JSON.stringify(studioJournalPayload)
@@ -2603,22 +2697,160 @@ export default function StudioScreen() {
         id: entryId,
         type: studioJournalPayload.type,
         date: studioJournalPayload.date,
+        title,
         preview,
         updatedAt,
         isFavorite,
         editor: 'studio',
       });
+
+      return title;
     },
     [
+      applyStudioEntryTitle,
       buildStudioJournalPayload,
       buildCurrentSavedDesign,
       buildStudioPreview,
       currentEditorState,
       currentEntryId,
       ensureFavoriteKey,
+      resolveStudioEntryTitle,
       routeDraftEntryIdParam,
       selectedSaveTarget,
+      studioEntryTitle,
     ]
+  );
+
+  const stashCurrentStudioPageIfNeeded = useCallback(
+    async (nextEntryId?: string | null) => {
+      const activeId = currentEntryId;
+      if (!activeId) {
+        return;
+      }
+
+      if (nextEntryId && nextEntryId === activeId) {
+        return;
+      }
+
+      if (!hasMeaningfulStudioContent(currentEditorState)) {
+        return;
+      }
+
+      await saveStudioJournalEntry(isFavoriteActive, selectedSaveTarget, {
+        entryIdOverride: activeId,
+      });
+    },
+    [currentEditorState, currentEntryId, isFavoriteActive, saveStudioJournalEntry, selectedSaveTarget]
+  );
+
+  const loadStudioPages = useCallback(async () => {
+    setIsLoadingStudioPages(true);
+    try {
+      const entries = await getHydratedJournalEntries();
+      const nextPages = entries
+        .filter((entry) => entry.editor === 'studio')
+        .filter(
+          (entry) =>
+            Boolean(entry.title?.trim()) ||
+            Boolean(entry.preview?.trim()) ||
+            Boolean(entry.book && entry.chapter && entry.verse)
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 30);
+      setStudioPages(nextPages);
+    } catch (error) {
+      console.warn('Failed to load Studio pages', error);
+      setStudioPages([]);
+    } finally {
+      setIsLoadingStudioPages(false);
+    }
+  }, []);
+
+  const openStudioPage = useCallback(
+    async (entry: Pick<HydratedJournalEntry, 'id' | 'type'>) => {
+      if (entry.id === currentEntryId) {
+        setIsPagesMenuOpen(false);
+        return;
+      }
+
+      await stashCurrentStudioPageIfNeeded(entry.id);
+      setIsPagesMenuOpen(false);
+      setIsSaveMenuOpen(false);
+      setOpenToolbarMenu(null);
+      setAllowNavigationAfterSave(true);
+      router.replace({
+        pathname: '/studio',
+        params: {
+          entryId: entry.id,
+          entryType: entry.type,
+          saveTarget: entry.type,
+          blankStudioToken: '',
+          openSelectedVerse: 'false',
+          selectedBook: '',
+          selectedChapter: '',
+          selectedVerse: '',
+          selectionToken: '',
+          editDesignKey: '',
+          includeInBible: '',
+          selectedVerses: '',
+          favoriteKey: '',
+          design: '',
+          restoreToken: String(Date.now()),
+        },
+      });
+    },
+    [currentEntryId, router, stashCurrentStudioPageIfNeeded]
+  );
+
+  const startNewStudioPageFromList = useCallback(async () => {
+    await stashCurrentStudioPageIfNeeded();
+    setIsPagesMenuOpen(false);
+    setIsSaveMenuOpen(false);
+    setOpenToolbarMenu(null);
+    setAllowNavigationAfterSave(true);
+    router.replace({
+      pathname: '/studio',
+      params: {
+        blankStudioToken: String(Date.now()),
+        saveTarget: 'journal-studio',
+        openSelectedVerse: 'false',
+        selectedBook: '',
+        selectedChapter: '',
+        selectedVerse: '',
+        selectionToken: '',
+        entryId: '',
+        entryType: '',
+        editDesignKey: '',
+        includeInBible: '',
+        selectedVerses: '',
+        favoriteKey: '',
+        design: '',
+        restoreToken: '',
+      },
+    });
+  }, [router, stashCurrentStudioPageIfNeeded]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        const activeId = currentEntryId;
+        if (!activeId || !hasMeaningfulStudioContent(currentEditorState)) {
+          return;
+        }
+
+        void saveStudioJournalEntry(isFavoriteActive, selectedSaveTarget, {
+          entryIdOverride: activeId,
+        }).catch((error) => {
+          console.warn('Failed to temp-save Studio page on leave', error);
+        });
+      };
+    }, [
+      currentEditorState,
+      currentEntryId,
+      isFavoriteActive,
+      saveStudioJournalEntry,
+      selectedSaveTarget,
+    ])
   );
 
   useEffect(() => {
@@ -2630,9 +2862,24 @@ export default function StudioScreen() {
       return;
     }
 
-    lastAppliedBlankTokenRef.current = routeBlankStudioToken;
-    resetStudioToBlank(routeDraftEntryIdParam ?? undefined, defaultStudioSaveTarget);
-  }, [defaultStudioSaveTarget, resetStudioToBlank, routeBlankStudioToken, routeDraftEntryIdParam]);
+    const applyBlankSession = async () => {
+      await stashCurrentStudioPageIfNeeded(routeDraftEntryIdParam);
+      lastAppliedBlankTokenRef.current = routeBlankStudioToken;
+      resetStudioToBlank(routeDraftEntryIdParam ?? undefined, defaultStudioSaveTarget);
+    };
+
+    void applyBlankSession().catch((error) => {
+      console.warn('Failed to apply blank Studio session', error);
+      lastAppliedBlankTokenRef.current = routeBlankStudioToken;
+      resetStudioToBlank(routeDraftEntryIdParam ?? undefined, defaultStudioSaveTarget);
+    });
+  }, [
+    defaultStudioSaveTarget,
+    resetStudioToBlank,
+    routeBlankStudioToken,
+    routeDraftEntryIdParam,
+    stashCurrentStudioPageIfNeeded,
+  ]);
 
   useEffect(() => {
     if (
@@ -2664,6 +2911,8 @@ export default function StudioScreen() {
     }
 
     const applySelectedVerse = async () => {
+      await stashCurrentStudioPageIfNeeded(routeDraftEntryIdParam);
+
       await markBibleVerseRead({
         book: routeSelectedBookParam,
         chapter: nextChapter,
@@ -2692,6 +2941,9 @@ export default function StudioScreen() {
             setSelectedSaveTarget(
               isStudioSaveTarget(parsed.saveTarget) ? parsed.saveTarget : routeEntryTypeParam ?? defaultStudioSaveTarget
             );
+            if (typeof parsed.title === 'string' && parsed.title.trim()) {
+              applyStudioEntryTitle(parsed.title, { touched: true });
+            }
             setSelectedBook(d.book);
             setSelectedChapter(d.chapter);
             setSelectedVerse(d.verse);
@@ -2781,6 +3033,7 @@ export default function StudioScreen() {
       console.warn('Failed to apply selected Studio verse', error);
     });
   }, [
+    applyStudioEntryTitle,
     defaultStudioSaveTarget,
     bibleVersionKey,
     hasRouteSelectedVerseParams,
@@ -2792,6 +3045,7 @@ export default function StudioScreen() {
     routeSelectedChapterParam,
     routeSelectedVerseParam,
     routeSelectionToken,
+    stashCurrentStudioPageIfNeeded,
     verseLineHeight,
   ]);
 
@@ -2825,10 +3079,14 @@ export default function StudioScreen() {
     if (!currentEntryId) {
       setCurrentEntryId(entryId);
     }
+    const title =
+      studioEntryTitle.trim() || (await resolveStudioEntryTitle(entryId, selectedSaveTarget));
+    applyStudioEntryTitle(title, { touched: true });
     const preview = buildStudioPreview(notes);
     const studioJournalPayload = buildStudioJournalPayload(
       entryId,
       nextFavorite,
+      title,
       preview,
       Date.now(),
       true
@@ -2841,6 +3099,7 @@ export default function StudioScreen() {
       id: entryId,
       type: studioJournalPayload.type,
       date: studioJournalPayload.date,
+      title,
       preview,
       updatedAt: studioJournalPayload.updatedAt,
       isFavorite: true,
@@ -2854,6 +3113,7 @@ export default function StudioScreen() {
         : {}),
     });
   }, [
+    applyStudioEntryTitle,
     buildCurrentSavedDesign,
     buildStudioPreview,
     buildStudioJournalPayload,
@@ -2863,13 +3123,16 @@ export default function StudioScreen() {
     isFavoriteActive,
     currentEditorState,
     currentEntryId,
+    resolveStudioEntryTitle,
     routeDraftEntryIdParam,
     notes,
     routeDesignParam,
     routeFavoriteKeyParam,
     selectedBook,
     selectedChapter,
+    selectedSaveTarget,
     selectedVerse,
+    studioEntryTitle,
   ]);
 
   const applyEditorState = (state: VerseEditorState) => {
@@ -3423,19 +3686,29 @@ export default function StudioScreen() {
         [designKey]: latestEditorState,
       };
 
+      // Store the leave action and unlock on the next render before dispatching.
+      // Dispatching in the same turn keeps usePreventRemove blocking Back forever.
+      pendingLeaveActionRef.current = data.action;
       setAllowNavigationAfterSave(true);
-      Promise.all([
+
+      void Promise.all([
         saveVerseStateMap(selectedBook, nextVerseState),
         saveVerseDesignSnapshot(selectedBook, designKey, latestEditorState),
-      ])
-        .catch((error) => {
-          console.warn('Failed to save Canvas before leaving Studio', error);
-        })
-        .finally(() => {
-          requestAnimationFrame(() => navigation.dispatch(data.action));
-        });
+      ]).catch((error) => {
+        console.warn('Failed to save Canvas before leaving Studio', error);
+      });
     }
   );
+
+  useEffect(() => {
+    if (!allowNavigationAfterSave || !pendingLeaveActionRef.current) {
+      return;
+    }
+
+    const action = pendingLeaveActionRef.current;
+    pendingLeaveActionRef.current = null;
+    navigation.dispatch(action);
+  }, [allowNavigationAfterSave, navigation]);
 
   useEffect(() => {
     if (!hasLoadedState || !hasBookSelection) {
@@ -3966,6 +4239,9 @@ export default function StudioScreen() {
         setSelectedSaveTarget(
           isStudioSaveTarget(parsed.saveTarget) ? parsed.saveTarget : routeEntryTypeParam ?? defaultStudioSaveTarget
         );
+        if (typeof parsed.title === 'string' && parsed.title.trim()) {
+          applyStudioEntryTitle(parsed.title, { touched: true });
+        }
         if (hasSavedVerseReference(d)) {
           setSelectedBook(d.book);
           setSelectedChapter(d.chapter);
@@ -4834,10 +5110,11 @@ export default function StudioScreen() {
       captureNotesBeforeAction();
       setIsSaveMenuOpen(false);
       setOpenToolbarMenu(null);
-      const latestNotes = getLatestWebNotes(notesRef.current);
-      notesRef.current = latestNotes;
-      const savedTitle = buildStudioPreview(latestNotes).slice(0, 48);
-      await saveStudioJournalEntry(isFavoriteActive, saveTarget);
+      const savedTitle = await saveStudioJournalEntry(isFavoriteActive, saveTarget);
+      if (!savedTitle) {
+        return;
+      }
+
       showSaveConfirmation(
         t('editorSavedToTarget', {
           target: getTranslatedStudioSaveTargetLabel(saveTarget),
@@ -4846,7 +5123,6 @@ export default function StudioScreen() {
       );
     },
     [
-      buildStudioPreview,
       captureNotesBeforeAction,
       getTranslatedStudioSaveTargetLabel,
       isFavoriteActive,
@@ -4948,9 +5224,13 @@ export default function StudioScreen() {
       latestNotes
     );
     const preview = buildStudioPreview(latestNotes);
+    const title =
+      studioEntryTitle.trim() || (await resolveStudioEntryTitle(entryId, selectedSaveTarget));
+    applyStudioEntryTitle(title, { touched: true });
     const studioJournalPayload = buildStudioJournalPayload(
       entryId,
       nextFavorite,
+      title,
       preview,
       updatedAt,
       true,
@@ -4978,6 +5258,7 @@ export default function StudioScreen() {
       id: entryId,
       type: studioJournalPayload.type,
       date: studioJournalPayload.date,
+      title,
       preview,
       updatedAt,
       isFavorite: true,
@@ -4992,6 +5273,7 @@ export default function StudioScreen() {
     });
     showSaveConfirmation(t('editorAddedToFavorites'));
   }, [
+    applyStudioEntryTitle,
     buildCurrentSavedDesign,
     buildStudioJournalPayload,
     buildStudioPreview,
@@ -5000,6 +5282,7 @@ export default function StudioScreen() {
     currentEntryId,
     ensureFavoriteKey,
     hasVerseSelection,
+    resolveStudioEntryTitle,
     routeDesignParam,
     routeDraftEntryIdParam,
     routeFavoriteKeyParam,
@@ -5007,6 +5290,7 @@ export default function StudioScreen() {
     selectedChapter,
     selectedSaveTarget,
     selectedVerse,
+    studioEntryTitle,
     t,
   ]);
 
@@ -5031,29 +5315,53 @@ export default function StudioScreen() {
     navigation.setOptions({
       title: getTranslatedStudioSaveTargetLabel(selectedSaveTarget),
       headerRight: () => (
-        <Pressable
-          onPressIn={captureNotesBeforeAction}
-          onPress={() => {
-            setIsSaveMenuOpen((current) => !current);
-          }}
-          style={[
-            styles.headerSaveButton,
-            { backgroundColor: colorTheme.toolbarBackground },
-            isSaveMenuOpen
-              ? {
-                  backgroundColor: colorTheme.selectionBackground,
-                  borderColor: colorTheme.border,
+        <View style={styles.headerRightActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('studioOpenPagesAccessibility')}
+            onPress={() => {
+              setIsSaveMenuOpen(false);
+              setIsPagesMenuOpen((current) => {
+                const nextOpen = !current;
+                if (nextOpen) {
+                  void loadStudioPages();
                 }
-              : null,
-          ]}>
-          <Ionicons
-            name="save-outline"
-            size={16}
-            color="#5B514D"
-          />
-          <Text style={styles.headerSaveButtonText}>{t('actionSave')}</Text>
-          <Ionicons name="chevron-down" size={14} color="#5B514D" />
-        </Pressable>
+                return nextOpen;
+              });
+            }}
+            style={[
+              styles.headerPagesButton,
+              { backgroundColor: colorTheme.toolbarBackground },
+              isPagesMenuOpen
+                ? {
+                    backgroundColor: colorTheme.selectionBackground,
+                    borderColor: colorTheme.border,
+                  }
+                : null,
+            ]}>
+            <Ionicons name="layers-outline" size={16} color="#5B514D" />
+          </Pressable>
+          <Pressable
+            onPressIn={captureNotesBeforeAction}
+            onPress={() => {
+              setIsPagesMenuOpen(false);
+              setIsSaveMenuOpen((current) => !current);
+            }}
+            style={[
+              styles.headerSaveButton,
+              { backgroundColor: colorTheme.toolbarBackground },
+              isSaveMenuOpen
+                ? {
+                    backgroundColor: colorTheme.selectionBackground,
+                    borderColor: colorTheme.border,
+                  }
+                : null,
+            ]}>
+            <Ionicons name="save-outline" size={16} color="#5B514D" />
+            <Text style={styles.headerSaveButtonText}>{t('actionSave')}</Text>
+            <Ionicons name="chevron-down" size={14} color="#5B514D" />
+          </Pressable>
+        </View>
       ),
     });
   }, [
@@ -5061,7 +5369,9 @@ export default function StudioScreen() {
     colorTheme.border,
     colorTheme.selectionBackground,
     colorTheme.toolbarBackground,
+    isPagesMenuOpen,
     isSaveMenuOpen,
+    loadStudioPages,
     navigation,
     selectedSaveTarget,
     getTranslatedStudioSaveTargetLabel,
@@ -5747,7 +6057,7 @@ export default function StudioScreen() {
                     accessibilityLabel={t('editorAddMoreDecor')}
                     onPress={() => {
                       setOpenToolbarMenu(null);
-                      router.push('/shop');
+                      router.push('/studio-shop');
                     }}
                     style={[
                       styles.decorShopCta,
@@ -5980,6 +6290,87 @@ export default function StudioScreen() {
             </View>
           ) : null}
 
+          {isPagesMenuOpen ? (
+            <View
+              style={[
+                styles.pagesMenu,
+                {
+                  backgroundColor: colorTheme.paperBackground,
+                  borderColor: colorTheme.border,
+                },
+              ]}>
+              <Text style={styles.saveMenuLabel}>{t('studioPagesTitle')}</Text>
+              {isLoadingStudioPages ? (
+                <Text style={styles.pagesMenuEmptyText}>{t('actionSaving')}</Text>
+              ) : studioPages.length === 0 ? (
+                <Text style={styles.pagesMenuEmptyText}>{t('studioPagesEmpty')}</Text>
+              ) : (
+                <ScrollView
+                  style={styles.pagesMenuScroll}
+                  contentContainerStyle={styles.pagesMenuScrollContent}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled">
+                  {studioPages.map((page) => {
+                    const isCurrent = page.id === currentEntryId;
+                    const pageTitle =
+                      page.title?.trim() || getTranslatedStudioSaveTargetLabel(page.type);
+
+                    return (
+                      <Pressable
+                        key={`${page.type}:${page.id}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isCurrent }}
+                        onPress={() => {
+                          void openStudioPage(page);
+                        }}
+                        style={[
+                          styles.pagesMenuItem,
+                          isCurrent
+                            ? [
+                                styles.saveMenuItemActive,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
+                        ]}>
+                        <View style={styles.pagesMenuItemTextWrap}>
+                          <Text numberOfLines={1} style={styles.saveMenuItemText}>
+                            {pageTitle}
+                          </Text>
+                          <Text numberOfLines={1} style={styles.pagesMenuItemPreview}>
+                            {isCurrent
+                              ? t('studioPagesCurrent')
+                              : page.preview?.trim() ||
+                                getTranslatedStudioSaveTargetLabel(page.type)}
+                          </Text>
+                        </View>
+                        {isCurrent ? (
+                          <Ionicons name="checkmark-circle" size={17} color="#5B514D" />
+                        ) : (
+                          <Ionicons name="chevron-forward" size={16} color="#8A7F76" />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+              <View style={[styles.saveMenuDivider, { backgroundColor: colorTheme.border }]} />
+              <Pressable
+                disabled={isStudioLocked}
+                accessibilityRole="button"
+                accessibilityLabel={t('studioPagesNewPage')}
+                onPress={() => {
+                  void startNewStudioPageFromList();
+                }}
+                style={[
+                  styles.saveMenuItem,
+                  isStudioLocked ? styles.shareImageButtonDisabled : null,
+                ]}>
+                <Ionicons name="add-circle-outline" size={17} color="#5B514D" />
+                <Text style={styles.saveMenuItemText}>{t('studioPagesNewPage')}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {isSaveMenuOpen ? (
             <View
               style={[
@@ -5989,6 +6380,26 @@ export default function StudioScreen() {
                   borderColor: colorTheme.border,
                 },
               ]}>
+              <Text style={styles.saveMenuLabel}>{t('editorEntryTitle')}</Text>
+              <TextInput
+                value={studioEntryTitle}
+                onChangeText={(nextTitle) => {
+                  studioEntryTitleTouchedRef.current = true;
+                  setStudioEntryTitle(nextTitle);
+                }}
+                placeholder={t('editorEntryTitlePlaceholder')}
+                placeholderTextColor="#A89B92"
+                maxLength={80}
+                returnKeyType="done"
+                style={[
+                  styles.saveMenuTitleInput,
+                  {
+                    backgroundColor: colorTheme.toolbarBackground,
+                    borderColor: colorTheme.border,
+                  },
+                ]}
+              />
+              <View style={[styles.saveMenuDivider, { backgroundColor: colorTheme.border }]} />
               <Text style={styles.saveMenuLabel}>{t('editorSaveTo')}</Text>
               {STUDIO_SAVE_TARGET_OPTIONS.map((option) => (
                 <Pressable
@@ -6308,7 +6719,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 232,
+    width: 268,
     borderWidth: 1,
     borderRadius: 16,
     padding: 8,
@@ -6327,6 +6738,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     paddingHorizontal: 8,
     paddingBottom: 5,
+  },
+  saveMenuTitleInput: {
+    minHeight: 40,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#1F1F1F',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   saveMenuItem: {
     minHeight: 38,
@@ -6638,6 +7060,21 @@ const styles = StyleSheet.create({
   verseSelectionOptionTextSelected: {
     color: '#5B514D',
   },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 4,
+  },
+  headerPagesButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
   headerSaveButton: {
     minHeight: 34,
     borderRadius: 17,
@@ -6656,6 +7093,54 @@ const styles = StyleSheet.create({
     color: '#3A302B',
     fontSize: 13,
     fontWeight: '700',
+  },
+  pagesMenu: {
+    position: 'absolute',
+    top: 0,
+    right: 48,
+    width: 280,
+    maxHeight: 360,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 120,
+    zIndex: 121,
+  },
+  pagesMenuScroll: {
+    maxHeight: 260,
+  },
+  pagesMenuScrollContent: {
+    paddingBottom: 2,
+  },
+  pagesMenuItem: {
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pagesMenuItemTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  pagesMenuItemPreview: {
+    color: '#8A7F76',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  pagesMenuEmptyText: {
+    color: '#8A7F76',
+    fontSize: 13,
+    fontWeight: '500',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
   },
   saveDesignButton: {
     width: 40,

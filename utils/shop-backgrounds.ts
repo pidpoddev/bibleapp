@@ -95,7 +95,7 @@ export const SHOP_BACKGROUND_PACKS: ShopBackgroundPack[] = [
   {
     id: 'soft-glitter-backgrounds',
     title: 'Soft Glitter Backgrounds',
-    subtitle: '10 shimmering paper backgrounds for Studio and journals',
+    subtitle: '10 shimmering paper backgrounds for Canvas and journals',
     category: 'Backgrounds',
     tag: 'Included',
     backgrounds: SOFT_GLITTER_BACKGROUNDS,
