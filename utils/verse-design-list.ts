@@ -42,6 +42,7 @@ export type VerseDesignListItem = {
   fontSize: number;
   savedAt: string;
   includeInBible: boolean;
+  stageWidth?: number;
 };
 
 const books = bible as BibleBook[];
@@ -145,6 +146,7 @@ function buildVerseDesignListItem(
     fontSize: state.fontSize,
     savedAt,
     includeInBible: false,
+    stageWidth: state.stageWidth,
   };
 }
 
@@ -198,6 +200,7 @@ function normalizeVerseDesignListItem(value: unknown): VerseDesignListItem | nul
     fontSize: candidate.fontSize,
     savedAt: typeof candidate.savedAt === 'string' ? candidate.savedAt : '',
     includeInBible: candidate.includeInBible === true,
+    stageWidth: typeof candidate.stageWidth === 'number' ? candidate.stageWidth : undefined,
   };
 }
 

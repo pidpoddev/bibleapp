@@ -67,6 +67,8 @@ export type VerseEditorState = {
   selectedFont: string;
   fontSize: number;
   highlightedWords: Record<string, HighlightColor>;
+  /** Canvas coordinate width when this design was saved (iPhone vs iPad). */
+  stageWidth?: number;
 };
 
 export type VerseStateMap = Record<string, VerseEditorState>;

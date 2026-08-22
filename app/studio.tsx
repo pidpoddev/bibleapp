@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
@@ -63,6 +63,12 @@ import {
 import { useAppSettings } from '@/utils/app-settings';
 import { useResponsiveLayout } from '@/utils/responsive-layout';
 import {
+  getStageLayoutScale,
+  getStudioStageWidth,
+  prepareEditorStateForStage,
+  withStageWidth,
+} from '@/utils/canvas-stage-layout';
+import {
   getShopBackground,
   SHOP_BACKGROUND_PACKS,
 } from '@/utils/shop-backgrounds';
@@ -124,10 +130,63 @@ type NoteUpdate = {
 };
 
 type CornerHandleMode = 'resize' | 'rotate';
+type DrawingTool = 'pen' | 'eraser';
 
 function getCornerRotationDelta(translationX: number, translationY: number) {
   'worklet';
   return (translationX - translationY) * 0.35;
+}
+
+function applyEraserAtPoint(
+  strokes: DrawingStroke[],
+  x: number,
+  y: number,
+  radius: number
+): DrawingStroke[] {
+  let changed = false;
+
+  const nextStrokes = strokes.flatMap((stroke) => {
+    const segments: { x: number; y: number }[][] = [];
+    let currentSegment: { x: number; y: number }[] = [];
+
+    for (const point of stroke.points) {
+      if (Math.hypot(point.x - x, point.y - y) <= radius) {
+        changed = true;
+
+        if (currentSegment.length > 0) {
+          segments.push(currentSegment);
+          currentSegment = [];
+        }
+
+        continue;
+      }
+
+      currentSegment.push(point);
+    }
+
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment);
+    }
+
+    if (segments.length === 0) {
+      return [];
+    }
+
+    if (segments.length === 1 && segments[0].length === stroke.points.length) {
+      return [stroke];
+    }
+
+    changed = true;
+    const timestamp = Date.now();
+
+    return segments.map((points, index) => ({
+      ...stroke,
+      id: index === 0 ? stroke.id : `${stroke.id}-e-${timestamp}-${index}`,
+      points,
+    }));
+  });
+
+  return changed ? nextStrokes : strokes;
 }
 
 type VerseCardUpdate = {
@@ -278,6 +337,7 @@ type SavedVerseDesign = {
   selectedFont: string;
   fontSize: number;
   savedAt: string;
+  stageWidth?: number;
 };
 
 type StudioJournalIndexEntry = {
@@ -400,6 +460,7 @@ function cloneVerseEditorState(state: VerseEditorState): VerseEditorState {
     selectedFont: state.selectedFont,
     fontSize: state.fontSize,
     highlightedWords: { ...state.highlightedWords },
+    stageWidth: state.stageWidth,
   };
 }
 
@@ -416,6 +477,7 @@ function getVerseEditorStateFromDesign(design: SavedVerseDesign): VerseEditorSta
     selectedFont: design.selectedFont,
     fontSize: design.fontSize,
     highlightedWords: { ...design.highlights },
+    stageWidth: design.stageWidth,
   };
 }
 
@@ -448,18 +510,39 @@ function getDesignKey(book: string, chapter: number, verses: number[]) {
   return `${book}-${chapter}-${verses.join('_')}`;
 }
 
-function buildDefaultVerseCard(verse: number, text: string, index: number): VerseCard {
+function buildVerseDesignAutosaveSignature(
+  book: string,
+  key: string,
+  state: VerseEditorState
+) {
+  return JSON.stringify({
+    book,
+    key,
+    stageWidth: state.stageWidth,
+    verseCards: state.verseCards,
+    stickers: state.stickers,
+    notes: state.notes,
+    drawingStrokes: state.drawingStrokes,
+    backgroundKey: state.backgroundKey,
+    selectedFont: state.selectedFont,
+    fontSize: state.fontSize,
+    highlightedWords: state.highlightedWords,
+  });
+}
+
+function buildDefaultVerseCard(verse: number, text: string, index: number, layoutScale = 1): VerseCard {
   const initialSize = getInitialVerseCardSize(
     text,
-    Math.round(DEFAULT_VERSE_EDITOR_STATE.fontSize * 1.42)
+    Math.round(DEFAULT_VERSE_EDITOR_STATE.fontSize * 1.42),
+    layoutScale
   );
 
   return {
     id: `verse-card-${verse}`,
     verse,
     text,
-    x: 18 + index * 18,
-    y: 24 + index * 20,
+    x: Math.round((18 + index * 18) * layoutScale),
+    y: Math.round((24 + index * 20) * layoutScale),
     width: initialSize.width,
     height: initialSize.height,
     autoSize: true,
@@ -595,7 +678,7 @@ function getNoteStyleOption(styleKey?: string) {
   return getShopNoteStyleByKey(styleKey);
 }
 
-function buildStudioTemplateNotes(target: StudioSaveTarget): Note[] {
+function buildStudioTemplateNotes(target: StudioSaveTarget, layoutScale = 1): Note[] {
   const labels =
     target === 'prayer'
       ? [
@@ -635,10 +718,10 @@ function buildStudioTemplateNotes(target: StudioSaveTarget): Note[] {
     placeholder: 'Write here...',
     text: '',
     styleKey: DEFAULT_NOTE_STYLE_KEY,
-    x: TEMPLATE_NOTE_X,
-    y: 24 + index * (TEMPLATE_NOTE_HEIGHT + TEMPLATE_NOTE_VERTICAL_GAP),
-    width: TEMPLATE_NOTE_WIDTH,
-    height: TEMPLATE_NOTE_HEIGHT,
+    x: Math.round(TEMPLATE_NOTE_X * layoutScale),
+    y: Math.round((24 + index * (TEMPLATE_NOTE_HEIGHT + TEMPLATE_NOTE_VERTICAL_GAP)) * layoutScale),
+    width: Math.round(TEMPLATE_NOTE_WIDTH * layoutScale),
+    height: Math.round(TEMPLATE_NOTE_HEIGHT * layoutScale),
     zIndex: index + 1,
   }));
 }
@@ -660,8 +743,12 @@ function syncVerseCardsWithSelection(
   book: string,
   chapter: number,
   language: BibleLanguageKey,
-  versionKey?: BibleVersionKey
+  versionKey?: BibleVersionKey,
+  options?: { frontZIndexForNewCards?: number; layoutScale?: number }
 ) {
+  let nextNewCardZIndex = options?.frontZIndexForNewCards;
+  const layoutScale = options?.layoutScale ?? 1;
+
   return nextSelectedVerses.map((verseNumber, index) => {
     const existingCard = currentCards.find((card) => card.verse === verseNumber);
     const text = getVerseText(book, chapter, verseNumber, language, versionKey);
@@ -677,7 +764,15 @@ function syncVerseCardsWithSelection(
       };
     }
 
-    return buildDefaultVerseCard(verseNumber, text, index);
+    const card = buildDefaultVerseCard(verseNumber, text, index, layoutScale);
+
+    if (typeof nextNewCardZIndex === 'number') {
+      const assignedZIndex = nextNewCardZIndex;
+      nextNewCardZIndex += 1;
+      return { ...card, zIndex: assignedZIndex };
+    }
+
+    return card;
   });
 }
 
@@ -718,18 +813,21 @@ function estimateVerseCardHeight(
   return Math.ceil(72 + lineCount * (lineHeight + 4));
 }
 
-function getInitialVerseCardSize(text: string, lineHeight: number) {
+function getInitialVerseCardSize(text: string, lineHeight: number, layoutScale = 1) {
   const width =
     DEFAULT_VERSE_CARD_INITIAL_WIDTHS.find(
-      (candidateWidth) => estimateVerseCardHeight(text, lineHeight, candidateWidth) <= 178
+      (candidateWidth) =>
+        estimateVerseCardHeight(text, lineHeight, candidateWidth * layoutScale) <= 178 * layoutScale
     ) ?? DEFAULT_VERSE_CARD_WIDTH;
 
+  const scaledWidth = Math.round(width * layoutScale);
+
   return {
-    width,
+    width: scaledWidth,
     height: clamp(
-      estimateVerseCardHeight(text, lineHeight, width),
+      estimateVerseCardHeight(text, lineHeight, scaledWidth),
       DEFAULT_VERSE_CARD_MIN_HEIGHT,
-      DEFAULT_VERSE_CARD_MAX_HEIGHT
+      Math.round(DEFAULT_VERSE_CARD_MAX_HEIGHT * layoutScale)
     ),
   };
 }
@@ -741,21 +839,24 @@ function shouldShiftTemplateNotesBelowVerses(target: StudioSaveTarget) {
 function stackTemplateVerseCardsAtTop(
   cards: VerseCard[],
   lineHeight: number,
-  target: StudioSaveTarget
+  target: StudioSaveTarget,
+  layoutScale = 1
 ) {
   if (!shouldShiftTemplateNotesBelowVerses(target) || cards.length <= 1) {
     return cards;
   }
 
-  let nextY = 24;
+  let nextY = Math.round(24 * layoutScale);
   return cards.map((card) => {
     const nextCard = {
       ...card,
-      x: 18,
+      x: Math.round(18 * layoutScale),
       y: nextY,
       rotation: 0,
     };
-    nextY += getVerseCardHeight(card, lineHeight) * card.scale + TEMPLATE_VERSE_CARD_VERTICAL_GAP;
+    nextY +=
+      getVerseCardHeight(card, lineHeight) * card.scale +
+      Math.round(TEMPLATE_VERSE_CARD_VERTICAL_GAP * layoutScale);
     return nextCard;
   });
 }
@@ -765,20 +866,21 @@ function shiftTemplateNotesBelowVerseCards(
   cards: VerseCard[],
   lineHeight: number,
   target: StudioSaveTarget,
-  options?: { allowMoveUp?: boolean }
+  options?: { allowMoveUp?: boolean; layoutScale?: number }
 ) {
   if (!shouldShiftTemplateNotesBelowVerses(target) || notes.length === 0) {
     return notes;
   }
 
+  const layoutScale = options?.layoutScale ?? 1;
   const notesTop = Math.min(...notes.map((note) => note.y));
   const nextNotesTop =
     cards.length === 0
-      ? 24
+      ? Math.round(24 * layoutScale)
       : Math.ceil(
           Math.max(
             ...cards.map((card) => card.y + getVerseCardHeight(card, lineHeight) * card.scale)
-          ) + TEMPLATE_NOTE_AFTER_VERSE_GAP
+          ) + Math.round(TEMPLATE_NOTE_AFTER_VERSE_GAP * layoutScale)
         );
 
   if (options?.allowMoveUp ? notesTop === nextNotesTop : notesTop >= nextNotesTop) {
@@ -870,11 +972,40 @@ function DraggableSticker({
     setCornerMode(nextMode);
   };
 
+  const cornerPanGesture = Gesture.Pan()
+    .enabled(!isLocked)
+    .maxPointers(1)
+    .minDistance(0)
+    .onBegin(() => {
+      startScale.value = scale.value;
+      startRotation.value = rotation.value;
+      runOnJS(handleSelect)();
+    })
+    .onUpdate((event) => {
+      if (cornerModeSV.value === 0) {
+        const scaleDelta = (event.translationX + event.translationY) / 180;
+        scale.value = clamp(startScale.value + scaleDelta, MIN_SCALE, MAX_SCALE);
+        return;
+      }
+
+      rotation.value =
+        startRotation.value + getCornerRotationDelta(event.translationX, event.translationY);
+    })
+    .onEnd(() => {
+      runOnJS(commitTransform)(
+        translateX.value,
+        translateY.value,
+        scale.value,
+        rotation.value
+      );
+    });
+
   const panGesture = Gesture.Pan()
     .enabled(!isLocked)
     .maxPointers(1)
     .minDistance(6)
     .averageTouches(true)
+    .requireExternalGestureToFail(cornerPanGesture)
     .onBegin(() => {
       startX.value = translateX.value;
       startY.value = translateY.value;
@@ -892,6 +1023,8 @@ function DraggableSticker({
         rotation.value
       );
     });
+
+  cornerPanGesture.blocksExternalGesture(panGesture);
 
   const pinchGesture = Gesture.Pinch()
     .enabled(!isLocked)
@@ -921,34 +1054,6 @@ function DraggableSticker({
     })
     .onUpdate((event) => {
       rotation.value = startRotation.value + (event.rotation * 180) / Math.PI;
-    })
-    .onEnd(() => {
-      runOnJS(commitTransform)(
-        translateX.value,
-        translateY.value,
-        scale.value,
-        rotation.value
-      );
-    });
-
-  const cornerPanGesture = Gesture.Pan()
-    .enabled(!isLocked)
-    .maxPointers(1)
-    .minDistance(10)
-    .onBegin(() => {
-      startScale.value = scale.value;
-      startRotation.value = rotation.value;
-      runOnJS(handleSelect)();
-    })
-    .onUpdate((event) => {
-      if (cornerModeSV.value === 0) {
-        const scaleDelta = (event.translationX + event.translationY) / 180;
-        scale.value = clamp(startScale.value + scaleDelta, MIN_SCALE, MAX_SCALE);
-        return;
-      }
-
-      rotation.value =
-        startRotation.value + getCornerRotationDelta(event.translationX, event.translationY);
     })
     .onEnd(() => {
       runOnJS(commitTransform)(
@@ -1197,10 +1302,13 @@ function DraggableNote({
     translateY.value = startY.value + event.nativeEvent.translationY;
   };
 
+  const noteCornerGestureRef = useRef(null);
+
   const noteCornerPanGesture = Gesture.Pan()
     .enabled(!isLocked)
     .maxPointers(1)
-    .minDistance(10)
+    .minDistance(0)
+    .withRef(noteCornerGestureRef)
     .onBegin(() => {
       startWidth.value = width.value;
       startHeight.value = height.value;
@@ -1257,6 +1365,7 @@ function DraggableNote({
       enabled={!isLocked}
       maxPointers={1}
       minDist={6}
+      waitFor={noteCornerGestureRef}
       onGestureEvent={onDragGestureEvent}
       onHandlerStateChange={onDragStateChange}>
       <Animated.View
@@ -1575,11 +1684,49 @@ function DraggableVerseCard({
     setCornerMode(nextMode);
   };
 
+  const cornerPanGesture = Gesture.Pan()
+    .enabled(!isLocked)
+    .maxPointers(1)
+    .minDistance(0)
+    .onBegin(() => {
+      startWidth.value = width.value;
+      startHeight.value = height.value;
+      startRotation.value = rotation.value;
+      runOnJS(handleSelect)();
+    })
+    .onUpdate((event) => {
+      if (cornerModeSV.value === 0) {
+        width.value = clamp(
+          startWidth.value + event.translationX,
+          DEFAULT_VERSE_CARD_MIN_WIDTH,
+          DEFAULT_VERSE_CARD_MAX_WIDTH
+        );
+        height.value = clamp(
+          startHeight.value + event.translationY,
+          DEFAULT_VERSE_CARD_MIN_HEIGHT,
+          DEFAULT_VERSE_CARD_MAX_HEIGHT
+        );
+        return;
+      }
+
+      rotation.value =
+        startRotation.value + getCornerRotationDelta(event.translationX, event.translationY);
+    })
+    .onEnd(() => {
+      runOnJS(commitCornerTransform)(
+        width.value,
+        height.value,
+        rotation.value,
+        cornerModeSV.value
+      );
+    });
+
   const panGesture = Gesture.Pan()
     .enabled(!isLocked)
     .maxPointers(1)
     .minDistance(6)
     .averageTouches(true)
+    .requireExternalGestureToFail(cornerPanGesture)
     .onBegin(() => {
       startX.value = translateX.value;
       startY.value = translateY.value;
@@ -1597,6 +1744,8 @@ function DraggableVerseCard({
         rotation.value
       );
     });
+
+  cornerPanGesture.blocksExternalGesture(panGesture);
 
   const pinchGesture = Gesture.Pinch()
     .enabled(!isLocked)
@@ -1633,43 +1782,6 @@ function DraggableVerseCard({
         translateY.value,
         scale.value,
         rotation.value
-      );
-    });
-
-  const cornerPanGesture = Gesture.Pan()
-    .enabled(!isLocked)
-    .maxPointers(1)
-    .minDistance(10)
-    .onBegin(() => {
-      startWidth.value = width.value;
-      startHeight.value = height.value;
-      startRotation.value = rotation.value;
-      runOnJS(handleSelect)();
-    })
-    .onUpdate((event) => {
-      if (cornerModeSV.value === 0) {
-        width.value = clamp(
-          startWidth.value + event.translationX,
-          DEFAULT_VERSE_CARD_MIN_WIDTH,
-          DEFAULT_VERSE_CARD_MAX_WIDTH
-        );
-        height.value = clamp(
-          startHeight.value + event.translationY,
-          DEFAULT_VERSE_CARD_MIN_HEIGHT,
-          DEFAULT_VERSE_CARD_MAX_HEIGHT
-        );
-        return;
-      }
-
-      rotation.value =
-        startRotation.value + getCornerRotationDelta(event.translationX, event.translationY);
-    })
-    .onEnd(() => {
-      runOnJS(commitCornerTransform)(
-        width.value,
-        height.value,
-        rotation.value,
-        cornerModeSV.value
       );
     });
 
@@ -1920,60 +2032,69 @@ function DrawingLayer({ strokes }: { strokes: DrawingStroke[] }) {
   return (
     <View pointerEvents="none" style={styles.drawingLayer}>
       {strokes.flatMap((stroke) => {
-        if (stroke.points.length === 1) {
-          const point = stroke.points[0];
+        const radius = stroke.width / 2;
 
+        return stroke.points.flatMap((point, index) => {
           if (!point) {
             return [];
           }
 
-          return (
+          const elements = [
             <View
-              key={`${stroke.id}-dot`}
+              key={`${stroke.id}-cap-${index}`}
               style={[
                 styles.drawingDot,
                 {
-                  left: point.x - stroke.width / 2,
-                  top: point.y - stroke.width / 2,
+                  left: point.x - radius,
+                  top: point.y - radius,
                   width: stroke.width,
                   height: stroke.width,
-                  borderRadius: stroke.width / 2,
+                  borderRadius: radius,
                   backgroundColor: stroke.color,
                 },
               ]}
-            />
-          );
-        }
+            />,
+          ];
 
-        return stroke.points.slice(1).map((point, index) => {
-          const previousPoint = stroke.points[index];
+          if (index === 0) {
+            return elements;
+          }
+
+          const previousPoint = stroke.points[index - 1];
 
           if (!previousPoint) {
-            return null;
+            return elements;
           }
 
           const deltaX = point.x - previousPoint.x;
           const deltaY = point.y - previousPoint.y;
           const length = Math.hypot(deltaX, deltaY);
+
+          if (length < 0.5) {
+            return elements;
+          }
+
           const angle = Math.atan2(deltaY, deltaX);
 
-          return (
+          elements.push(
             <View
-              key={`${stroke.id}-${index}`}
+              key={`${stroke.id}-seg-${index}`}
               style={[
                 styles.drawingSegment,
                 {
                   left: (previousPoint.x + point.x) / 2 - length / 2,
-                  top: (previousPoint.y + point.y) / 2 - stroke.width / 2,
+                  top: (previousPoint.y + point.y) / 2 - radius,
                   width: length,
                   height: stroke.width,
-                  borderRadius: stroke.width / 2,
+                  borderRadius: radius,
                   backgroundColor: stroke.color,
                   transform: [{ rotateZ: `${angle}rad` }],
                 },
               ]}
             />
           );
+
+          return elements;
         });
       })}
     </View>
@@ -1999,6 +2120,18 @@ const TOOLBAR_ICON_OFFSET_Y = {
 export default function StudioScreen() {
   const { colorTheme, language, bibleVersionKey, t } = useAppSettings();
   const layout = useResponsiveLayout();
+  const computedStageWidth = useMemo(
+    () => getStudioStageWidth(layout.width, layout.studioMaxWidth),
+    [layout.studioMaxWidth, layout.width]
+  );
+  const [measuredStageWidth, setMeasuredStageWidth] = useState<number | null>(null);
+  const activeStageWidth = measuredStageWidth ?? computedStageWidth;
+  const stageLayoutScale = getStageLayoutScale(activeStageWidth);
+  const normalizeLoadedEditorState = useCallback(
+    (state: VerseEditorState) =>
+      prepareEditorStateForStage(cloneVerseEditorState(state), activeStageWidth),
+    [activeStageWidth]
+  );
   const navigation = useNavigation();
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -2137,6 +2270,10 @@ export default function StudioScreen() {
   );
   const drawingStrokesRef = useRef<DrawingStroke[]>(DEFAULT_VERSE_EDITOR_STATE.drawingStrokes);
   const activeDrawingStrokeIdRef = useRef<string | null>(null);
+  const pendingDrawingFrameRef = useRef<number | null>(null);
+  const isErasingRef = useRef(false);
+  const lastEraserPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [selectedDrawingTool, setSelectedDrawingTool] = useState<DrawingTool>('pen');
   const [selectedDrawingColor, setSelectedDrawingColor] = useState<(typeof DRAWING_COLOR_OPTIONS)[number]>(
     DRAWING_COLOR_OPTIONS[0]
   );
@@ -2390,6 +2527,39 @@ export default function StudioScreen() {
     drawingStrokesRef.current = drawingStrokes;
   }, [drawingStrokes]);
 
+  const persistCurrentVerseDesign = useCallback(async () => {
+    if (!hasVerseSelection || !selectedBook || designKey === 'draft') {
+      return;
+    }
+
+    const latestNotes = getLatestWebNotes(notesRef.current);
+    const latestEditorState: VerseEditorState = withStageWidth(
+      {
+        ...currentEditorState,
+        notes: latestNotes,
+      },
+      activeStageWidth
+    );
+
+    if (!isVerseDesignDecorated(latestEditorState)) {
+      return;
+    }
+
+    const nextVerseState: VerseStateMap = {
+      ...verseState,
+      [designKey]: latestEditorState,
+    };
+
+    await saveVerseStateMap(selectedBook, nextVerseState);
+    await saveVerseDesignSnapshot(selectedBook, designKey, latestEditorState);
+    setVerseState(nextVerseState);
+    lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+      selectedBook,
+      designKey,
+      latestEditorState
+    );
+  }, [activeStageWidth, currentEditorState, designKey, hasVerseSelection, selectedBook, verseState]);
+
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
       return undefined;
@@ -2476,7 +2646,7 @@ export default function StudioScreen() {
 
   const resetStudioToBlank = useCallback((nextEntryId?: string, nextSaveTarget: StudioSaveTarget = defaultStudioSaveTarget) => {
     const nextEditorState = cloneVerseEditorState(DEFAULT_VERSE_EDITOR_STATE);
-    const nextTemplateNotes = buildStudioTemplateNotes(nextSaveTarget);
+    const nextTemplateNotes = buildStudioTemplateNotes(nextSaveTarget, stageLayoutScale);
 
     lastAppliedDesignKeyRef.current = null;
     draftFavoriteKeyRef.current = null;
@@ -2512,7 +2682,7 @@ export default function StudioScreen() {
     setHasLoadedState(true);
     studioEntryTitleTouchedRef.current = false;
     setStudioEntryTitle(buildDefaultStudioEntryTitle(nextSaveTarget));
-  }, [buildDefaultStudioEntryTitle, defaultStudioSaveTarget]);
+  }, [buildDefaultStudioEntryTitle, defaultStudioSaveTarget, stageLayoutScale]);
 
   const ensureFavoriteKey = useCallback(() => {
     if (routeFavoriteKeyParam) {
@@ -2571,8 +2741,10 @@ export default function StudioScreen() {
       selectedFont,
       fontSize,
       savedAt,
+      stageWidth: activeStageWidth,
     }),
     [
+      activeStageWidth,
       backgroundKey,
       drawingStrokes,
       fontSize,
@@ -2858,6 +3030,11 @@ export default function StudioScreen() {
       return;
     }
 
+    // Reopening a saved page or Bible canvas edit must not be wiped by a blank session.
+    if (routeEntryIdParam || routeEditDesignKey) {
+      return;
+    }
+
     if (lastAppliedBlankTokenRef.current === routeBlankStudioToken) {
       return;
     }
@@ -2878,6 +3055,8 @@ export default function StudioScreen() {
     resetStudioToBlank,
     routeBlankStudioToken,
     routeDraftEntryIdParam,
+    routeEditDesignKey,
+    routeEntryIdParam,
     stashCurrentStudioPageIfNeeded,
   ]);
 
@@ -2892,6 +3071,12 @@ export default function StudioScreen() {
     const selectionParamsKey = `${routeSelectionToken ?? 'direct'}:${routeSelectedBookParam}:${routeSelectedChapterParam ?? ''}:${routeSelectedVerseParam ?? ''}`;
 
     if (lastAppliedSelectionTokenRef.current === selectionParamsKey) {
+      return;
+    }
+
+    // Saved designs are restored by loadStoredVerseState, loadStudioEntryById, or routeDesignParam.
+    if (routeEditDesignKey || routeEntryIdParam || routeDesignParam || routeFavoriteKeyParam) {
+      lastAppliedSelectionTokenRef.current = selectionParamsKey;
       return;
     }
 
@@ -2944,6 +3129,7 @@ export default function StudioScreen() {
             if (typeof parsed.title === 'string' && parsed.title.trim()) {
               applyStudioEntryTitle(parsed.title, { touched: true });
             }
+            const restoredState = normalizeLoadedEditorState(getVerseEditorStateFromDesign(d));
             setSelectedBook(d.book);
             setSelectedChapter(d.chapter);
             setSelectedVerse(d.verse);
@@ -2952,7 +3138,7 @@ export default function StudioScreen() {
             setSelectedVerses(restoredVerses);
             setVerseCards(
               syncVerseCardsWithSelection(
-                d.verseCards || [],
+                restoredState.verseCards,
                 restoredVerses,
                 d.book,
                 d.chapter,
@@ -2960,14 +3146,14 @@ export default function StudioScreen() {
                 bibleVersionKey
               )
             );
-            setStickers(d.stickers || []);
-            notesRef.current = d.notes || [];
-            replaceNotes(d.notes || []);
-            setDrawingStrokes(d.drawingStrokes || []);
-            setBackgroundKey(d.backgroundKey ?? null);
-            setHighlightedWords(d.highlights || {});
-            setSelectedFont(d.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
-            setFontSize(d.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
+            setStickers(restoredState.stickers);
+            notesRef.current = restoredState.notes;
+            replaceNotes(restoredState.notes);
+            setDrawingStrokes(restoredState.drawingStrokes);
+            setBackgroundKey(restoredState.backgroundKey ?? null);
+            setHighlightedWords(restoredState.highlightedWords);
+            setSelectedFont(restoredState.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+            setFontSize(restoredState.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
             setSelectedStickerId(null);
             setSelectedNoteId(null);
             setAutoFocusNoteId(null);
@@ -2979,6 +3165,96 @@ export default function StudioScreen() {
             setIsVerseDropdownOpen(false);
             setUndoHistory([]);
             setIsFavoriteActive(Boolean(parsed.isFavorite));
+            setVerseState((current) => ({
+              ...current,
+              [d.key]: restoredState,
+            }));
+            lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+              d.book,
+              d.key,
+              restoredState
+            );
+            studioSessionReadyRef.current = true;
+            setHasLoadedState(true);
+            return;
+          }
+        }
+      }
+
+      if (!routeBlankStudioToken) {
+        const routeVerses =
+          routeSelectedVersesParam.length > 0 && routeSelectedVersesParam.includes(nextVerse)
+            ? normalizeSelectedVerses(routeSelectedVersesParam, nextVerse)
+            : [nextVerse];
+        const existingDesignKey = getDesignKey(
+          routeSelectedBookParam,
+          nextChapter,
+          routeVerses
+        );
+        const existingDesign = await loadVerseDesignByKey(
+          routeSelectedBookParam,
+          existingDesignKey
+        );
+
+        if (existingDesign) {
+          const restoredState = normalizeLoadedEditorState(
+            getVerseEditorStateFromDesign(existingDesign as SavedVerseDesign)
+          );
+
+          if (isVerseDesignDecorated(restoredState)) {
+            lastAppliedSelectionTokenRef.current = selectionParamsKey;
+            lastAppliedDesignKeyRef.current = existingDesign.key;
+            draftFavoriteKeyRef.current = existingDesign.key;
+            setCurrentEntryId(routeDraftEntryIdParam ?? generateId());
+            setSelectedSaveTarget(routeEntryTypeParam ?? defaultStudioSaveTarget);
+            setSelectedBook(routeSelectedBookParam);
+            setSelectedChapter(nextChapter);
+            setSelectedVerse(nextVerse);
+            setSelectedVerseCardVerse(nextVerse);
+            setSelectedVerses(routeVerses);
+            setVerseCards(
+              syncVerseCardsWithSelection(
+                restoredState.verseCards,
+                routeVerses,
+                routeSelectedBookParam,
+                nextChapter,
+                language.key,
+                bibleVersionKey
+              )
+            );
+            setStickers(restoredState.stickers);
+            notesRef.current = restoredState.notes;
+            replaceNotes(restoredState.notes);
+            setDrawingStrokes(restoredState.drawingStrokes);
+            setBackgroundKey(restoredState.backgroundKey ?? null);
+            setSelectedFont(restoredState.selectedFont);
+            setFontSize(restoredState.fontSize);
+            setHighlightedWords(restoredState.highlightedWords);
+            setVerseState((current) => ({
+              ...current,
+              [existingDesign.key]: restoredState,
+            }));
+            lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+              routeSelectedBookParam,
+              existingDesign.key,
+              restoredState
+            );
+            if (existingDesign.includeInBible) {
+              lastIncludedBibleDesignKeyRef.current = existingDesign.key;
+              setIncludeInBible(true);
+            }
+            setSelectedStickerId(null);
+            setSelectedNoteId(null);
+            setAutoFocusNoteId(null);
+            setFocusedNoteId(null);
+            setFocusedNoteTarget(null);
+            setOpenToolbarMenu(null);
+            setIsBookDropdownOpen(false);
+            setIsChapterDropdownOpen(false);
+            setIsVerseDropdownOpen(false);
+            setUndoHistory([]);
+            studioSessionReadyRef.current = true;
+            setHasLoadedState(true);
             return;
           }
         }
@@ -2989,7 +3265,7 @@ export default function StudioScreen() {
       lastAppliedSelectionTokenRef.current = selectionParamsKey;
       draftFavoriteKeyRef.current = null;
       const nextSaveTarget = routeEntryTypeParam ?? defaultStudioSaveTarget;
-      const nextTemplateNotes = buildStudioTemplateNotes(nextSaveTarget);
+      const nextTemplateNotes = buildStudioTemplateNotes(nextSaveTarget, stageLayoutScale);
       const nextVerseCards = stackTemplateVerseCardsAtTop(
         syncVerseCardsWithSelection(
           DEFAULT_VERSE_EDITOR_STATE.verseCards,
@@ -2997,16 +3273,19 @@ export default function StudioScreen() {
           routeSelectedBookParam,
           nextChapter,
           language.key,
-          bibleVersionKey
+          bibleVersionKey,
+          { layoutScale: stageLayoutScale }
         ),
         verseLineHeight,
-        nextSaveTarget
+        nextSaveTarget,
+        stageLayoutScale
       );
       const nextNotes = shiftTemplateNotesBelowVerseCards(
         nextTemplateNotes,
         nextVerseCards,
         verseLineHeight,
-        nextSaveTarget
+        nextSaveTarget,
+        { layoutScale: stageLayoutScale }
       );
 
       setCurrentEntryId(routeDraftEntryIdParam ?? generateId());
@@ -3027,6 +3306,8 @@ export default function StudioScreen() {
       setFontSize(DEFAULT_VERSE_EDITOR_STATE.fontSize);
       setHighlightedWords(DEFAULT_VERSE_EDITOR_STATE.highlightedWords);
       setUndoHistory([]);
+      studioSessionReadyRef.current = true;
+      setHasLoadedState(true);
     };
 
     void applySelectedVerse().catch((error) => {
@@ -3038,13 +3319,21 @@ export default function StudioScreen() {
     bibleVersionKey,
     hasRouteSelectedVerseParams,
     language.key,
+    routeBlankStudioToken,
+    routeDesignParam,
     routeDraftEntryIdParam,
+    routeEditDesignKey,
+    routeEntryIdParam,
     routeEntryTypeParam,
+    routeFavoriteKeyParam,
     routeOpenSelectedVerseParam,
     routeSelectedBookParam,
     routeSelectedChapterParam,
     routeSelectedVerseParam,
+    routeSelectedVersesParam,
     routeSelectionToken,
+    normalizeLoadedEditorState,
+    stageLayoutScale,
     stashCurrentStudioPageIfNeeded,
     verseLineHeight,
   ]);
@@ -3184,6 +3473,22 @@ export default function StudioScreen() {
     clearCanvasSelection({ keepToolbarMenu: true });
     recordUndoSnapshot();
 
+    if (selectedDrawingTool === 'eraser') {
+      isErasingRef.current = true;
+      lastEraserPointRef.current = { x, y };
+      activeDrawingStrokeIdRef.current = null;
+
+      const nextStrokes = applyEraserAtPoint(
+        drawingStrokesRef.current,
+        x,
+        y,
+        selectedDrawingWidth * 0.75
+      );
+      drawingStrokesRef.current = nextStrokes;
+      setDrawingStrokes(nextStrokes);
+      return;
+    }
+
     const newStroke: DrawingStroke = {
       id: `drawing-${Date.now()}`,
       color: selectedDrawingColor,
@@ -3193,12 +3498,48 @@ export default function StudioScreen() {
     };
     const nextStrokes = [...drawingStrokesRef.current, newStroke];
 
+    isErasingRef.current = false;
+    lastEraserPointRef.current = null;
     activeDrawingStrokeIdRef.current = newStroke.id;
     drawingStrokesRef.current = nextStrokes;
     setDrawingStrokes(nextStrokes);
   };
 
   const appendDrawingPoint = (x: number, y: number) => {
+    if (isErasingRef.current) {
+      const previousPoint = lastEraserPointRef.current;
+
+      if (previousPoint) {
+        const movedDistance = Math.hypot(x - previousPoint.x, y - previousPoint.y);
+
+        if (movedDistance < 0.75) {
+          return;
+        }
+      }
+
+      lastEraserPointRef.current = { x, y };
+
+      const nextStrokes = applyEraserAtPoint(
+        drawingStrokesRef.current,
+        x,
+        y,
+        selectedDrawingWidth * 0.75
+      );
+
+      drawingStrokesRef.current = nextStrokes;
+
+      if (pendingDrawingFrameRef.current !== null) {
+        return;
+      }
+
+      pendingDrawingFrameRef.current = requestAnimationFrame(() => {
+        pendingDrawingFrameRef.current = null;
+        setDrawingStrokes(drawingStrokesRef.current);
+      });
+
+      return;
+    }
+
     const activeStrokeId = activeDrawingStrokeIdRef.current;
 
     // Once a stroke is active, keep appending even if UI state flickers.
@@ -3216,7 +3557,7 @@ export default function StudioScreen() {
 
     const movedDistance = Math.hypot(x - previousPoint.x, y - previousPoint.y);
 
-    if (movedDistance < 2) {
+    if (movedDistance < 0.75) {
       return;
     }
 
@@ -3227,32 +3568,65 @@ export default function StudioScreen() {
     );
 
     drawingStrokesRef.current = nextStrokes;
-    setDrawingStrokes(nextStrokes);
+
+    if (pendingDrawingFrameRef.current !== null) {
+      return;
+    }
+
+    pendingDrawingFrameRef.current = requestAnimationFrame(() => {
+      pendingDrawingFrameRef.current = null;
+      setDrawingStrokes(drawingStrokesRef.current);
+    });
   };
 
   const finishDrawingStroke = () => {
+    if (pendingDrawingFrameRef.current !== null) {
+      cancelAnimationFrame(pendingDrawingFrameRef.current);
+      pendingDrawingFrameRef.current = null;
+    }
+
+    isErasingRef.current = false;
+    lastEraserPointRef.current = null;
     activeDrawingStrokeIdRef.current = null;
+    setDrawingStrokes(drawingStrokesRef.current);
   };
 
-  const onDrawingStateChange = (event: PanGestureHandlerStateChangeEvent) => {
-    const { state, x, y } = event.nativeEvent;
+  const startDrawingStrokeRef = useRef(startDrawingStroke);
+  const appendDrawingPointRef = useRef(appendDrawingPoint);
+  const finishDrawingStrokeRef = useRef(finishDrawingStroke);
+  startDrawingStrokeRef.current = startDrawingStroke;
+  appendDrawingPointRef.current = appendDrawingPoint;
+  finishDrawingStrokeRef.current = finishDrawingStroke;
 
-    if (state === State.BEGAN) {
-      startDrawingStroke(x, y);
-    }
+  const invokeStartDrawingStroke = useCallback((x: number, y: number) => {
+    startDrawingStrokeRef.current(x, y);
+  }, []);
 
-    if (
-      state === State.END ||
-      state === State.CANCELLED ||
-      state === State.FAILED
-    ) {
-      finishDrawingStroke();
-    }
-  };
+  const invokeAppendDrawingPoint = useCallback((x: number, y: number) => {
+    appendDrawingPointRef.current(x, y);
+  }, []);
 
-  const onDrawingGestureEvent = (event: PanGestureHandlerGestureEvent) => {
-    appendDrawingPoint(event.nativeEvent.x, event.nativeEvent.y);
-  };
+  const invokeFinishDrawingStroke = useCallback(() => {
+    finishDrawingStrokeRef.current();
+  }, []);
+
+  const drawingPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minDistance(0)
+        .maxPointers(1)
+        .shouldCancelWhenOutside(false)
+        .onBegin((event) => {
+          runOnJS(invokeStartDrawingStroke)(event.x, event.y);
+        })
+        .onUpdate((event) => {
+          runOnJS(invokeAppendDrawingPoint)(event.x, event.y);
+        })
+        .onFinalize(() => {
+          runOnJS(invokeFinishDrawingStroke)();
+        }),
+    [invokeAppendDrawingPoint, invokeFinishDrawingStroke, invokeStartDrawingStroke]
+  );
 
   const undoLastDrawingStroke = () => {
     if (isStudioLocked || drawingStrokesRef.current.length === 0) {
@@ -3339,10 +3713,12 @@ export default function StudioScreen() {
             nextBook,
             nextChapter,
             language.key,
-            bibleVersionKey
+            bibleVersionKey,
+            { layoutScale: stageLayoutScale }
           ),
           verseLineHeight,
-          selectedSaveTarget
+          selectedSaveTarget,
+          stageLayoutScale
         )
       : syncVerseCardsWithSelection(
           nextEditorState.verseCards,
@@ -3350,14 +3726,16 @@ export default function StudioScreen() {
           nextBook,
           nextChapter,
           language.key,
-          bibleVersionKey
+          bibleVersionKey,
+          { layoutScale: stageLayoutScale }
         );
     const nextNotes = shouldArrangeNotesForTemplate
       ? shiftTemplateNotesBelowVerseCards(
           nextEditorState.notes,
           nextVerseCards,
           verseLineHeight,
-          selectedSaveTarget
+          selectedSaveTarget,
+          { layoutScale: stageLayoutScale }
         )
       : nextEditorState.notes;
 
@@ -3387,12 +3765,10 @@ export default function StudioScreen() {
 
     const loadStoredVerseState = async () => {
       const blankEditorSaveTarget = routeEntryTypeParam ?? selectedSaveTarget ?? defaultStudioSaveTarget;
-      const blankEditorTemplateNotes = buildStudioTemplateNotes(blankEditorSaveTarget);
+      const blankEditorTemplateNotes = buildStudioTemplateNotes(blankEditorSaveTarget, stageLayoutScale);
       const isFollowUpBookChange = studioSessionReadyRef.current;
 
       if (routeEntryIdParam && !routeDesignParam) {
-        studioSessionReadyRef.current = true;
-        setHasLoadedState(true);
         return;
       }
 
@@ -3444,6 +3820,7 @@ export default function StudioScreen() {
 
         setVerseState(savedVerseState);
         const shouldOpenSpecificVerse =
+          Boolean(routeEditDesignKey) ||
           routeDesignParam?.book === selectedBook ||
           (hasRouteSelectedVerseParams &&
             routeSelectedBookParam === selectedBook &&
@@ -3493,6 +3870,11 @@ export default function StudioScreen() {
             : storedRouteDesign && hasSavedVerseReference(storedRouteDesign)
               ? storedRouteDesign
               : null;
+
+        if (routeEditDesignKey) {
+          draftFavoriteKeyRef.current = routeEditDesignKey;
+        }
+
         const routeSelectedVerses = matchingRouteDesign
           ? normalizeSelectedVerses(
               matchingRouteDesign.selectedVerses ?? [matchingRouteDesign.verse],
@@ -3542,10 +3924,30 @@ export default function StudioScreen() {
           initialSelectedVerses
         );
         const initialVerseState = matchingRouteDesign
-          ? getVerseEditorStateFromDesign(matchingRouteDesign)
-          : cloneVerseEditorState(
-              savedVerseState[routeEditDesignKey ?? initialDesignKey] ?? DEFAULT_VERSE_EDITOR_STATE
+          ? normalizeLoadedEditorState(
+              getVerseEditorStateFromDesign(matchingRouteDesign as SavedVerseDesign)
+            )
+          : normalizeLoadedEditorState(
+              cloneVerseEditorState(
+                savedVerseState[routeEditDesignKey ?? initialDesignKey] ?? DEFAULT_VERSE_EDITOR_STATE
+              )
             );
+        const resolvedDesignKey = routeEditDesignKey ?? initialDesignKey;
+
+        setVerseState({
+          ...savedVerseState,
+          [resolvedDesignKey]: initialVerseState,
+        });
+        lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+          selectedBook,
+          resolvedDesignKey,
+          initialVerseState
+        );
+
+        if (matchingRouteDesign?.includeInBible) {
+          lastIncludedBibleDesignKeyRef.current = resolvedDesignKey;
+          setIncludeInBible(true);
+        }
 
         setSelectedChapter(initialChapter);
         setSelectedVerse(initialVerse);
@@ -3603,6 +4005,8 @@ export default function StudioScreen() {
     routeSelectedVersesParam,
     selectedSaveTarget,
     selectedBook,
+    normalizeLoadedEditorState,
+    stageLayoutScale,
   ]);
 
   useEffect(() => {
@@ -3635,16 +4039,19 @@ export default function StudioScreen() {
       return;
     }
 
-    const nextEditorState: VerseEditorState = {
-      verseCards,
-      stickers,
-      notes,
-      drawingStrokes,
-      selectedFont,
-      fontSize,
-      highlightedWords,
-      backgroundKey,
-    };
+    const nextEditorState: VerseEditorState = withStageWidth(
+      {
+        verseCards,
+        stickers,
+        notes,
+        drawingStrokes,
+        selectedFont,
+        fontSize,
+        highlightedWords,
+        backgroundKey,
+      },
+      activeStageWidth
+    );
 
     setVerseState((current) => {
       if (JSON.stringify(current[designKey]) === JSON.stringify(nextEditorState)) {
@@ -3657,6 +4064,7 @@ export default function StudioScreen() {
       };
     });
   }, [
+    activeStageWidth,
     designKey,
     backgroundKey,
     drawingStrokes,
@@ -3677,10 +4085,13 @@ export default function StudioScreen() {
       isVerseDesignDecorated(currentEditorState),
     ({ data }) => {
       const latestNotes = getLatestWebNotes(notesRef.current);
-      const latestEditorState: VerseEditorState = {
-        ...currentEditorState,
-        notes: latestNotes,
-      };
+      const latestEditorState: VerseEditorState = withStageWidth(
+        {
+          ...currentEditorState,
+          notes: latestNotes,
+        },
+        activeStageWidth
+      );
       const nextVerseState: VerseStateMap = {
         ...verseState,
         [designKey]: latestEditorState,
@@ -3735,6 +4146,8 @@ export default function StudioScreen() {
       verseCards,
       stickers,
       notes,
+      drawingStrokes,
+      backgroundKey,
       selectedFont,
       fontSize,
       highlightedWords,
@@ -3756,9 +4169,11 @@ export default function StudioScreen() {
     currentEditorState,
     currentEntryId,
     designKey,
+    drawingStrokes,
     fontSize,
     hasLoadedState,
     highlightedWords,
+    backgroundKey,
     isFavoriteActive,
     notes,
     saveStudioJournalEntry,
@@ -3777,30 +4192,26 @@ export default function StudioScreen() {
       return;
     }
 
-    const autosaveSignature = JSON.stringify({
+    const autosaveSignature = buildVerseDesignAutosaveSignature(
       selectedBook,
       designKey,
-      verseCards,
-      stickers,
-      notes,
-      selectedFont,
-      fontSize,
-      highlightedWords,
-    });
+      currentEditorState
+    );
 
     if (lastAutoSavedVerseDesignSignatureRef.current === autosaveSignature) {
       return;
     }
 
     const autosaveTimeout = setTimeout(() => {
+      const savedEditorState = withStageWidth(currentEditorState, activeStageWidth);
       const nextVerseState: VerseStateMap = {
         ...verseState,
-        [designKey]: currentEditorState,
+        [designKey]: savedEditorState,
       };
 
       saveVerseStateMap(selectedBook, nextVerseState)
         .then(() =>
-          saveVerseDesignSnapshot(selectedBook, designKey, currentEditorState)
+          saveVerseDesignSnapshot(selectedBook, designKey, savedEditorState)
         )
         .then(() => {
           lastAutoSavedVerseDesignSignatureRef.current = autosaveSignature;
@@ -3814,6 +4225,7 @@ export default function StudioScreen() {
       clearTimeout(autosaveTimeout);
     };
   }, [
+    activeStageWidth,
     currentEditorState,
     designKey,
     drawingStrokes,
@@ -4148,6 +4560,7 @@ export default function StudioScreen() {
 
     lastAppliedDesignKeyRef.current = restoreToken;
     draftFavoriteKeyRef.current = d.key;
+    const restoredState = normalizeLoadedEditorState(getVerseEditorStateFromDesign(d));
 
     if (hasSavedVerseReference(d)) {
       setSelectedBook(d.book);
@@ -4161,7 +4574,7 @@ export default function StudioScreen() {
       setSelectedVerses(nextSelectedVerses);
       setVerseCards(
         syncVerseCardsWithSelection(
-          d.verseCards || [],
+          restoredState.verseCards,
           nextSelectedVerses,
           d.book,
           d.chapter,
@@ -4175,15 +4588,15 @@ export default function StudioScreen() {
       setSelectedVerse(0);
       setSelectedVerseCardVerse(null);
       setSelectedVerses([]);
-      setVerseCards((d.verseCards || []).map((verseCard) => ({ ...verseCard })));
+      setVerseCards(restoredState.verseCards.map((verseCard) => ({ ...verseCard })));
     }
-    setStickers(d.stickers || []);
-    replaceNotes(d.notes || []);
-    setDrawingStrokes(d.drawingStrokes || []);
-    setBackgroundKey(d.backgroundKey ?? null);
-    setHighlightedWords(d.highlights || {});
-    setSelectedFont(d.selectedFont);
-    setFontSize(d.fontSize);
+    setStickers(restoredState.stickers);
+    replaceNotes(restoredState.notes);
+    setDrawingStrokes(restoredState.drawingStrokes);
+    setBackgroundKey(restoredState.backgroundKey ?? null);
+    setHighlightedWords(restoredState.highlightedWords);
+    setSelectedFont(restoredState.selectedFont);
+    setFontSize(restoredState.fontSize);
     setSelectedStickerId(null);
     setSelectedNoteId(null);
     setAutoFocusNoteId(null);
@@ -4195,9 +4608,23 @@ export default function StudioScreen() {
     setIsVerseDropdownOpen(false);
     setUndoHistory([]);
     setIsFavoriteActive(routeSourceParam === 'favorites');
+    if (hasSavedVerseReference(d)) {
+      setVerseState((current) => ({
+        ...current,
+        [d.key]: restoredState,
+      }));
+      lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+        d.book,
+        d.key,
+        restoredState
+      );
+    }
+    studioSessionReadyRef.current = true;
+    setHasLoadedState(true);
   }, [
     bibleVersionKey,
     language.key,
+    normalizeLoadedEditorState,
     routeDesignParam,
     routeFavoriteKeyParam,
     routeRestoreToken,
@@ -4219,11 +4646,15 @@ export default function StudioScreen() {
           })
         );
         if (!stored) {
+          studioSessionReadyRef.current = true;
+          setHasLoadedState(true);
           return;
         }
 
         const parsed = JSON.parse(stored) as Partial<StudioJournalPayload>;
         if (!parsed?.design) {
+          studioSessionReadyRef.current = true;
+          setHasLoadedState(true);
           return;
         }
 
@@ -4242,6 +4673,7 @@ export default function StudioScreen() {
         if (typeof parsed.title === 'string' && parsed.title.trim()) {
           applyStudioEntryTitle(parsed.title, { touched: true });
         }
+        const restoredState = normalizeLoadedEditorState(getVerseEditorStateFromDesign(d));
         if (hasSavedVerseReference(d)) {
           setSelectedBook(d.book);
           setSelectedChapter(d.chapter);
@@ -4254,7 +4686,7 @@ export default function StudioScreen() {
           setSelectedVerses(nextSelectedVerses);
           setVerseCards(
             syncVerseCardsWithSelection(
-              d.verseCards || [],
+              restoredState.verseCards,
               nextSelectedVerses,
               d.book,
               d.chapter,
@@ -4268,15 +4700,15 @@ export default function StudioScreen() {
           setSelectedVerse(0);
           setSelectedVerseCardVerse(null);
           setSelectedVerses([]);
-          setVerseCards((d.verseCards || []).map((verseCard) => ({ ...verseCard })));
+          setVerseCards(restoredState.verseCards.map((verseCard) => ({ ...verseCard })));
         }
-        setStickers(d.stickers || []);
-        replaceNotes(d.notes || []);
-        setDrawingStrokes(d.drawingStrokes || []);
-        setBackgroundKey(d.backgroundKey ?? null);
-        setHighlightedWords(d.highlights || {});
-        setSelectedFont(d.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
-        setFontSize(d.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
+        setStickers(restoredState.stickers);
+        replaceNotes(restoredState.notes);
+        setDrawingStrokes(restoredState.drawingStrokes);
+        setBackgroundKey(restoredState.backgroundKey ?? null);
+        setHighlightedWords(restoredState.highlightedWords);
+        setSelectedFont(restoredState.selectedFont || DEFAULT_VERSE_EDITOR_STATE.selectedFont);
+        setFontSize(restoredState.fontSize || DEFAULT_VERSE_EDITOR_STATE.fontSize);
         setSelectedStickerId(null);
         setSelectedNoteId(null);
         setAutoFocusNoteId(null);
@@ -4288,16 +4720,33 @@ export default function StudioScreen() {
         setIsVerseDropdownOpen(false);
         setUndoHistory([]);
         setIsFavoriteActive(Boolean(parsed.isFavorite));
+        if (hasSavedVerseReference(d)) {
+          setVerseState((current) => ({
+            ...current,
+            [d.key]: restoredState,
+          }));
+          lastAutoSavedVerseDesignSignatureRef.current = buildVerseDesignAutosaveSignature(
+            d.book,
+            d.key,
+            restoredState
+          );
+        }
+        studioSessionReadyRef.current = true;
+        setHasLoadedState(true);
       } catch (error) {
         console.warn('Failed to load studio journal entry', error);
+        studioSessionReadyRef.current = true;
+        setHasLoadedState(true);
       }
     };
 
     void loadStudioEntryById();
   }, [
+    applyStudioEntryTitle,
     defaultStudioSaveTarget,
     bibleVersionKey,
     language.key,
+    normalizeLoadedEditorState,
     routeDesignParam,
     routeEntryIdParam,
     routeEntryTypeParam,
@@ -4655,6 +5104,8 @@ export default function StudioScreen() {
       verseNumber
     );
     const nextDesignKey = getDesignKey(selectedBook, selectedChapter, nextSelectedVerses);
+    const isNewVerse = !verseCards.some((card) => card.verse === verseNumber);
+    const frontZIndexForNewCards = isNewVerse ? getHighestZIndex() + 1 : undefined;
 
     // Keep the current canvas when adding/switching verses. Reloading by design key
     // was wiping stickers/drawings and clearing undo mid-session.
@@ -4678,7 +5129,10 @@ export default function StudioScreen() {
         selectedBook,
         selectedChapter,
         language.key,
-        bibleVersionKey
+        bibleVersionKey,
+        frontZIndexForNewCards !== undefined
+          ? { frontZIndexForNewCards }
+          : undefined
       )
     );
     setSelectedStickerId(null);
@@ -5166,7 +5620,9 @@ export default function StudioScreen() {
           !hasAppliedRouteBibleDefaultRef.current;
         if (shouldAutoInclude && !included) {
           hasAppliedRouteBibleDefaultRef.current = true;
-          return setVerseDesignIncludedInBible(selectedBook, designKey, true).then(() => {
+          return persistCurrentVerseDesign()
+            .then(() => setVerseDesignIncludedInBible(selectedBook, designKey, true))
+            .then(() => {
             if (isActive) {
               lastIncludedBibleDesignKeyRef.current = designKey;
               setIncludeInBible(true);
@@ -5183,7 +5639,7 @@ export default function StudioScreen() {
     return () => {
       isActive = false;
     };
-  }, [canIncludeInBible, designKey, hasVerseSelection, routeEditDesignKey, routeIncludeInBibleParam, selectedBook]);
+  }, [canIncludeInBible, designKey, hasVerseSelection, persistCurrentVerseDesign, routeEditDesignKey, routeIncludeInBibleParam, selectedBook]);
 
   const handleIncludeInBible = useCallback(async () => {
     if (!canIncludeInBible || !selectedBook || !hasDecoratedStudioContent) {
@@ -5192,11 +5648,16 @@ export default function StudioScreen() {
     }
 
     const nextIncluded = !includeInBible;
+
+    if (nextIncluded) {
+      await persistCurrentVerseDesign();
+    }
+
     await setVerseDesignIncludedInBible(selectedBook, designKey, nextIncluded);
     lastIncludedBibleDesignKeyRef.current = nextIncluded ? designKey : null;
     setIncludeInBible(nextIncluded);
     showSaveConfirmation(nextIncluded ? 'Included in My Bible' : 'Removed from My Bible');
-  }, [canIncludeInBible, designKey, hasDecoratedStudioContent, includeInBible, selectedBook, t]);
+  }, [canIncludeInBible, designKey, hasDecoratedStudioContent, includeInBible, persistCurrentVerseDesign, selectedBook, t]);
 
   const handleAddToFavorites = useCallback(async () => {
     captureNotesBeforeAction();
@@ -6129,27 +6590,69 @@ export default function StudioScreen() {
               {openToolbarMenu === 'draw' ? (
                 <View style={styles.dropdownOptionList}>
                   <View style={styles.drawMenuSection}>
-                    <Text style={styles.drawMenuLabel}>{t('editorPenColor')}</Text>
-                    <View style={styles.drawColorRow}>
-                      {DRAWING_COLOR_OPTIONS.map((color) => (
-                        <Pressable
-                          key={color}
-                          onPress={() => setSelectedDrawingColor(color)}
-                          style={[
-                            styles.drawColorButton,
-                            { backgroundColor: color },
-                            selectedDrawingColor === color ? styles.drawColorButtonSelected : null,
-                          ]}>
-                          {selectedDrawingColor === color ? (
-                            <Ionicons name="checkmark" size={13} color="#FFFDF9" />
-                          ) : null}
-                        </Pressable>
-                      ))}
+                    <Text style={styles.drawMenuLabel}>{t('editorDrawingTool')}</Text>
+                    <View style={styles.drawToolRow}>
+                      <Pressable
+                        onPress={() => setSelectedDrawingTool('pen')}
+                        style={[
+                          styles.drawToolButton,
+                          { backgroundColor: colorTheme.toolbarBackground },
+                          selectedDrawingTool === 'pen'
+                            ? [
+                                styles.dropdownOptionButtonActive,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
+                        ]}>
+                        <Ionicons name="pencil-outline" size={17} color="#5B514D" />
+                        <Text style={styles.drawToolButtonText}>{t('editorPen')}</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setSelectedDrawingTool('eraser')}
+                        style={[
+                          styles.drawToolButton,
+                          { backgroundColor: colorTheme.toolbarBackground },
+                          selectedDrawingTool === 'eraser'
+                            ? [
+                                styles.dropdownOptionButtonActive,
+                                { backgroundColor: colorTheme.selectionBackground },
+                              ]
+                            : null,
+                        ]}>
+                        <MaterialCommunityIcons name="eraser" size={17} color="#5B514D" />
+                        <Text style={styles.drawToolButtonText}>{t('editorEraser')}</Text>
+                      </Pressable>
                     </View>
                   </View>
 
+                  {selectedDrawingTool === 'pen' ? (
+                    <View style={styles.drawMenuSection}>
+                      <Text style={styles.drawMenuLabel}>{t('editorPenColor')}</Text>
+                      <View style={styles.drawColorRow}>
+                        {DRAWING_COLOR_OPTIONS.map((color) => (
+                          <Pressable
+                            key={color}
+                            onPress={() => setSelectedDrawingColor(color)}
+                            style={[
+                              styles.drawColorButton,
+                              { backgroundColor: color },
+                              selectedDrawingColor === color ? styles.drawColorButtonSelected : null,
+                            ]}>
+                            {selectedDrawingColor === color ? (
+                              <Ionicons name="checkmark" size={13} color="#FFFDF9" />
+                            ) : null}
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
                   <View style={styles.drawMenuSection}>
-                    <Text style={styles.drawMenuLabel}>{t('editorPenSize')}</Text>
+                    <Text style={styles.drawMenuLabel}>
+                      {selectedDrawingTool === 'eraser'
+                        ? t('editorEraserSize')
+                        : t('editorPenSize')}
+                    </Text>
                     <View style={styles.drawWidthRow}>
                       {DRAWING_WIDTH_OPTIONS.map((width) => (
                         <Pressable
@@ -6171,7 +6674,10 @@ export default function StudioScreen() {
                               {
                                 height: width,
                                 borderRadius: width / 2,
-                                backgroundColor: selectedDrawingColor,
+                                backgroundColor:
+                                  selectedDrawingTool === 'eraser'
+                                    ? '#B8AEA6'
+                                    : selectedDrawingColor,
                               },
                             ]}
                           />
@@ -6545,9 +7051,14 @@ export default function StudioScreen() {
               <View
                 onLayout={(event) => {
                   setCaptureCanvasTop(event.nativeEvent.layout.y);
+                  const nextWidth = event.nativeEvent.layout.width;
+                  if (nextWidth > 0) {
+                    setMeasuredStageWidth(nextWidth);
+                  }
                 }}
                 style={styles.captureCanvas}>
                 <Pressable
+                  disabled={isDrawingMode}
                   onPress={() => clearCanvasSelection({ keepToolbarMenu: isDrawingMode })}
                   style={[
                     styles.captureStage,
@@ -6618,15 +7129,12 @@ export default function StudioScreen() {
                   )}
                 </View>
                 {canUseDrawingTool ? (
-                  <PanGestureHandler
-                    enabled={isDrawingMode}
-                    onGestureEvent={onDrawingGestureEvent}
-                    onHandlerStateChange={onDrawingStateChange}>
+                  <GestureDetector gesture={drawingPanGesture}>
                     <View
                       pointerEvents={isDrawingMode ? 'auto' : 'none'}
                       style={styles.drawingGestureLayer}
                     />
-                  </PanGestureHandler>
+                  </GestureDetector>
                 ) : null}
               </Pressable>
               </View>
@@ -7298,6 +7806,25 @@ const styles = StyleSheet.create({
   },
   drawMenuSection: {
     gap: 8,
+  },
+  drawToolRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  drawToolButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  drawToolButtonText: {
+    color: '#5B514D',
+    fontSize: 13,
+    fontWeight: '700',
   },
   drawMenuLabel: {
     color: '#5B514D',

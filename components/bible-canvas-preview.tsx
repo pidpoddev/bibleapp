@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
+import {
+  inferDesignStageWidth,
+  STUDIO_STAGE_MIN_WIDTH,
+} from '@/utils/canvas-stage-layout';
 import { getShopBackground } from '@/utils/shop-backgrounds';
 import { getShopSticker, getShopStickerDisplaySize } from '@/utils/shop-stickers';
 import type { HighlightColor } from '@/utils/verse-storage';
 import type { VerseDesignListItem } from '@/utils/verse-design-list';
 
-const STAGE_WIDTH = 340;
 const CROP_PADDING = 16;
 const MIN_CROP_HEIGHT = 120;
 const HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
@@ -41,6 +44,7 @@ const NOTE_COLORS: Record<string, { backgroundColor: string; borderColor: string
 };
 
 function getContentBounds(design: VerseDesignListItem) {
+  const savedStageWidth = inferDesignStageWidth(design, design.stageWidth);
   const boxes = [
     ...design.verseCards.map((card) => ({
       left: card.x,
@@ -82,22 +86,26 @@ function getContentBounds(design: VerseDesignListItem) {
   ];
 
   if (boxes.length === 0) {
-    return { left: 0, top: 0, right: STAGE_WIDTH, bottom: 240 };
+    return { left: 0, top: 0, right: STUDIO_STAGE_MIN_WIDTH, bottom: 240 };
   }
 
   return {
     left: Math.max(0, Math.min(...boxes.map((box) => box.left)) - CROP_PADDING),
     top: Math.max(0, Math.min(...boxes.map((box) => box.top)) - CROP_PADDING),
-    right: Math.min(STAGE_WIDTH, Math.max(...boxes.map((box) => box.right)) + CROP_PADDING),
+    right: Math.min(
+      savedStageWidth,
+      Math.max(...boxes.map((box) => box.right)) + CROP_PADDING
+    ),
     bottom: Math.max(...boxes.map((box) => box.bottom)) + CROP_PADDING,
   };
 }
 
 export function BibleCanvasPreview({ design }: { design: VerseDesignListItem }) {
-  const [availableWidth, setAvailableWidth] = useState(STAGE_WIDTH);
+  const [availableWidth, setAvailableWidth] = useState(STUDIO_STAGE_MIN_WIDTH);
   const bounds = useMemo(() => getContentBounds(design), [design]);
   const cropWidth = Math.max(1, bounds.right - bounds.left);
   const cropHeight = Math.max(MIN_CROP_HEIGHT, bounds.bottom - bounds.top);
+  const stageWidth = Math.max(STUDIO_STAGE_MIN_WIDTH, inferDesignStageWidth(design, design.stageWidth), bounds.right);
   const stageHeight = Math.max(bounds.bottom, cropHeight);
   const scale = Math.min(1, availableWidth / cropWidth);
   const background = getShopBackground(design.backgroundKey);
@@ -113,6 +121,7 @@ export function BibleCanvasPreview({ design }: { design: VerseDesignListItem }) 
         style={[
           styles.stage,
           {
+            width: stageWidth,
             height: stageHeight,
             left: -bounds.left * scale,
             top: -bounds.top * scale,
@@ -130,17 +139,66 @@ export function BibleCanvasPreview({ design }: { design: VerseDesignListItem }) 
         ) : null}
 
         {design.drawingStrokes.flatMap((stroke) => {
-          if (stroke.points.length === 1) {
-            const point = stroke.points[0];
-            return point ? [<View key={`${stroke.id}-dot`} style={[styles.stroke, { left: point.x - stroke.width / 2, top: point.y - stroke.width / 2, width: stroke.width, height: stroke.width, borderRadius: stroke.width / 2, backgroundColor: stroke.color }]} />] : [];
-          }
-          return stroke.points.slice(1).map((point, index) => {
-            const previous = stroke.points[index];
-            if (!previous) return null;
+          const radius = stroke.width / 2;
+
+          return stroke.points.flatMap((point, index) => {
+            if (!point) {
+              return [];
+            }
+
+            const elements = [
+              <View
+                key={`${stroke.id}-cap-${index}`}
+                style={[
+                  styles.stroke,
+                  {
+                    left: point.x - radius,
+                    top: point.y - radius,
+                    width: stroke.width,
+                    height: stroke.width,
+                    borderRadius: radius,
+                    backgroundColor: stroke.color,
+                  },
+                ]}
+              />,
+            ];
+
+            if (index === 0) {
+              return elements;
+            }
+
+            const previous = stroke.points[index - 1];
+            if (!previous) {
+              return elements;
+            }
+
             const dx = point.x - previous.x;
             const dy = point.y - previous.y;
             const length = Math.hypot(dx, dy);
-            return <View key={`${stroke.id}-${index}`} style={[styles.stroke, { left: (previous.x + point.x) / 2 - length / 2, top: (previous.y + point.y) / 2 - stroke.width / 2, width: length, height: stroke.width, borderRadius: stroke.width / 2, backgroundColor: stroke.color, transform: [{ rotateZ: `${Math.atan2(dy, dx)}rad` }] }]} />;
+
+            if (length < 0.5) {
+              return elements;
+            }
+
+            elements.push(
+              <View
+                key={`${stroke.id}-seg-${index}`}
+                style={[
+                  styles.stroke,
+                  {
+                    left: (previous.x + point.x) / 2 - length / 2,
+                    top: (previous.y + point.y) / 2 - radius,
+                    width: length,
+                    height: stroke.width,
+                    borderRadius: radius,
+                    backgroundColor: stroke.color,
+                    transform: [{ rotateZ: `${Math.atan2(dy, dx)}rad` }],
+                  },
+                ]}
+              />
+            );
+
+            return elements;
           });
         })}
 
@@ -181,7 +239,7 @@ export function BibleCanvasPreview({ design }: { design: VerseDesignListItem }) 
 
 const styles = StyleSheet.create({
   preview: { width: '100%', overflow: 'hidden', borderRadius: 16, backgroundColor: '#FCFAF6' },
-  stage: { position: 'absolute', width: STAGE_WIDTH, overflow: 'hidden', backgroundColor: '#FCFAF6' },
+  stage: { position: 'absolute', overflow: 'hidden', backgroundColor: '#FCFAF6' },
   paperLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(207,187,175,0.72)' },
   stroke: { position: 'absolute', zIndex: 18 },
   verseCard: { position: 'absolute', borderWidth: 1, borderRadius: 20, paddingTop: 16, paddingHorizontal: 18, paddingBottom: 14, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
